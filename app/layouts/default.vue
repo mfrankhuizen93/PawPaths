@@ -1,7 +1,15 @@
+<script lang="ts" setup>
+import AppHeader from "~/components/AppHeader.vue";
+import AppFooter from "~/components/AppFooter.vue";
+</script>
 <template>
-  <div>
+  <UApp>
     <AppHeader />
-    <slot />
+    <UMain>
+      <slot />
+    </UMain>
     <AppFooter />
-  </div>
+  </UApp>
 </template>
+
+<style scoped></style>

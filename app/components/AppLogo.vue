@@ -1,9 +1,7 @@
 <script lang="ts" setup></script>
 
 <template>
-  <div class="app-logo">
-
-  </div>
+  <NuxtImg alt="PawPaths Logo" src="/icon.png" />
 </template>
 
 <style scoped></style>

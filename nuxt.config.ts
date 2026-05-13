@@ -7,28 +7,16 @@ function vueStyleTailwindReference() {
     name: "vue-style-tailwind-reference",
     enforce: "pre" as const,
     transform(code: string, id: string) {
-      const idSplit = id.split("?");
-      if (!idSplit[0]?.endsWith(".vue")) {
+      if (!id.includes(".vue") || !id.includes("type=style")) {
         return;
       }
 
-      const nextCode = code.replace(
-        /(<style\b(?![^>]*\bsrc=)[^>]*>)([\s\S]*?)(<\/style>)/g,
-        (match, openTag, content, closeTag) => {
-          if (content.includes("@reference")) {
-            return match;
-          }
-
-          return `${openTag}\n${tailwindReference}${content.trimStart()}${closeTag}`;
-        },
-      );
-
-      if (nextCode === code) {
+      if (code.includes("@reference")) {
         return;
       }
 
       return {
-        code: nextCode,
+        code: `${tailwindReference}${code}`,
         map: null,
       };
     },
@@ -40,11 +28,27 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
   modules: ["@nuxt/eslint", "@nuxt/image", "@nuxt/ui"],
-  css: ["./app/assets/css/theme.css", "./app/assets/css/main.css"],
+  fonts: {
+    families: [
+      {
+        name: "Nunito",
+        provider: "google",
+        weights: [400, 600, 800],
+        global: true,
+      },
+    ],
+  },
+  css: ["./app/assets/css/main.css"],
   vite: {
     plugins: [vueStyleTailwindReference(), tailwindcss()],
     optimizeDeps: {
       include: ["@vue/devtools-core", "@vue/devtools-kit"],
+    },
+  },
+  head: {
+    title: "PawPaths",
+    htmlAttrs: {
+      lang: "en",
     },
   },
 });
