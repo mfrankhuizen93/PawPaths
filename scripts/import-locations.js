@@ -1,0 +1,145 @@
+import fs from "node:fs/promises";
+import { MongoClient } from "mongodb";
+import { getMongoConfig, loadEnvFile } from "./env.js";
+import { inferLocationWarnings } from "../server/utils/location-warnings.js";
+
+const SOURCE_PATH = "doggydating-locations.json";
+
+function toDateOrNull(value) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toLocationDocument(location) {
+  const hasCoordinates =
+    Number.isFinite(location.longitude) && Number.isFinite(location.latitude);
+
+  return {
+    sourceUrl: location.url,
+    source: "doggydating",
+    name: location.name,
+    city: location.cityGuess,
+    province: location.province,
+    country: "NL",
+    latitude: location.latitude,
+    longitude: location.longitude,
+    location: hasCoordinates
+      ? {
+          type: "Point",
+          coordinates: [location.longitude, location.latitude],
+        }
+      : null,
+    type: location.type ?? [],
+    characteristics: location.characteristics ?? [],
+    warnings: location.warnings ?? inferLocationWarnings(location.reviews),
+    description: location.description ?? "",
+    relatedUrls: location.relatedUrls ?? [],
+    photos: (location.photos ?? []).map((photo) => ({
+      url: photo.url,
+      alt: photo.alt ?? null,
+    })),
+    reviews: (location.reviews ?? []).map((review) => ({
+      reviewerName: review.reviewer,
+      dateText: review.date,
+      date: toDateOrNull(review.date),
+      rating: Number.isFinite(review.rating) ? review.rating : null,
+      text: review.text,
+      source: "doggydating",
+    })),
+    status: location.error ? "import_error" : "published",
+    importError: location.error ?? null,
+    updatedAt: new Date(),
+  };
+}
+
+await loadEnvFile();
+
+const { uri, dbName } = getMongoConfig();
+const source = JSON.parse(await fs.readFile(SOURCE_PATH, "utf8"));
+
+if (!Array.isArray(source)) {
+  throw new Error(`${SOURCE_PATH} should contain an array`);
+}
+
+const client = new MongoClient(uri);
+
+try {
+  await client.connect();
+
+  const db = client.db(dbName);
+  const locations = db.collection("locations");
+
+  const documents = source.map(toLocationDocument);
+  const operations = documents.map((document) => ({
+    updateOne: {
+      filter: { sourceUrl: document.sourceUrl },
+      update: {
+        $set: document,
+        $unset: {
+          ratingSummary: "",
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  const result =
+    operations.length > 0
+      ? await locations.bulkWrite(operations, { ordered: false })
+      : null;
+
+  const sourceUrls = documents.map((document) => document.sourceUrl);
+  const removedResult =
+    sourceUrls.length > 0
+      ? await locations.updateMany(
+          {
+            source: "doggydating",
+            sourceUrl: { $nin: sourceUrls },
+            status: { $ne: "removed" },
+          },
+          {
+            $set: {
+              status: "removed",
+              updatedAt: new Date(),
+            },
+            $unset: {
+              ratingSummary: "",
+            },
+          },
+        )
+      : { modifiedCount: 0 };
+
+  await locations.createIndex({ sourceUrl: 1 }, { unique: true });
+  await locations.createIndex({ location: "2dsphere" });
+  await locations.createIndex({ status: 1 });
+  await locations.createIndex({ type: 1 });
+  await locations.createIndex({ characteristics: 1 });
+  await locations.createIndex({ name: "text", description: "text" });
+  try {
+    await locations.dropIndex("ratingSummary.average_-1");
+  } catch (error) {
+    if (error.codeName !== "IndexNotFound") {
+      throw error;
+    }
+  }
+
+  console.log("Import complete");
+  console.log(`Database: ${db.databaseName}`);
+  console.log(`Collection: locations`);
+  console.log(`Source rows: ${source.length}`);
+  console.log(`Matched: ${result?.matchedCount ?? 0}`);
+  console.log(`Inserted: ${result?.upsertedCount ?? 0}`);
+  console.log(`Modified: ${result?.modifiedCount ?? 0}`);
+  console.log(`Marked removed: ${removedResult.modifiedCount}`);
+  console.log(`Total in collection: ${await locations.countDocuments()}`);
+  console.log(
+    `Published in collection: ${await locations.countDocuments({ status: "published" })}`,
+  );
+} finally {
+  await client.close();
+}

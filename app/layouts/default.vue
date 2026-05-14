@@ -1,6 +1,5 @@
 <script lang="ts" setup>
 import AppHeader from "~/components/AppHeader.vue";
-import AppFooter from "~/components/AppFooter.vue";
 </script>
 <template>
   <UApp>
@@ -8,7 +7,7 @@ import AppFooter from "~/components/AppFooter.vue";
     <UMain>
       <slot />
     </UMain>
-    <AppFooter />
+    <!--    <AppFooter />-->
   </UApp>
 </template>
 

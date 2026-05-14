@@ -8,14 +8,21 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "prettier": "npx prettier . --write"
+    "prettier": "npx prettier . --write",
+    "db:test": "node scripts/test-mongodb.js",
+    "db:import": "node scripts/import-locations.js",
+    "db:inspect": "node scripts/inspect-mongodb.js"
   },
   "dependencies": {
     "@nuxt/eslint": "^1.15.2",
     "@nuxt/image": "^2.0.0",
     "@tailwindcss/vite": "^4.3.0",
+    "cheerio": "^1.2.0",
     "eslint": "^10.3.0",
+    "maplibre-gl": "^5.24.0",
+    "mongodb": "^7.2.0",
     "nuxt": "^4.4.5",
+    "p-limit": "^7.3.0",
     "tailwindcss": "^4.3.0",
     "vue": "^3.5.34",
     "vue-router": "^5.0.6"

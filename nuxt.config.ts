@@ -28,6 +28,11 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
   modules: ["@nuxt/eslint", "@nuxt/image", "@nuxt/ui"],
+  runtimeConfig: {
+    public: {
+      mapStyleUrl: "",
+    },
+  },
   fonts: {
     families: [
       {
@@ -38,7 +43,7 @@ export default defineNuxtConfig({
       },
     ],
   },
-  css: ["./app/assets/css/main.css"],
+  css: ["maplibre-gl/dist/maplibre-gl.css", "./app/assets/css/main.css"],
   vite: {
     plugins: [vueStyleTailwindReference(), tailwindcss()],
     optimizeDeps: {
