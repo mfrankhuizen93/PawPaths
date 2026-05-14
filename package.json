@@ -11,7 +11,8 @@
     "prettier": "npx prettier . --write",
     "db:test": "node scripts/test-mongodb.js",
     "db:import": "node scripts/import-locations.js",
-    "db:inspect": "node scripts/inspect-mongodb.js"
+    "db:inspect": "node scripts/inspect-mongodb.js",
+    "images:upload": "node scripts/upload-location-photos.js"
   },
   "dependencies": {
     "@nuxt/eslint": "^1.15.2",

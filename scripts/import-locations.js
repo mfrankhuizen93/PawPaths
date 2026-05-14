@@ -12,7 +12,41 @@ function toDateOrNull(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function toLocationDocument(location) {
+function isCloudinaryPhoto(photo) {
+  return (
+    photo?.provider === "cloudinary" || /res\.cloudinary\.com/.test(photo?.url)
+  );
+}
+
+function getOriginalPhotoUrl(photo) {
+  return photo?.originalUrl ?? photo?.url ?? null;
+}
+
+function mergePhotos(sourcePhotos = [], existingPhotos = []) {
+  const existingCloudinaryByOriginalUrl = new Map();
+
+  for (const photo of existingPhotos) {
+    const originalUrl = getOriginalPhotoUrl(photo);
+    if (originalUrl && isCloudinaryPhoto(photo)) {
+      existingCloudinaryByOriginalUrl.set(originalUrl, photo);
+    }
+  }
+
+  return sourcePhotos.map((photo) => {
+    const originalUrl = getOriginalPhotoUrl(photo);
+    const existingPhoto = existingCloudinaryByOriginalUrl.get(originalUrl);
+
+    if (existingPhoto) return existingPhoto;
+
+    return {
+      url: photo.url,
+      originalUrl: photo.originalUrl ?? photo.url,
+      alt: photo.alt ?? null,
+    };
+  });
+}
+
+function toLocationDocument(location, existingLocation) {
   const hasCoordinates =
     Number.isFinite(location.longitude) && Number.isFinite(location.latitude);
 
@@ -36,10 +70,7 @@ function toLocationDocument(location) {
     warnings: location.warnings ?? inferLocationWarnings(location.reviews),
     description: location.description ?? "",
     relatedUrls: location.relatedUrls ?? [],
-    photos: (location.photos ?? []).map((photo) => ({
-      url: photo.url,
-      alt: photo.alt ?? null,
-    })),
+    photos: mergePhotos(location.photos, existingLocation?.photos),
     reviews: (location.reviews ?? []).map((review) => ({
       reviewerName: review.reviewer,
       dateText: review.date,
@@ -71,7 +102,19 @@ try {
   const db = client.db(dbName);
   const locations = db.collection("locations");
 
-  const documents = source.map(toLocationDocument);
+  const sourceUrls = source.map((location) => location.url).filter(Boolean);
+  const existingLocations = await locations
+    .find(
+      { sourceUrl: { $in: sourceUrls } },
+      { projection: { sourceUrl: 1, photos: 1 } },
+    )
+    .toArray();
+  const existingBySourceUrl = new Map(
+    existingLocations.map((location) => [location.sourceUrl, location]),
+  );
+  const documents = source.map((location) =>
+    toLocationDocument(location, existingBySourceUrl.get(location.url)),
+  );
   const operations = documents.map((document) => ({
     updateOne: {
       filter: { sourceUrl: document.sourceUrl },
@@ -93,13 +136,13 @@ try {
       ? await locations.bulkWrite(operations, { ordered: false })
       : null;
 
-  const sourceUrls = documents.map((document) => document.sourceUrl);
+  const documentSourceUrls = documents.map((document) => document.sourceUrl);
   const removedResult =
-    sourceUrls.length > 0
+    documentSourceUrls.length > 0
       ? await locations.updateMany(
           {
             source: "doggydating",
-            sourceUrl: { $nin: sourceUrls },
+            sourceUrl: { $nin: documentSourceUrls },
             status: { $ne: "removed" },
           },
           {
