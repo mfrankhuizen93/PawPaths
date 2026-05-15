@@ -1,44 +1,15 @@
 <script lang="ts" setup>
-type LocationListItem = {
-  id: string;
-  name: string;
-  city?: string | null;
-  country?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  type: string[];
-  characteristics: string[];
-  warnings: string[];
-  reviewCount: number;
-  ratingCount: number;
-  averageRating?: number | null;
-  photos: {
-    url: string;
-    alt?: string | null;
-  }[];
-  distanceMeters?: number;
-};
-
-type LocationsResponse = {
-  items: LocationListItem[];
-  total: number;
-  limit: number;
-  skip: number;
-};
-
-type LocationFilters = {
-  q?: string;
-  minRating?: number;
-  type?: string[];
-  excludeType?: string[];
-  characteristic?: string[];
-  excludeCharacteristic?: string[];
-};
+import type {
+  LocationFilters,
+  LocationListItem,
+  LocationsResponse,
+} from "#shared/types/locations";
 
 type FilterMode = "include" | "exclude";
 
 const typeOptions = ["beach", "dog playground", "nature reserve", "park"];
 const characteristicOptions = [
+  "off-leash area",
   "fenced",
   "food and drink",
   "horse trails",
@@ -343,7 +314,7 @@ function clearFilters() {
 
     <div v-if="!error" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <article
-        v-for="location in locations"
+        v-for="location in locations.slice(0, 3)"
         :key="location.id"
         class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm"
       >

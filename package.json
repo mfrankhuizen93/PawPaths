@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "prettier": "npx prettier . --write",
+    "scrape": "node scripts/scrape-doggydating.js",
     "db:test": "node scripts/test-mongodb.js",
     "db:import": "node scripts/import-locations.js",
     "db:inspect": "node scripts/inspect-mongodb.js",

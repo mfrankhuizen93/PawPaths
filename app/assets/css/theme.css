@@ -51,11 +51,4 @@
 
   --font-sans: Metropolis, ui-sans-serif, system-ui, sans-serif;
   --font-title: Nunito, sans-serif;
-
-  --radius-card: 1.25rem;
-  --radius-button: 0.875rem;
-  --radius-chip: 999px;
-
-  --shadow-card: 0 10px 30px rgb(15 63 42 / 0.08);
-  --shadow-button: 0 6px 16px rgb(15 63 42 / 0.18);
 }

@@ -1,12 +1,22 @@
-<script lang="ts" setup></script>
+<script lang="ts" setup>
+import { headerNavigationItems } from "~/navigation/items";
+</script>
 
 <template>
-  <UHeader>
+  <UHeader mode="drawer">
     <template #title>
       <div class="app-title">
         <AppLogo class="app-title__logo" />
         <h1>PawPaths</h1>
       </div>
+    </template>
+
+    <template #body>
+      <UNavigationMenu
+        :items="headerNavigationItems"
+        class="w-full"
+        orientation="vertical"
+      />
     </template>
   </UHeader>
 </template>

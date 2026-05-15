@@ -1,15 +1,17 @@
 import * as cheerio from "cheerio";
 import fs from "node:fs/promises";
 import pLimit from "p-limit";
-import { inferLocationWarnings } from "./server/utils/location-warnings.js";
+import { inferLocationWarnings } from "../server/utils/location-warnings.js";
 
 const BASE_URL = "https://www.doggydating.com";
 const START_URL = `${BASE_URL}/hondenlosloopgebied/`;
+const SITEMAP_URL = `${BASE_URL}/losloopgebieden-sitemap.xml`;
 const MAX_LISTING_PAGES = 100;
 const JSON_OUTPUT_PATH = "doggydating-locations.json";
 const META_OUTPUT_PATH = "doggydating-locations.meta.json";
-const CACHE_SCHEMA_VERSION = 4;
+const CACHE_SCHEMA_VERSION = 5;
 const FORCE_REFRESH = process.argv.includes("--force");
+const OFF_LEASH_CHARACTERISTIC = "off-leash area";
 
 const HEADERS = {
   "User-Agent": "Location research scraper - contact: your@email.com",
@@ -65,6 +67,14 @@ function translateLabels(values, labels) {
   ];
 }
 
+function normalizeCharacteristics(values) {
+  return [
+    ...new Set(
+      (values ?? []).map((value) => clean(value).toLowerCase()).filter(Boolean),
+    ),
+  ];
+}
+
 function normalizeLocation(location) {
   if (!location) return location;
 
@@ -72,14 +82,22 @@ function normalizeLocation(location) {
   delete normalizedLocation.views;
   delete normalizedLocation.ratingSummary;
   const reviews = (normalizedLocation.reviews ?? []).filter(isReview);
+  const characteristics = translateLabels(
+    normalizedLocation.characteristics,
+    CHARACTERISTIC_LABELS,
+  );
 
   return {
     ...normalizedLocation,
     type: translateLabels(normalizedLocation.type, TYPE_LABELS),
-    characteristics: translateLabels(
-      normalizedLocation.characteristics,
-      CHARACTERISTIC_LABELS,
-    ),
+    characteristics: [
+      ...new Set(
+        normalizeCharacteristics([
+          OFF_LEASH_CHARACTERISTIC,
+          ...characteristics,
+        ]),
+      ),
+    ],
     warnings: inferLocationWarnings(reviews),
     relatedUrls: normalizedLocation.relatedUrls ?? [],
     photos: normalizePhotos(normalizedLocation.photos),
@@ -132,6 +150,33 @@ function extractLocationCount($) {
   const match = pageText.match(/(\d+)\s+losloopgebieden/i);
 
   return match ? Number(match[1]) : null;
+}
+
+function extractListingPageCount($) {
+  const pageCounts = [];
+  const titleMatch = clean($("title").text()).match(
+    /pagina\s+\d+\s+van\s+(\d+)/i,
+  );
+
+  if (titleMatch) {
+    pageCounts.push(Number(titleMatch[1]));
+  }
+
+  $('a[href*="/hondenlosloopgebied/page/"]').each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+
+    const match = href.match(/\/hondenlosloopgebied\/page\/(\d+)\/?/);
+    if (match) pageCounts.push(Number(match[1]));
+  });
+
+  const totalPages = Math.max(...pageCounts.filter(Number.isFinite), 0);
+
+  return totalPages > 0 ? totalPages : null;
+}
+
+function getListingUrlForPage(page) {
+  return page === 1 ? START_URL : `${START_URL}page/${page}/`;
 }
 
 function collectLocationUrls($, urls) {
@@ -216,9 +261,28 @@ async function getListingSnapshot() {
   };
 }
 
+async function getSitemapLocationUrls() {
+  console.log(`Fetching location sitemap: ${SITEMAP_URL}`);
+
+  const xml = await fetchHtml(SITEMAP_URL);
+  const urls = new Set();
+  const locMatches = xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/g);
+
+  for (const match of locMatches) {
+    const url = absoluteUrl(match[1]);
+
+    if (isLocationDetailUrl(url)) {
+      urls.add(url);
+    }
+  }
+
+  return [...urls];
+}
+
 async function getLocationUrls(firstPageHtml) {
   const urls = new Set();
   const seenListingUrls = new Set();
+  let listingPageCount = null;
 
   let page = 1;
   let url = START_URL;
@@ -235,11 +299,41 @@ async function getLocationUrls(firstPageHtml) {
     const added = collectLocationUrls($, urls);
     console.log(`Found ${added} new location URLs on page ${page}`);
 
-    url = getNextListingUrl($, url);
+    listingPageCount = Math.max(
+      listingPageCount ?? 0,
+      extractListingPageCount($) ?? 0,
+    );
+
+    const nextListingUrl = getNextListingUrl($, url);
+    url =
+      nextListingUrl ??
+      (listingPageCount && page < listingPageCount
+        ? getListingUrlForPage(page + 1)
+        : null);
     page += 1;
   }
 
   return [...urls];
+}
+
+async function getAuthoritativeLocationUrls(firstPageHtml, listingCount) {
+  try {
+    const sitemapUrls = await getSitemapLocationUrls();
+    console.log(`Found ${sitemapUrls.length} location URLs in sitemap`);
+
+    if (listingCount === null || sitemapUrls.length >= listingCount) {
+      return sitemapUrls;
+    }
+
+    console.log(
+      `Sitemap URL count is below listing count (${sitemapUrls.length}/${listingCount}); falling back to archive pages`,
+    );
+  } catch (error) {
+    console.log(`Could not read sitemap; falling back to archive pages`);
+    console.log(error.message);
+  }
+
+  return await getLocationUrls(firstPageHtml);
 }
 
 function extractCoordinates($) {
@@ -469,16 +563,20 @@ async function main() {
     await getListingSnapshot();
   const cachedListingCount =
     cacheMetadata?.listingCount ?? cachedLocations.length;
+  const cachedUrlCount = cacheMetadata?.urlCount ?? cachedLocations.length;
   const cacheSchemaVersion = cacheMetadata?.schemaVersion ?? 1;
   const needsFullDetailRefresh =
     FORCE_REFRESH || cacheSchemaVersion < CACHE_SCHEMA_VERSION;
+  const hasCompleteCachedUrlList =
+    listingCount === null || cachedUrlCount === listingCount;
 
   if (
     !FORCE_REFRESH &&
     !needsFullDetailRefresh &&
     cachedLocations.length > 0 &&
     listingCount !== null &&
-    cachedListingCount === listingCount
+    cachedListingCount === listingCount &&
+    hasCompleteCachedUrlList
   ) {
     console.log(
       `Location count unchanged (${listingCount}); using ${JSON_OUTPUT_PATH}`,
@@ -530,9 +628,15 @@ async function main() {
     console.log("No cached locations found; scraping from scratch");
   }
 
-  const urls = await getLocationUrls(firstPageHtml);
+  const urls = await getAuthoritativeLocationUrls(firstPageHtml, listingCount);
 
   console.log(`Found ${urls.length} location URLs`);
+
+  if (listingCount !== null && urls.length < listingCount) {
+    throw new Error(
+      `Only found ${urls.length} location URLs, but the listing advertises ${listingCount}`,
+    );
+  }
 
   const cachedByUrl = new Map(
     cachedLocations

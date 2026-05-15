@@ -4,6 +4,7 @@ import { getMongoConfig, loadEnvFile } from "./env.js";
 import { inferLocationWarnings } from "../server/utils/location-warnings.js";
 
 const SOURCE_PATH = "doggydating-locations.json";
+const OFF_LEASH_CHARACTERISTIC = "off-leash area";
 
 function toDateOrNull(value) {
   if (!value) return null;
@@ -46,9 +47,20 @@ function mergePhotos(sourcePhotos = [], existingPhotos = []) {
   });
 }
 
+function normalizeCharacteristic(value) {
+  return String(value).trim().toLowerCase();
+}
+
 function toLocationDocument(location, existingLocation) {
   const hasCoordinates =
     Number.isFinite(location.longitude) && Number.isFinite(location.latitude);
+  const characteristics = [
+    ...new Set(
+      [OFF_LEASH_CHARACTERISTIC, ...(location.characteristics ?? [])]
+        .map(normalizeCharacteristic)
+        .filter(Boolean),
+    ),
+  ];
 
   return {
     sourceUrl: location.url,
@@ -66,7 +78,7 @@ function toLocationDocument(location, existingLocation) {
         }
       : null,
     type: location.type ?? [],
-    characteristics: location.characteristics ?? [],
+    characteristics,
     warnings: location.warnings ?? inferLocationWarnings(location.reviews),
     description: location.description ?? "",
     relatedUrls: location.relatedUrls ?? [],

@@ -1,28 +1,45 @@
 import { defineEventHandler, getQuery } from "h3";
+import type { QueryObject, QueryValue } from "ufo";
+import type { LocationsResponse } from "#shared/types/locations";
 import { getDb } from "../utils/mongodb.js";
 import { inferLocationWarnings } from "../utils/location-warnings.js";
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
 
-function toFiniteNumber(value) {
+type MongoFilter = Record<string, unknown>;
+type PipelineStage = Record<string, unknown>;
+
+type LocationReview = {
+  rating?: unknown;
+};
+
+type RawLocationItem = {
+  reviews?: LocationReview[];
+  [key: string]: unknown;
+};
+
+function toFiniteNumber(value: QueryValue | QueryValue[]): number | null {
   if (Array.isArray(value)) return toFiniteNumber(value[0]);
 
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
-function toPositiveNumber(value) {
+function toPositiveNumber(value: QueryValue | QueryValue[]): number | null {
   const number = toFiniteNumber(value);
   return number && number > 0 ? number : null;
 }
 
-function toNonNegativeInteger(value, fallback = 0) {
+function toNonNegativeInteger(
+  value: QueryValue | QueryValue[],
+  fallback = 0,
+): number {
   const number = Number(value);
   return Number.isInteger(number) && number >= 0 ? number : fallback;
 }
 
-function toLimitedInteger(value) {
+function toLimitedInteger(value: QueryValue | QueryValue[]): number {
   const number = Number(value);
 
   if (!Number.isInteger(number) || number < 1) return DEFAULT_LIMIT;
@@ -30,7 +47,7 @@ function toLimitedInteger(value) {
   return Math.min(number, MAX_LIMIT);
 }
 
-function toRating(value) {
+function toRating(value: QueryValue | QueryValue[]): number | null {
   const number = toFiniteNumber(value);
 
   if (number === null || number < 1 || number > 5) return null;
@@ -38,11 +55,11 @@ function toRating(value) {
   return number;
 }
 
-function escapeRegex(value) {
+function escapeRegex(value: QueryValue | QueryValue[]) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function asArray(value) {
+function asArray(value: QueryValue | QueryValue[]): string[] {
   if (!value) return [];
 
   const values = Array.isArray(value) ? value : [value];
@@ -55,8 +72,8 @@ function asArray(value) {
   );
 }
 
-function buildFilter(query) {
-  const filter = {
+function buildFilter(query: QueryObject): MongoFilter {
+  const filter: MongoFilter = {
     status: "published",
   };
 
@@ -67,7 +84,7 @@ function buildFilter(query) {
   }
   if (excludedTypes.length > 0) {
     filter.type = {
-      ...(filter.type ?? {}),
+      ...((filter.type as MongoFilter | undefined) ?? {}),
       $nin: excludedTypes,
     };
   }
@@ -81,7 +98,7 @@ function buildFilter(query) {
   }
   if (excludedCharacteristics.length > 0) {
     filter.characteristics = {
-      ...(filter.characteristics ?? {}),
+      ...((filter.characteristics as MongoFilter | undefined) ?? {}),
       $nin: excludedCharacteristics,
     };
   }
@@ -98,7 +115,7 @@ function buildFilter(query) {
   return filter;
 }
 
-function getBoundsFilter(query) {
+function getBoundsFilter(query: QueryObject): MongoFilter | null {
   const west = toFiniteNumber(query.west);
   const south = toFiniteNumber(query.south);
   const east = toFiniteNumber(query.east);
@@ -120,7 +137,7 @@ function getBoundsFilter(query) {
     return null;
   }
 
-  const makeBoundsPolygon = (minLng, maxLng) => ({
+  const makeBoundsPolygon = (minLng: number, maxLng: number): MongoFilter => ({
     location: {
       $geoWithin: {
         $geometry: {
@@ -148,7 +165,7 @@ function getBoundsFilter(query) {
   };
 }
 
-function getRatingValuesExpression() {
+function getRatingValuesExpression(): MongoFilter {
   return {
     $filter: {
       input: {
@@ -164,7 +181,7 @@ function getRatingValuesExpression() {
   };
 }
 
-function buildRatingFieldsStage() {
+function buildRatingFieldsStage(): PipelineStage {
   const ratingValues = {
     $let: {
       vars: { ratings: getRatingValuesExpression() },
@@ -197,8 +214,8 @@ function buildRatingFieldsStage() {
   };
 }
 
-function buildProjection(includeReviews) {
-  const projection = {
+function buildProjection(): MongoFilter {
+  return {
     _id: 0,
     id: { $toString: "$_id" },
     sourceUrl: 1,
@@ -222,14 +239,14 @@ function buildProjection(includeReviews) {
     reviewCount: 1,
     ratingCount: 1,
     averageRating: 1,
+    reviews: 1,
   };
-
-  projection.reviews = 1;
-
-  return projection;
 }
 
-function normalizeWarnings(items, includeReviews) {
+function normalizeWarnings(
+  items: RawLocationItem[],
+  includeReviews: boolean,
+): LocationsResponse["items"] {
   return items.map((item) => {
     const warnings = inferLocationWarnings(item.reviews);
 
@@ -237,7 +254,7 @@ function normalizeWarnings(items, includeReviews) {
       return {
         ...item,
         warnings,
-      };
+      } as LocationsResponse["items"][number];
     }
 
     const { reviews, ...location } = item;
@@ -245,11 +262,11 @@ function normalizeWarnings(items, includeReviews) {
     return {
       ...location,
       warnings,
-    };
+    } as LocationsResponse["items"][number];
   });
 }
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   const query = getQuery(event);
   const db = await getDb();
   const locations = db.collection("locations");
@@ -262,13 +279,14 @@ export default defineEventHandler(async (event) => {
   const lng = toFiniteNumber(query.lng);
   const radiusKm = toPositiveNumber(query.radiusKm);
   const boundsFilter = getBoundsFilter(query);
-  const isGeoSearch = !boundsFilter && lat !== null && lng !== null && radiusKm;
+  const isGeoSearch =
+    !boundsFilter && lat !== null && lng !== null && radiusKm !== null;
   const minRating = toRating(query.minRating);
-  const projection = buildProjection(includeReviews);
+  const projection = buildProjection();
   const ratingFieldsStage = buildRatingFieldsStage();
 
-  const pipeline = [];
-  const countPipeline = [];
+  const pipeline: PipelineStage[] = [];
+  const countPipeline: PipelineStage[] = [];
 
   if (boundsFilter) {
     const boundedFilter = {

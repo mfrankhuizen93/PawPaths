@@ -5,45 +5,16 @@ import type {
   MapLayerMouseEvent,
   Popup,
 } from "maplibre-gl";
-
-type LocationMapItem = {
-  id: string;
-  name: string;
-  city?: string | null;
-  country?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  type: string[];
-  characteristics: string[];
-  reviewCount: number;
-  ratingCount: number;
-  averageRating?: number | null;
-  photos: {
-    url: string;
-    alt?: string | null;
-  }[];
-};
-
-type LocationsResponse = {
-  items: LocationMapItem[];
-  total: number;
-  limit: number;
-  skip: number;
-};
-
-type LocationFilters = {
-  q?: string;
-  minRating?: number;
-  type?: string[];
-  excludeType?: string[];
-  characteristic?: string[];
-  excludeCharacteristic?: string[];
-};
+import type {
+  LocationFilters,
+  LocationListItem,
+  LocationsResponse,
+} from "#shared/types/locations";
 
 const props = withDefaults(
   defineProps<{
-    locations?: LocationMapItem[];
-    location?: LocationMapItem | null;
+    locations?: LocationListItem[];
+    location?: LocationListItem | null;
     variant?: "search" | "single" | "static";
     limit?: number;
     filters?: LocationFilters;
@@ -76,7 +47,7 @@ const searchError = ref(false);
 const hasSearched = ref(false);
 const locationError = ref("");
 const userLocation = ref<[number, number] | null>(null);
-const fetchedLocations = ref<LocationMapItem[]>([]);
+const fetchedLocations = ref<LocationListItem[]>([]);
 let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 const mapStyle =
