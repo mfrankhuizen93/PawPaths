@@ -18,6 +18,26 @@ export type LocationListItem = {
   distanceMeters?: number;
 };
 
+export type LocationRelatedUrl = {
+  label: string;
+  url: string;
+};
+
+export type LocationReview = {
+  reviewer?: string | null;
+  date?: string | null;
+  rating?: number | null;
+  text?: string | null;
+};
+
+export type LocationDetail = LocationListItem & {
+  province?: string | null;
+  description?: string | null;
+  relatedUrls?: LocationRelatedUrl[];
+  reviews?: LocationReview[];
+  sourceUrl?: string | null;
+};
+
 export type LocationsResponse = {
   items: LocationListItem[];
   total: number;

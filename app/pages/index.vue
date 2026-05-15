@@ -4,8 +4,15 @@ import type {
   LocationListItem,
   LocationsResponse,
 } from "#shared/types/locations";
+import { getLocationPath } from "#shared/utils/location-route";
 
 type FilterMode = "include" | "exclude";
+type PersistedFilters = {
+  searchQuery?: unknown;
+  minRating?: unknown;
+  typeModes?: unknown;
+  characteristicModes?: unknown;
+};
 
 const typeOptions = ["beach", "dog playground", "nature reserve", "park"];
 const characteristicOptions = [
@@ -37,6 +44,7 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
     label: "Traffic nearby",
   },
 };
+const filtersStorageKey = "pawpaths.locationFilters";
 
 const searchQuery = ref("");
 const minRating = ref<number | null>(null);
@@ -111,6 +119,52 @@ function getValuesByMode(modes: Record<string, FilterMode>, mode: FilterMode) {
     .map(([key]) => key);
 }
 
+function isFilterMode(value: unknown): value is FilterMode {
+  return value === "include" || value === "exclude";
+}
+
+function getStoredModes(
+  value: unknown,
+  allowedOptions: string[],
+): Record<string, FilterMode> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const allowedValues = new Set(allowedOptions);
+
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([key, mode]) => allowedValues.has(key) && isFilterMode(mode),
+    ),
+  );
+}
+
+function getStoredRating(value: unknown) {
+  return typeof value === "number" && ratingOptions.includes(value)
+    ? value
+    : null;
+}
+
+function readStoredFilters(): PersistedFilters | null {
+  try {
+    const storedValue = window.localStorage.getItem(filtersStorageKey);
+    return storedValue ? (JSON.parse(storedValue) as PersistedFilters) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeFilters() {
+  window.localStorage.setItem(
+    filtersStorageKey,
+    JSON.stringify({
+      searchQuery: searchQuery.value,
+      minRating: minRating.value,
+      typeModes: typeModes.value,
+      characteristicModes: characteristicModes.value,
+    }),
+  );
+}
+
 function getNextMode(mode?: FilterMode) {
   if (!mode) return "include";
   if (mode === "include") return "exclude";
@@ -178,6 +232,32 @@ function clearFilters() {
   typeModes.value = {};
   characteristicModes.value = {};
 }
+
+onMounted(() => {
+  const storedFilters = readStoredFilters();
+
+  if (!storedFilters) return;
+
+  searchQuery.value =
+    typeof storedFilters.searchQuery === "string"
+      ? storedFilters.searchQuery
+      : "";
+  minRating.value = getStoredRating(storedFilters.minRating);
+  typeModes.value = getStoredModes(storedFilters.typeModes, typeOptions);
+  characteristicModes.value = getStoredModes(
+    storedFilters.characteristicModes,
+    characteristicOptions,
+  );
+});
+
+watch([searchQuery, minRating, typeModes, characteristicModes], storeFilters, {
+  deep: true,
+  flush: "sync",
+});
+
+onBeforeRouteLeave(() => {
+  storeFilters();
+});
 </script>
 
 <template>
@@ -385,6 +465,16 @@ function clearFilters() {
             <template v-else>No rating yet ·</template>
             {{ location.reviewCount }} reviews
           </p>
+
+          <UButton
+            :to="getLocationPath(location.name)"
+            class="self-start"
+            color="primary"
+            icon="i-lucide-info"
+            size="sm"
+          >
+            More information
+          </UButton>
         </div>
       </article>
     </div>

@@ -10,6 +10,15 @@ import type {
   LocationListItem,
   LocationsResponse,
 } from "#shared/types/locations";
+import { getLocationPath } from "#shared/utils/location-route";
+
+type StoredMapViewport = {
+  lng: number;
+  lat: number;
+  zoom: number;
+  bearing: number;
+  pitch: number;
+};
 
 const props = withDefaults(
   defineProps<{
@@ -31,6 +40,7 @@ const props = withDefaults(
     title: "Explore locations",
   },
 );
+const mapViewportStorageKey = "pawpaths.searchMapViewport";
 
 const emit = defineEmits<{
   locationsLoaded: [response: LocationsResponse];
@@ -100,6 +110,7 @@ function getFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Point> {
         reviewCount: location.reviewCount,
         ratingCount: location.ratingCount,
         averageRating: location.averageRating,
+        detailPath: getLocationPath(location.name),
         photoUrl: location.photos?.[0]?.url ?? null,
         photoAlt: location.photos?.[0]?.alt ?? location.name,
       },
@@ -193,6 +204,51 @@ function zoomToCoordinates(coordinates: [number, number]) {
     duration: 800,
     essential: true,
   });
+}
+
+function isStoredMapViewport(value: unknown): value is StoredMapViewport {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const viewport = value as Partial<StoredMapViewport>;
+
+  return (
+    Number.isFinite(viewport.lng) &&
+    Number.isFinite(viewport.lat) &&
+    Number.isFinite(viewport.zoom) &&
+    Number.isFinite(viewport.bearing) &&
+    Number.isFinite(viewport.pitch) &&
+    Math.abs(viewport.lng as number) <= 180 &&
+    Math.abs(viewport.lat as number) <= 90
+  );
+}
+
+function readStoredMapViewport() {
+  if (props.variant !== "search") return null;
+
+  try {
+    const storedValue = window.localStorage.getItem(mapViewportStorageKey);
+    const parsedValue = storedValue ? JSON.parse(storedValue) : null;
+    return isStoredMapViewport(parsedValue) ? parsedValue : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeMapViewport() {
+  if (props.variant !== "search" || !map.value) return;
+
+  const center = map.value.getCenter();
+
+  window.localStorage.setItem(
+    mapViewportStorageKey,
+    JSON.stringify({
+      lng: center.lng,
+      lat: center.lat,
+      zoom: map.value.getZoom(),
+      bearing: map.value.getBearing(),
+      pitch: map.value.getPitch(),
+    }),
+  );
 }
 
 async function zoomToMyLocation() {
@@ -396,7 +452,10 @@ function addLocationLayers() {
             ? `Rating ${feature.properties.averageRating} (${feature.properties.ratingCount} ratings)`
             : "No rating yet",
         )}</em>
-        <em>${escapeHtml(feature.properties.reviewCount)} reviews</em>`,
+        <em>${escapeHtml(feature.properties.reviewCount)} reviews</em>
+        <a href="${escapeHtml(
+          feature.properties.detailPath,
+        )}" style="display:inline-flex;align-items:center;justify-content:center;margin-top:8px;border-radius:6px;background:#1f4d3a;color:#fff;font-size:0.8125rem;font-weight:800;line-height:1;padding:9px 10px;text-decoration:none;">More information</a>`,
       )
       .addTo(map.value);
   });
@@ -411,7 +470,10 @@ function addLocationLayers() {
   }
 
   if (props.variant === "search") {
-    map.value.on("moveend", queueVisibleSearch);
+    map.value.on("moveend", () => {
+      storeMapViewport();
+      queueVisibleSearch();
+    });
   }
 }
 
@@ -451,8 +513,10 @@ onMounted(async () => {
   if (!mapContainer.value) return;
 
   const maplibregl = await import("maplibre-gl");
-  const initialCenter =
-    mappedLocations.value.length > 0
+  const storedViewport = readStoredMapViewport();
+  const initialCenter = storedViewport
+    ? ([storedViewport.lng, storedViewport.lat] as [number, number])
+    : mappedLocations.value.length > 0
       ? ([
           mappedLocations.value[0].longitude,
           mappedLocations.value[0].latitude,
@@ -463,7 +527,9 @@ onMounted(async () => {
     container: mapContainer.value,
     style: mapStyle,
     center: initialCenter,
-    zoom: mappedLocations.value.length > 0 ? 8 : 6,
+    zoom: storedViewport?.zoom ?? (mappedLocations.value.length > 0 ? 8 : 6),
+    bearing: storedViewport?.bearing ?? 0,
+    pitch: storedViewport?.pitch ?? 0,
     attributionControl: false,
   });
 
@@ -478,7 +544,7 @@ onMounted(async () => {
   map.value.on("load", () => {
     addLocationLayers();
     addUserLocationLayer();
-    fitToLocations();
+    if (!storedViewport) fitToLocations();
     isReady.value = true;
     queueVisibleSearch();
   });
@@ -496,6 +562,10 @@ watch(filterKey, () => {
 });
 
 watch(userLocation, syncUserLocation);
+
+onBeforeRouteLeave(() => {
+  storeMapViewport();
+});
 
 onBeforeUnmount(() => {
   if (searchTimer) {
