@@ -6,6 +6,10 @@ import { inferLocationWarnings } from "../server/utils/location-warnings.js";
 const SOURCE_PATH = "doggydating-locations.json";
 const OFF_LEASH_CHARACTERISTIC = "off-leash area";
 
+function hasText(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function toDateOrNull(value) {
   if (!value) return null;
 
@@ -51,6 +55,30 @@ function normalizeCharacteristic(value) {
   return String(value).trim().toLowerCase();
 }
 
+function isDoggyDatingUrl(value) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    return /(^|\.)doggydating\.com$/i.test(url.hostname);
+  } catch {
+    return /doggy[-\s]?dating|doggydating/i.test(String(value));
+  }
+}
+
+function isDoggyDatingRelatedUrl(relatedUrl) {
+  return (
+    isDoggyDatingUrl(relatedUrl?.url) ||
+    /doggy[-\s]?dating|doggydating/i.test(String(relatedUrl?.label ?? ""))
+  );
+}
+
+function cleanRelatedUrls(relatedUrls = []) {
+  return relatedUrls.filter(
+    (relatedUrl) => !isDoggyDatingRelatedUrl(relatedUrl),
+  );
+}
+
 function toLocationDocument(location, existingLocation) {
   const hasCoordinates =
     Number.isFinite(location.longitude) && Number.isFinite(location.latitude);
@@ -80,8 +108,10 @@ function toLocationDocument(location, existingLocation) {
     type: location.type ?? [],
     characteristics,
     warnings: location.warnings ?? inferLocationWarnings(location.reviews),
-    description: location.description ?? "",
-    relatedUrls: location.relatedUrls ?? [],
+    description: hasText(existingLocation?.description)
+      ? existingLocation.description
+      : (location.description ?? ""),
+    relatedUrls: cleanRelatedUrls(location.relatedUrls ?? []),
     photos: mergePhotos(location.photos, existingLocation?.photos),
     reviews: (location.reviews ?? []).map((review) => ({
       reviewerName: review.reviewer,
@@ -118,7 +148,7 @@ try {
   const existingLocations = await locations
     .find(
       { sourceUrl: { $in: sourceUrls } },
-      { projection: { sourceUrl: 1, photos: 1 } },
+      { projection: { sourceUrl: 1, description: 1, photos: 1 } },
     )
     .toArray();
   const existingBySourceUrl = new Map(

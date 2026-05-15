@@ -48,3 +48,14 @@ export function getCloudinaryConfig() {
 
   return { cloudName, apiKey, apiSecret };
 }
+
+export function getOpenAIConfig() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_DESCRIPTION_MODEL ?? "gpt-4.1-mini";
+
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY in .env");
+  }
+
+  return { apiKey, model };
+}
