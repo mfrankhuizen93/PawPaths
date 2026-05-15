@@ -324,8 +324,23 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
     countPipeline.push({ $match: { averageRating: { $gte: minRating } } });
   }
 
-  if (!isGeoSearch) {
-    pipeline.push({ $sort: { name: 1 } });
+  if (isGeoSearch) {
+    pipeline.push({
+      $sort: {
+        distanceMeters: 1,
+        averageRating: -1,
+        ratingCount: -1,
+        name: 1,
+      },
+    });
+  } else {
+    pipeline.push({
+      $sort: {
+        averageRating: -1,
+        ratingCount: -1,
+        name: 1,
+      },
+    });
   }
 
   pipeline.push({ $skip: skip });
