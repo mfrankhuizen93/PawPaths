@@ -4,6 +4,7 @@ import type {
   LocationsResponse,
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
+import { getLocationPath } from "#shared/utils/location-route";
 
 const characteristicOptions: Record<string, { icon: string; label: string }> = {
   "off-leash area": {
@@ -214,7 +215,19 @@ definePageMeta({
         </div>
       </template>
       <template #body>
-        <AppPhotoLanes :photos="selectedLocation?.photos" />
+        <div class="flex flex-col gap-4">
+          <AppPhotoLanes :photos="selectedLocation?.photos" />
+
+          <UButton
+            :to="getLocationPath(selectedLocation.name)"
+            class="w-full"
+            color="primary"
+            icon="i-lucide-info"
+            size="sm"
+          >
+            More information
+          </UButton>
+        </div>
       </template>
     </UDrawer>
   </div>
