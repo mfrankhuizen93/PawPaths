@@ -1,5 +1,17 @@
 <script lang="ts" setup>
 import { headerNavigationItems } from "~/navigation/items";
+import { useTextSearch } from "~/composables/states";
+
+defineProps({
+  isExplore: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+defineEmits(["search"]);
+
+const searchQuery = useTextSearch();
 </script>
 
 <template>
@@ -7,8 +19,20 @@ import { headerNavigationItems } from "~/navigation/items";
     <template #title>
       <div class="app-title">
         <AppLogo class="app-title__logo" />
-        <h1>PawPaths</h1>
+        <h1 v-if="!isExplore">PawPaths</h1>
       </div>
+    </template>
+
+    <template #right>
+      <UInput
+        v-model="searchQuery"
+        icon="i-lucide-search"
+        placeholder="Search for places, areas..."
+      />
+
+      <UButton icon="i-lucide-sliders" label="Filters" variant="subtle" />
+
+      <UColorModeButton v-if="!isExplore" />
     </template>
 
     <template #body>

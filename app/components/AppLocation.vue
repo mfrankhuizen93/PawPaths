@@ -171,69 +171,6 @@ function syncUserLocation() {
   source.setData(getUserLocationFeatureCollection());
 }
 
-function getDistanceMeters(
-  fromCoordinates: [number, number],
-  location: LocationListItem,
-) {
-  if (
-    !Number.isFinite(location.latitude) ||
-    !Number.isFinite(location.longitude)
-  ) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  const [fromLng, fromLat] = fromCoordinates;
-  const toLat = location.latitude as number;
-  const toLng = location.longitude as number;
-  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-  const earthRadiusMeters = 6_371_000;
-  const deltaLat = toRadians(toLat - fromLat);
-  const deltaLng = toRadians(toLng - fromLng);
-  const lat1 = toRadians(fromLat);
-  const lat2 = toRadians(toLat);
-  const haversine =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
-
-  return (
-    2 *
-    earthRadiusMeters *
-    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
-  );
-}
-
-function getRatingSortValue(location: LocationListItem) {
-  return location.averageRating ?? -1;
-}
-
-function sortLocations(items: LocationListItem[]) {
-  const coordinates = userLocation.value;
-  const sortableItems = coordinates
-    ? items.map((location) => ({
-        ...location,
-        distanceMeters: getDistanceMeters(coordinates, location),
-      }))
-    : [...items];
-
-  return sortableItems.sort((a, b) => {
-    if (coordinates) {
-      const distanceDifference =
-        (a.distanceMeters ?? Number.POSITIVE_INFINITY) -
-        (b.distanceMeters ?? Number.POSITIVE_INFINITY);
-
-      if (distanceDifference !== 0) return distanceDifference;
-    }
-
-    const ratingDifference = getRatingSortValue(b) - getRatingSortValue(a);
-    if (ratingDifference !== 0) return ratingDifference;
-
-    const ratingCountDifference = b.ratingCount - a.ratingCount;
-    if (ratingCountDifference !== 0) return ratingCountDifference;
-
-    return a.name.localeCompare(b.name);
-  });
-}
-
 function fitToLocations() {
   if (!map.value || mappedLocations.value.length === 0) return;
 
@@ -373,15 +310,9 @@ async function searchVisibleLocations() {
       },
     });
 
-    const sortedItems = sortLocations(response.items);
-    const sortedResponse = {
-      ...response,
-      items: sortedItems,
-    };
-
     hasSearched.value = true;
-    fetchedLocations.value = sortedItems;
-    emit("locationsLoaded", sortedResponse);
+    fetchedLocations.value = response.items;
+    emit("locationsLoaded", response);
   } catch {
     searchError.value = true;
   } finally {
@@ -698,7 +629,7 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <div class="bg-surface-muted relative h-[28rem] min-h-80">
+    <div class="bg-surface-muted relative h-112 min-h-80">
       <div ref="mapContainer" class="h-full w-full" />
 
       <UAlert

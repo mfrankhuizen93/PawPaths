@@ -48,7 +48,6 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
 const filtersStorageKey = "pawpaths.locationFilters";
 
 const searchQuery = useTextSearch();
-
 const minRating = ref<number | null>(null);
 const typeModes = ref<Record<string, FilterMode>>({});
 const characteristicModes = ref<Record<string, FilterMode>>({});
@@ -259,6 +258,10 @@ watch([searchQuery, minRating, typeModes, characteristicModes], storeFilters, {
 
 onBeforeRouteLeave(() => {
   storeFilters();
+});
+
+definePageMeta({
+  layout: "explore",
 });
 </script>
 
