@@ -3,6 +3,13 @@ export type LocationResult = {
   total: number;
 };
 
+export type LocationPhoto = {
+  url: string;
+  alt?: string | null;
+  width?: number | null;
+  height?: number | null;
+};
+
 export type LocationListItem = {
   id: string;
   name: string;
@@ -16,10 +23,7 @@ export type LocationListItem = {
   reviewCount: number;
   ratingCount: number;
   averageRating?: number | null;
-  photos: {
-    url: string;
-    alt?: string | null;
-  }[];
+  photos: LocationPhoto[];
   distanceMeters?: number;
 };
 
