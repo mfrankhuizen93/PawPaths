@@ -577,7 +577,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex items-stretch gap-2">
+  <div v-if="false" class="flex items-stretch gap-2">
     <UBadge
       :aria-hidden="!isSearching"
       :class="isSearching ? 'opacity-100' : 'opacity-0'"
@@ -602,7 +602,7 @@ onBeforeUnmount(() => {
     </UButton>
   </div>
   <div class="bg-surface-muted relative h-full">
-    <div ref="mapContainer" class="h-full w-full" />
+    <div ref="mapContainer" class="h-full min-h-96 w-full" />
 
     <UAlert
       v-if="locationError"
