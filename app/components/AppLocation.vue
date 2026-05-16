@@ -518,8 +518,8 @@ onMounted(async () => {
     ? ([storedViewport.lng, storedViewport.lat] as [number, number])
     : mappedLocations.value.length > 0
       ? ([
-          mappedLocations.value[0].longitude,
-          mappedLocations.value[0].latitude,
+          mappedLocations.value[0]?.longitude,
+          mappedLocations.value[0]?.latitude,
         ] as [number, number])
       : ([5.2913, 52.1326] as [number, number]);
 
@@ -577,91 +577,63 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <UCard
-    :ui="{ body: 'p-0 sm:p-0', header: 'p-4 sm:p-5' }"
-    class="border-border bg-surface shadow-card overflow-hidden border"
-  >
-    <template #header>
-      <div
-        class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          <p class="text-brand-600 text-sm font-semibold">{{ eyebrow }}</p>
-          <h2 class="font-title text-text-primary text-2xl font-extrabold">
-            {{ title }}
-          </h2>
-        </div>
+  <div class="flex items-stretch gap-2">
+    <UBadge
+      :aria-hidden="!isSearching"
+      :class="isSearching ? 'opacity-100' : 'opacity-0'"
+      color="primary"
+      variant="soft"
+    >
+      Searching
+    </UBadge>
+    <UBadge color="neutral" variant="soft">
+      {{ locationCountLabel }}
+    </UBadge>
+    <UButton
+      :disabled="!isReady"
+      :loading="isLocating"
+      color="neutral"
+      icon="i-lucide-crosshair"
+      size="sm"
+      variant="outline"
+      @click="zoomToMyLocation"
+    >
+      Me
+    </UButton>
+  </div>
+  <div class="bg-surface-muted relative h-full">
+    <div ref="mapContainer" class="h-full w-full" />
 
-        <div class="flex items-stretch gap-2">
-          <UBadge
-            :aria-hidden="!isSearching"
-            :class="isSearching ? 'opacity-100' : 'opacity-0'"
-            color="primary"
-            variant="soft"
-          >
-            Searching
-          </UBadge>
-          <UBadge color="neutral" variant="soft">
-            {{ locationCountLabel }}
-          </UBadge>
-          <UButton
-            :disabled="!isReady"
-            :loading="isLocating"
-            color="neutral"
-            icon="i-lucide-crosshair"
-            size="sm"
-            variant="outline"
-            @click="zoomToMyLocation"
-          >
-            Me
-          </UButton>
-          <UButton
-            :disabled="mappedLocations.length === 0"
-            color="neutral"
-            icon="i-lucide-locate-fixed"
-            size="sm"
-            variant="outline"
-            @click="fitToLocations"
-          >
-            Fit
-          </UButton>
-        </div>
-      </div>
-    </template>
+    <UAlert
+      v-if="locationError"
+      :title="locationError"
+      class="absolute top-4 left-4 z-10 max-w-sm shadow-sm"
+      color="neutral"
+      description="Allow location access in your browser, then try again."
+      icon="i-lucide-crosshair"
+      variant="soft"
+    />
 
-    <div class="bg-surface-muted relative h-112 min-h-80">
-      <div ref="mapContainer" class="h-full w-full" />
-
+    <div
+      v-if="mappedLocations.length === 0"
+      class="pointer-events-none absolute inset-0 grid place-items-center"
+    >
       <UAlert
-        v-if="locationError"
-        :title="locationError"
-        class="absolute top-4 left-4 z-10 max-w-sm shadow-sm"
+        :description="
+          searchError
+            ? 'Try moving the map or checking the location API.'
+            : 'The current results do not include coordinates yet.'
+        "
+        :title="
+          searchError ? 'Could not search this area' : 'No mapped locations'
+        "
+        class="max-w-sm bg-white shadow-sm"
         color="neutral"
-        description="Allow location access in your browser, then try again."
-        icon="i-lucide-crosshair"
         variant="soft"
       />
-
-      <div
-        v-if="mappedLocations.length === 0"
-        class="pointer-events-none absolute inset-0 grid place-items-center"
-      >
-        <UAlert
-          :description="
-            searchError
-              ? 'Try moving the map or checking the location API.'
-              : 'The current results do not include coordinates yet.'
-          "
-          :title="
-            searchError ? 'Could not search this area' : 'No mapped locations'
-          "
-          class="max-w-sm bg-white shadow-sm"
-          color="neutral"
-          variant="soft"
-        />
-      </div>
     </div>
-  </UCard>
+  </div>
+  <!--  </UCard>-->
 </template>
 
 <style>

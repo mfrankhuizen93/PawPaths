@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { headerNavigationItems } from "~/navigation/items";
-import { useTextSearch } from "~/composables/states";
+import { useExploreQuery } from "~/composables/states";
 
 defineProps({
   isExplore: {
@@ -11,7 +11,7 @@ defineProps({
 
 defineEmits(["search"]);
 
-const searchQuery = useTextSearch();
+const activeFilters = useExploreQuery();
 </script>
 
 <template>
@@ -25,12 +25,30 @@ const searchQuery = useTextSearch();
 
     <template #right>
       <UInput
-        v-model="searchQuery"
+        v-model="activeFilters.q"
+        :ui="{ trailing: 'pe-1' }"
         icon="i-lucide-search"
         placeholder="Search for places, areas..."
-      />
+      >
+        <template v-if="activeFilters.q?.length" #trailing>
+          <UButton
+            aria-label="Clear input"
+            color="neutral"
+            icon="i-lucide-circle-x"
+            size="sm"
+            variant="link"
+            @click="activeFilters.q = ''"
+          />
+        </template>
+      </UInput>
 
-      <UButton icon="i-lucide-sliders" label="Filters" variant="subtle" />
+      <USlideover close-icon="i-lucide-arrow-right" title="Filter locations">
+        <UButton icon="i-lucide-sliders" label="Filters" variant="subtle" />
+
+        <template #body>
+          <AppLocationFilters v-model="activeFilters" />
+        </template>
+      </USlideover>
 
       <UColorModeButton v-if="!isExplore" />
     </template>
