@@ -1,10 +1,5 @@
 <script lang="ts" setup>
-import type {
-  GeoJSONSource,
-  Map,
-  MapLayerMouseEvent,
-  Popup,
-} from "maplibre-gl";
+import type { GeoJSONSource, Map, MapLayerMouseEvent } from "maplibre-gl";
 import type {
   LocationFilters,
   LocationListItem,
@@ -44,12 +39,12 @@ const mapViewportStorageKey = "pawpaths.searchMapViewport";
 
 const emit = defineEmits<{
   locationsLoaded: [response: LocationsResponse];
+  locationSelected: [location: LocationListItem];
 }>();
 
 const config = useRuntimeConfig();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = shallowRef<Map | null>(null);
-const popup = shallowRef<Popup | null>(null);
 const isReady = ref(false);
 const isSearching = ref(false);
 const isLocating = ref(false);
@@ -128,15 +123,6 @@ function getUserLocationSource() {
   return map.value?.getSource("pawpaths-user-location") as
     | GeoJSONSource
     | undefined;
-}
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 function syncLocations() {
@@ -349,7 +335,7 @@ function addLocationLayers() {
     source: "pawpaths-locations",
     filter: ["has", "point_count"],
     paint: {
-      "circle-color": "#1f4d3a",
+      "circle-color": "#4d7c5e",
       "circle-radius": ["step", ["get", "point_count"], 18, 10, 24, 30, 31],
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 3,
@@ -364,7 +350,7 @@ function addLocationLayers() {
     layout: {
       "text-field": ["get", "point_count_abbreviated"],
       "text-size": 13,
-      "text-font": ["Noto Sans Regular"],
+      "text-font": ["Metropolis Medium"],
     },
     paint: {
       "text-color": "#ffffff",
@@ -393,14 +379,14 @@ function addLocationLayers() {
         "match",
         ["get", "kind"],
         "beach",
-        "#5dade2",
-        "forest",
-        "#6f8756",
+        "#5DADE2",
+        "nature reserve",
+        "#4F7A5A",
         "park",
-        "#4caf7d",
-        "restaurant",
-        "#e6c15a",
-        "#e76f51",
+        "#8BAE7A",
+        "dog playground",
+        "#6BBF73",
+        "#E2F5E5",
       ],
       "circle-radius": 6,
       "circle-stroke-color": "#1a1a1a",
@@ -435,29 +421,13 @@ function addLocationLayers() {
 
     if (!map.value || !feature?.properties || !coordinates) return;
 
-    popup.value
-      ?.setLngLat(coordinates as [number, number])
-      .setHTML(
-        `${
-          feature.properties.photoUrl
-            ? `<img src="${escapeHtml(feature.properties.photoUrl)}" alt="${escapeHtml(
-                feature.properties.photoAlt,
-              )}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;margin-bottom:8px;" />`
-            : ""
-        }<strong>${escapeHtml(feature.properties.name)}</strong>
-        <span>${escapeHtml(feature.properties.locality)}</span>
-        <small>${escapeHtml(feature.properties.characteristics)}</small>
-        <em>${escapeHtml(
-          feature.properties.averageRating != null
-            ? `Rating ${feature.properties.averageRating} (${feature.properties.ratingCount} ratings)`
-            : "No rating yet",
-        )}</em>
-        <em>${escapeHtml(feature.properties.reviewCount)} reviews</em>
-        <a href="${escapeHtml(
-          feature.properties.detailPath,
-        )}" style="display:inline-flex;align-items:center;justify-content:center;margin-top:8px;border-radius:6px;background:#1f4d3a;color:#fff;font-size:0.8125rem;font-weight:800;line-height:1;padding:9px 10px;text-decoration:none;">More information</a>`,
-      )
-      .addTo(map.value);
+    const selectedLocation = activeLocations.value.find(
+      (location) => location.id === feature.properties?.id,
+    );
+
+    if (selectedLocation) {
+      emit("locationSelected", selectedLocation);
+    }
   });
 
   for (const layerId of ["pawpaths-clusters", "pawpaths-locations"]) {
@@ -535,11 +505,6 @@ onMounted(async () => {
 
   map.value.addControl(new maplibregl.NavigationControl(), "top-right");
   map.value.addControl(new maplibregl.AttributionControl({ compact: true }));
-  popup.value = new maplibregl.Popup({
-    closeButton: false,
-    closeOnMove: true,
-    offset: 14,
-  });
 
   map.value.on("load", () => {
     addLocationLayers();
@@ -571,7 +536,6 @@ onBeforeUnmount(() => {
   if (searchTimer) {
     window.clearTimeout(searchTimer);
   }
-  popup.value?.remove();
   map.value?.remove();
 });
 </script>
@@ -635,39 +599,3 @@ onBeforeUnmount(() => {
   </div>
   <!--  </UCard>-->
 </template>
-
-<style>
-.maplibregl-popup-content {
-  border-radius: 8px;
-  box-shadow: 0 16px 36px rgb(15 63 42 / 0.18);
-  color: #1a1a1a;
-  display: grid;
-  gap: 2px;
-  min-width: 180px;
-  padding: 10px 12px;
-}
-
-.maplibregl-popup-content strong,
-.maplibregl-popup-content span,
-.maplibregl-popup-content small,
-.maplibregl-popup-content em {
-  display: block;
-}
-
-.maplibregl-popup-content strong {
-  font-weight: 800;
-}
-
-.maplibregl-popup-content span,
-.maplibregl-popup-content small {
-  color: #6b6b6b;
-}
-
-.maplibregl-popup-content em {
-  color: #1f4d3a;
-  font-size: 0.75rem;
-  font-style: normal;
-  font-weight: 700;
-  margin-top: 4px;
-}
-</style>

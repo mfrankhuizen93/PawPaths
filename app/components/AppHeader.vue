@@ -42,13 +42,18 @@ const activeFilters = useExploreQuery();
         </template>
       </UInput>
 
-      <USlideover close-icon="i-lucide-arrow-right" title="Filter locations">
+      <UDrawer
+        v-if="isExplore"
+        description="Refine your search by location, type, and more."
+        direction="right"
+        title="Filter locations"
+      >
         <UButton icon="i-lucide-sliders" label="Filters" variant="subtle" />
 
         <template #body>
           <AppLocationFilters v-model="activeFilters" />
         </template>
-      </USlideover>
+      </UDrawer>
 
       <UColorModeButton v-if="!isExplore" />
     </template>

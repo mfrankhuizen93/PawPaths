@@ -283,7 +283,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5">
+  <div class="flex flex-col gap-4">
     <div class="grid gap-4 lg:grid-cols-[minmax(14rem,1fr)_auto]">
       <label class="flex flex-col gap-2">
         <span class="text-text-primary text-sm font-bold">Search</span>
