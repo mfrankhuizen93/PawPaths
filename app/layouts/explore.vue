@@ -4,7 +4,9 @@ import AppHeader from "~/components/AppHeader.vue";
 <template>
   <UApp class="min-h-dvh">
     <AppHeader is-explore />
-    <UMain class="pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <UMain
+      class="h-[calc(100vh-var(--ui-header-height))] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0"
+    >
       <slot />
     </UMain>
     <AppFooter />
