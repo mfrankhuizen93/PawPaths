@@ -55,8 +55,14 @@ function toRating(value: QueryValue | QueryValue[]): number | null {
   return number;
 }
 
-function escapeRegex(value: QueryValue | QueryValue[]) {
+function escapeRegex(value: unknown) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toSearchQuery(value: QueryValue | QueryValue[]) {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+
+  return rawValue ? String(rawValue).trim() : "";
 }
 
 function asArray(value: QueryValue | QueryValue[]): string[] {
@@ -103,8 +109,9 @@ function buildFilter(query: QueryObject): MongoFilter {
     };
   }
 
-  if (query.q) {
-    const pattern = new RegExp(escapeRegex(query.q), "i");
+  const searchQuery = toSearchQuery(query.q);
+  if (searchQuery) {
+    const pattern = new RegExp(escapeRegex(searchQuery), "i");
     filter.$or = [
       { name: pattern },
       { city: pattern },
@@ -243,6 +250,40 @@ function buildProjection(): MongoFilter {
   };
 }
 
+function buildSearchScoreStage(searchQuery: string): PipelineStage {
+  const escapedQuery = escapeRegex(searchQuery);
+
+  const getRegexScore = (field: string, regex: string, score: number) => ({
+    $cond: [
+      {
+        $regexMatch: {
+          input: { $ifNull: [`$${field}`, ""] },
+          regex,
+          options: "i",
+        },
+      },
+      score,
+      0,
+    ],
+  });
+
+  return {
+    $set: {
+      searchScore: {
+        $add: [
+          getRegexScore("name", `^${escapedQuery}$`, 120),
+          getRegexScore("name", `^${escapedQuery}`, 80),
+          getRegexScore("name", escapedQuery, 60),
+          getRegexScore("city", `^${escapedQuery}$`, 50),
+          getRegexScore("city", `^${escapedQuery}`, 40),
+          getRegexScore("city", escapedQuery, 30),
+          getRegexScore("description", escapedQuery, 10),
+        ],
+      },
+    },
+  };
+}
+
 function normalizeWarnings(
   items: RawLocationItem[],
   includeReviews: boolean,
@@ -272,6 +313,7 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   const locations = db.collection("locations");
 
   const filter = buildFilter(query);
+  const searchQuery = toSearchQuery(query.q);
   const limit = toLimitedInteger(query.limit);
   const skip = toNonNegativeInteger(query.skip);
   const includeReviews = query.includeReviews === "true";
@@ -324,10 +366,12 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
     countPipeline.push({ $match: { averageRating: { $gte: minRating } } });
   }
 
-  if (isGeoSearch) {
+  if (searchQuery) {
+    pipeline.push(buildSearchScoreStage(searchQuery));
     pipeline.push({
       $sort: {
-        distanceMeters: 1,
+        searchScore: -1,
+        reviewCount: -1,
         averageRating: -1,
         ratingCount: -1,
         name: 1,
@@ -336,6 +380,7 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   } else {
     pipeline.push({
       $sort: {
+        reviewCount: -1,
         averageRating: -1,
         ratingCount: -1,
         name: 1,

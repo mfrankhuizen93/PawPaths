@@ -1,3 +1,8 @@
+export type LocationResult = {
+  locations: LocationListItem[];
+  total: number;
+};
+
 export type LocationListItem = {
   id: string;
   name: string;

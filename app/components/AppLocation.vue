@@ -1,10 +1,5 @@
 <script lang="ts" setup>
-import type {
-  GeoJSONSource,
-  Map,
-  MapLayerMouseEvent,
-  Popup,
-} from "maplibre-gl";
+import type { GeoJSONSource, Map, MapLayerMouseEvent } from "maplibre-gl";
 import type {
   LocationFilters,
   LocationListItem,
@@ -44,12 +39,12 @@ const mapViewportStorageKey = "pawpaths.searchMapViewport";
 
 const emit = defineEmits<{
   locationsLoaded: [response: LocationsResponse];
+  locationSelected: [location: LocationListItem];
 }>();
 
 const config = useRuntimeConfig();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = shallowRef<Map | null>(null);
-const popup = shallowRef<Popup | null>(null);
 const isReady = ref(false);
 const isSearching = ref(false);
 const isLocating = ref(false);
@@ -130,15 +125,6 @@ function getUserLocationSource() {
     | undefined;
 }
 
-function escapeHtml(value: unknown) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
 function syncLocations() {
   const source = getLocationsSource();
   if (!source) return;
@@ -169,69 +155,6 @@ function syncUserLocation() {
   if (!source) return;
 
   source.setData(getUserLocationFeatureCollection());
-}
-
-function getDistanceMeters(
-  fromCoordinates: [number, number],
-  location: LocationListItem,
-) {
-  if (
-    !Number.isFinite(location.latitude) ||
-    !Number.isFinite(location.longitude)
-  ) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  const [fromLng, fromLat] = fromCoordinates;
-  const toLat = location.latitude as number;
-  const toLng = location.longitude as number;
-  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-  const earthRadiusMeters = 6_371_000;
-  const deltaLat = toRadians(toLat - fromLat);
-  const deltaLng = toRadians(toLng - fromLng);
-  const lat1 = toRadians(fromLat);
-  const lat2 = toRadians(toLat);
-  const haversine =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
-
-  return (
-    2 *
-    earthRadiusMeters *
-    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
-  );
-}
-
-function getRatingSortValue(location: LocationListItem) {
-  return location.averageRating ?? -1;
-}
-
-function sortLocations(items: LocationListItem[]) {
-  const coordinates = userLocation.value;
-  const sortableItems = coordinates
-    ? items.map((location) => ({
-        ...location,
-        distanceMeters: getDistanceMeters(coordinates, location),
-      }))
-    : [...items];
-
-  return sortableItems.sort((a, b) => {
-    if (coordinates) {
-      const distanceDifference =
-        (a.distanceMeters ?? Number.POSITIVE_INFINITY) -
-        (b.distanceMeters ?? Number.POSITIVE_INFINITY);
-
-      if (distanceDifference !== 0) return distanceDifference;
-    }
-
-    const ratingDifference = getRatingSortValue(b) - getRatingSortValue(a);
-    if (ratingDifference !== 0) return ratingDifference;
-
-    const ratingCountDifference = b.ratingCount - a.ratingCount;
-    if (ratingCountDifference !== 0) return ratingCountDifference;
-
-    return a.name.localeCompare(b.name);
-  });
 }
 
 function fitToLocations() {
@@ -373,15 +296,9 @@ async function searchVisibleLocations() {
       },
     });
 
-    const sortedItems = sortLocations(response.items);
-    const sortedResponse = {
-      ...response,
-      items: sortedItems,
-    };
-
     hasSearched.value = true;
-    fetchedLocations.value = sortedItems;
-    emit("locationsLoaded", sortedResponse);
+    fetchedLocations.value = response.items;
+    emit("locationsLoaded", response);
   } catch {
     searchError.value = true;
   } finally {
@@ -418,7 +335,7 @@ function addLocationLayers() {
     source: "pawpaths-locations",
     filter: ["has", "point_count"],
     paint: {
-      "circle-color": "#1f4d3a",
+      "circle-color": "#4d7c5e",
       "circle-radius": ["step", ["get", "point_count"], 18, 10, 24, 30, 31],
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 3,
@@ -433,7 +350,7 @@ function addLocationLayers() {
     layout: {
       "text-field": ["get", "point_count_abbreviated"],
       "text-size": 13,
-      "text-font": ["Noto Sans Regular"],
+      "text-font": ["Metropolis Medium"],
     },
     paint: {
       "text-color": "#ffffff",
@@ -462,14 +379,14 @@ function addLocationLayers() {
         "match",
         ["get", "kind"],
         "beach",
-        "#5dade2",
-        "forest",
-        "#6f8756",
+        "#5DADE2",
+        "nature reserve",
+        "#4F7A5A",
         "park",
-        "#4caf7d",
-        "restaurant",
-        "#e6c15a",
-        "#e76f51",
+        "#8BAE7A",
+        "dog playground",
+        "#6BBF73",
+        "#E2F5E5",
       ],
       "circle-radius": 6,
       "circle-stroke-color": "#1a1a1a",
@@ -504,29 +421,13 @@ function addLocationLayers() {
 
     if (!map.value || !feature?.properties || !coordinates) return;
 
-    popup.value
-      ?.setLngLat(coordinates as [number, number])
-      .setHTML(
-        `${
-          feature.properties.photoUrl
-            ? `<img src="${escapeHtml(feature.properties.photoUrl)}" alt="${escapeHtml(
-                feature.properties.photoAlt,
-              )}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;margin-bottom:8px;" />`
-            : ""
-        }<strong>${escapeHtml(feature.properties.name)}</strong>
-        <span>${escapeHtml(feature.properties.locality)}</span>
-        <small>${escapeHtml(feature.properties.characteristics)}</small>
-        <em>${escapeHtml(
-          feature.properties.averageRating != null
-            ? `Rating ${feature.properties.averageRating} (${feature.properties.ratingCount} ratings)`
-            : "No rating yet",
-        )}</em>
-        <em>${escapeHtml(feature.properties.reviewCount)} reviews</em>
-        <a href="${escapeHtml(
-          feature.properties.detailPath,
-        )}" style="display:inline-flex;align-items:center;justify-content:center;margin-top:8px;border-radius:6px;background:#1f4d3a;color:#fff;font-size:0.8125rem;font-weight:800;line-height:1;padding:9px 10px;text-decoration:none;">More information</a>`,
-      )
-      .addTo(map.value);
+    const selectedLocation = activeLocations.value.find(
+      (location) => location.id === feature.properties?.id,
+    );
+
+    if (selectedLocation) {
+      emit("locationSelected", selectedLocation);
+    }
   });
 
   for (const layerId of ["pawpaths-clusters", "pawpaths-locations"]) {
@@ -587,8 +488,8 @@ onMounted(async () => {
     ? ([storedViewport.lng, storedViewport.lat] as [number, number])
     : mappedLocations.value.length > 0
       ? ([
-          mappedLocations.value[0].longitude,
-          mappedLocations.value[0].latitude,
+          mappedLocations.value[0]?.longitude,
+          mappedLocations.value[0]?.latitude,
         ] as [number, number])
       : ([5.2913, 52.1326] as [number, number]);
 
@@ -604,11 +505,6 @@ onMounted(async () => {
 
   map.value.addControl(new maplibregl.NavigationControl(), "top-right");
   map.value.addControl(new maplibregl.AttributionControl({ compact: true }));
-  popup.value = new maplibregl.Popup({
-    closeButton: false,
-    closeOnMove: true,
-    offset: 14,
-  });
 
   map.value.on("load", () => {
     addLocationLayers();
@@ -640,131 +536,66 @@ onBeforeUnmount(() => {
   if (searchTimer) {
     window.clearTimeout(searchTimer);
   }
-  popup.value?.remove();
   map.value?.remove();
 });
 </script>
 
 <template>
-  <UCard
-    :ui="{ body: 'p-0 sm:p-0', header: 'p-4 sm:p-5' }"
-    class="border-border bg-surface shadow-card overflow-hidden border"
-  >
-    <template #header>
-      <div
-        class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          <p class="text-brand-600 text-sm font-semibold">{{ eyebrow }}</p>
-          <h2 class="font-title text-text-primary text-2xl font-extrabold">
-            {{ title }}
-          </h2>
-        </div>
+  <div v-if="false" class="flex items-stretch gap-2">
+    <UBadge
+      :aria-hidden="!isSearching"
+      :class="isSearching ? 'opacity-100' : 'opacity-0'"
+      color="primary"
+      variant="soft"
+    >
+      Searching
+    </UBadge>
+    <UBadge color="neutral" variant="soft">
+      {{ locationCountLabel }}
+    </UBadge>
+    <UButton
+      :disabled="!isReady"
+      :loading="isLocating"
+      color="neutral"
+      icon="i-lucide-crosshair"
+      size="sm"
+      variant="outline"
+      @click="zoomToMyLocation"
+    >
+      Me
+    </UButton>
+  </div>
+  <div class="bg-surface-muted relative h-full">
+    <div ref="mapContainer" class="h-full min-h-96 w-full" />
 
-        <div class="flex items-stretch gap-2">
-          <UBadge
-            :aria-hidden="!isSearching"
-            :class="isSearching ? 'opacity-100' : 'opacity-0'"
-            color="primary"
-            variant="soft"
-          >
-            Searching
-          </UBadge>
-          <UBadge color="neutral" variant="soft">
-            {{ locationCountLabel }}
-          </UBadge>
-          <UButton
-            :disabled="!isReady"
-            :loading="isLocating"
-            color="neutral"
-            icon="i-lucide-crosshair"
-            size="sm"
-            variant="outline"
-            @click="zoomToMyLocation"
-          >
-            Me
-          </UButton>
-          <UButton
-            :disabled="mappedLocations.length === 0"
-            color="neutral"
-            icon="i-lucide-locate-fixed"
-            size="sm"
-            variant="outline"
-            @click="fitToLocations"
-          >
-            Fit
-          </UButton>
-        </div>
-      </div>
-    </template>
+    <UAlert
+      v-if="locationError"
+      :title="locationError"
+      class="absolute top-4 left-4 z-10 max-w-sm shadow-sm"
+      color="neutral"
+      description="Allow location access in your browser, then try again."
+      icon="i-lucide-crosshair"
+      variant="soft"
+    />
 
-    <div class="bg-surface-muted relative h-[28rem] min-h-80">
-      <div ref="mapContainer" class="h-full w-full" />
-
+    <div
+      v-if="mappedLocations.length === 0"
+      class="pointer-events-none absolute inset-0 grid place-items-center"
+    >
       <UAlert
-        v-if="locationError"
-        :title="locationError"
-        class="absolute top-4 left-4 z-10 max-w-sm shadow-sm"
+        :description="
+          searchError
+            ? 'Try moving the map or checking the location API.'
+            : 'The current results do not include coordinates yet.'
+        "
+        :title="
+          searchError ? 'Could not search this area' : 'No mapped locations'
+        "
+        class="max-w-sm bg-white shadow-sm"
         color="neutral"
-        description="Allow location access in your browser, then try again."
-        icon="i-lucide-crosshair"
         variant="soft"
       />
-
-      <div
-        v-if="mappedLocations.length === 0"
-        class="pointer-events-none absolute inset-0 grid place-items-center"
-      >
-        <UAlert
-          :description="
-            searchError
-              ? 'Try moving the map or checking the location API.'
-              : 'The current results do not include coordinates yet.'
-          "
-          :title="
-            searchError ? 'Could not search this area' : 'No mapped locations'
-          "
-          class="max-w-sm bg-white shadow-sm"
-          color="neutral"
-          variant="soft"
-        />
-      </div>
     </div>
-  </UCard>
+  </div>
+  <!--  </UCard>-->
 </template>
-
-<style>
-.maplibregl-popup-content {
-  border-radius: 8px;
-  box-shadow: 0 16px 36px rgb(15 63 42 / 0.18);
-  color: #1a1a1a;
-  display: grid;
-  gap: 2px;
-  min-width: 180px;
-  padding: 10px 12px;
-}
-
-.maplibregl-popup-content strong,
-.maplibregl-popup-content span,
-.maplibregl-popup-content small,
-.maplibregl-popup-content em {
-  display: block;
-}
-
-.maplibregl-popup-content strong {
-  font-weight: 800;
-}
-
-.maplibregl-popup-content span,
-.maplibregl-popup-content small {
-  color: #6b6b6b;
-}
-
-.maplibregl-popup-content em {
-  color: #1f4d3a;
-  font-size: 0.75rem;
-  font-style: normal;
-  font-weight: 700;
-  margin-top: 4px;
-}
-</style>
