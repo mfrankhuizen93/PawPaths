@@ -5,7 +5,7 @@ import { footerNavigationItems } from "~/navigation/items";
 <template>
   <UFooter
     :ui="{
-      container: 'w-full p-0',
+      container: 'h-18 w-full p-0',
       center: 'm-0 flex w-full flex-col',
       left: 'm-0',
     }"

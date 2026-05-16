@@ -31,15 +31,7 @@ useSeoMeta({
 });
 
 function backToMap() {
-  if (
-    import.meta.client &&
-    document.referrer.startsWith(window.location.origin)
-  ) {
-    router.back();
-    return;
-  }
-
-  void navigateTo("/");
+  router.back();
 }
 </script>
 

@@ -1,4 +1,4 @@
-@theme {
+@theme static {
   /* Brand */
   --color-brand-50: #f1f6f3;
   --color-brand-100: #dcebe2;
@@ -10,6 +10,7 @@
   --color-brand-700: #123024;
   --color-brand-800: #0d241b;
   --color-brand-900: #081812;
+  --color-brand-950: #030c09;
 
   /* Sage */
   --color-sage-50: #f2f7f3;
@@ -25,16 +26,16 @@
   --color-sage-950: #111d17;
 
   /* App surfaces */
-  --color-background: #f7f5f0;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f1eee7;
-  --color-border: #e5e2da;
+  /*--color-background: #f7f5f0;*/
+  /*--color-surface: #ffffff;*/
+  /*--color-surface-muted: #f1eee7;*/
+  /*--color-border: #e5e2da;*/
 
   /* Text */
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #6b6b6b;
-  --color-text-muted: #9a958c;
-  --color-disabled: #c9c5bd;
+  /*--color-text-primary: #1a1a1a;*/
+  /*--color-text-secondary: #6b6b6b;*/
+  /*--color-text-muted: #9a958c;*/
+  /*--color-disabled: #c9c5bd;*/
 
   /* Tags / statuses */
   --color-calm: #4caf7d;
@@ -48,6 +49,22 @@
 
   --color-water: #5dade2;
   --color-water-soft: #dcedfa;
+
+  --color-park: #8BAE7A;
+  --color-park-soft: #EEF5EA;
+
+  --color-nature: #4F7A5A;
+  --color-nature-soft: #E1ECE4;
+
+  --color-playground: #6BBF73;
+  --color-playground-soft: #E2F5E5;
+
+  --color-beach: #5DADE2;
+  --color-beach-soft: #E2F5E5;
+
+
+
+
 
   --font-sans: Metropolis, ui-sans-serif, system-ui, sans-serif;
   --font-title: Nunito, sans-serif;
