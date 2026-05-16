@@ -1,18 +1,52 @@
 <script lang="ts" setup>
 import type {
-  LocationFilters,
   LocationListItem,
   LocationsResponse,
 } from "#shared/types/locations";
+import { useExploreQuery } from "~/composables/states";
 import { getLocationPath } from "#shared/utils/location-route";
 
+const characteristicOptions: Record<string, { icon: string; label: string }> = {
+  "off-leash area": {
+    icon: "i-tabler:ease-in-out",
+    label: "Off-leash Area",
+  },
+  fenced: {
+    icon: "i-tabler:fence",
+    label: "Fenced",
+  },
+  "food and drink": {
+    icon: "i-tabler:coffee",
+    label: "Food and Drink",
+  },
+  "horse trails": {
+    icon: "i-tabler:horse",
+    label: "Horse trails",
+  },
+  "mountain bike trails": {
+    icon: "i-tabler:bike",
+    label: "Mountain bike trails",
+  },
+  "swimming water": {
+    icon: "i-tabler:ripple",
+    label: "Swimming water",
+  },
+  "walking trails": {
+    icon: "i-tabler:walk",
+    label: "Walking trails",
+  },
+  "wheelchair accessible": {
+    icon: "i-tabler:disabled",
+    label: "Wheelchair accessible",
+  },
+};
 const warningOptions: Record<string, { icon: string; label: string }> = {
   "cyclists nearby": {
     icon: "i-lucide-bike",
     label: "Cyclists nearby",
   },
   "livestock nearby": {
-    icon: "i-lucide-triangle-alert",
+    icon: "i-lucide-lab:cow-head",
     label: "Livestock nearby",
   },
   "muddy after rain": {
@@ -24,9 +58,7 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
     label: "Traffic nearby",
   },
 };
-const filtersStorageKey = "pawpaths.locationFilters";
-
-const activeFilters = ref<LocationFilters>({});
+const activeFilters = useExploreQuery();
 
 const locationsQuery = computed(() => ({
   limit: 20,
@@ -42,6 +74,23 @@ const { data, error, pending, refresh } = await useFetch<LocationsResponse>(
 
 const locations = ref<LocationListItem[]>([]);
 const total = ref(0);
+const selectedLocation = ref<LocationListItem | null>(null);
+const isLocationDrawerOpen = computed({
+  get: () => Boolean(selectedLocation.value),
+  set: (open) => {
+    if (!open) selectedLocation.value = null;
+  },
+});
+
+const selectedLocationMeta = computed(() =>
+  [selectedLocation.value?.city, selectedLocation.value?.country]
+    .filter(Boolean)
+    .join(", "),
+);
+
+const selectedLocationPhoto = computed(
+  () => selectedLocation.value?.photos?.[0] ?? null,
+);
 
 watch(
   data,
@@ -57,6 +106,18 @@ function applyMapResults(response: LocationsResponse) {
   total.value = response.total;
 }
 
+function selectLocation(location: LocationListItem) {
+  selectedLocation.value = location;
+}
+
+function getCharacteristicMeta(characteristic: string) {
+  return (
+    characteristicOptions[characteristic] ?? {
+      icon: "i-lucide-triangle-alert",
+      label: characteristic,
+    }
+  );
+}
 function getWarningMeta(warning: string) {
   return (
     warningOptions[warning] ?? {
@@ -65,17 +126,14 @@ function getWarningMeta(warning: string) {
     }
   );
 }
+
+definePageMeta({
+  layout: "explore",
+});
 </script>
 
 <template>
-  <UContainer class="flex flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-    <AppLocationFilters
-      v-model="activeFilters"
-      :persist-key="filtersStorageKey"
-      :result-count="locations.length"
-      :total="total"
-    />
-
+  <div class="flex h-full min-h-0 flex-col gap-6">
     <div
       v-if="pending && locations.length === 0"
       class="rounded-md border border-slate-200 bg-white p-4 text-slate-600"
@@ -97,93 +155,72 @@ function getWarningMeta(warning: string) {
       </button>
     </div>
 
-    <ClientOnly v-if="!error">
-      <LazyAppLocation
-        :filters="activeFilters"
-        :limit="60"
-        :locations="locations"
-        variant="search"
-        @locations-loaded="applyMapResults"
-      />
-    </ClientOnly>
-
-    <div v-if="!error" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <article
-        v-for="location in locations.slice(0, 3)"
-        :key="location.id"
-        class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm"
-      >
-        <img
-          v-if="location.photos?.[0]"
-          :alt="location.photos[0].alt || location.name"
-          :src="location.photos[0].url"
-          class="aspect-[4/3] w-full object-cover"
-          loading="lazy"
+    <div v-if="!error" class="min-h-0 flex-1">
+      <ClientOnly>
+        <LazyAppLocation
+          :filters="activeFilters"
+          :limit="60"
+          :locations="locations"
+          class="h-full"
+          variant="search"
+          @location-selected="selectLocation"
+          @locations-loaded="applyMapResults"
         />
-        <div
-          v-else
-          class="flex aspect-[4/3] w-full items-center justify-center bg-emerald-50 text-sm font-semibold text-emerald-800"
-        >
-          PawPaths
-        </div>
+      </ClientOnly>
+    </div>
 
-        <div class="flex flex-col gap-3 p-4">
-          <div>
-            <h2 class="text-lg font-bold text-slate-950">
-              {{ location.name }}
-            </h2>
-            <p class="text-sm text-slate-600">
-              {{ [location.city, location.country].filter(Boolean).join(", ") }}
-            </p>
-          </div>
-
-          <div class="flex flex-wrap gap-2">
-            <span
-              v-for="type in location.type"
-              :key="type"
-              class="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800"
-            >
-              {{ type }}
-            </span>
-          </div>
-
-          <ul class="flex flex-wrap gap-2">
-            <li
-              v-for="characteristic in location.characteristics.slice(0, 4)"
-              :key="characteristic"
-              class="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
-            >
-              {{ characteristic }}
-            </li>
-          </ul>
-
-          <ul v-if="location.warnings.length" class="flex flex-wrap gap-2">
-            <li
-              v-for="warning in location.warnings"
-              :key="warning"
-              :title="getWarningMeta(warning).label"
-              class="flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800"
-            >
-              <UIcon
-                :name="getWarningMeta(warning).icon"
-                class="size-3.5 shrink-0"
-              />
-              <span>{{ getWarningMeta(warning).label }}</span>
-            </li>
-          </ul>
-
-          <p class="text-sm text-slate-500">
-            <template v-if="location.averageRating != null">
-              Rating {{ location.averageRating }} ·
-              {{ location.ratingCount }} ratings ·
-            </template>
-            <template v-else>No rating yet ·</template>
-            {{ location.reviewCount }} reviews
+    <UDrawer v-model:open="isLocationDrawerOpen">
+      <template #header>
+        <div class="">
+          <p class="text-brand-600 text-sm font-semibold">Location</p>
+          <h2 class="font-title text-2xl font-extrabold text-slate-950">
+            {{ selectedLocation?.name }}
+          </h2>
+          <p v-if="selectedLocationMeta" class="text-sm text-slate-600">
+            {{ selectedLocationMeta }}
           </p>
 
+          <div v-if="selectedLocation" class="flex flex-col flex-wrap gap-4">
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="type in selectedLocation.type"
+                :key="type"
+                color="primary"
+                variant="soft"
+              >
+                {{ type }}
+              </UBadge>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="characteristic in selectedLocation.characteristics"
+                :key="characteristic"
+                color="neutral"
+                variant="soft"
+              >
+                <span>{{ getCharacteristicMeta(characteristic).label }}</span>
+              </UBadge>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="warning in selectedLocation.warnings"
+                :key="warning"
+                color="error"
+                variant="soft"
+              >
+                {{ getWarningMeta(warning).label }}
+              </UBadge>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template #body>
+        <div class="flex flex-col gap-4">
+          <AppPhotoLanes :photos="selectedLocation?.photos" />
+
           <UButton
-            :to="getLocationPath(location.name)"
-            class="self-start"
+            :to="getLocationPath(selectedLocation.name)"
+            class="w-full"
             color="primary"
             icon="i-lucide-info"
             size="sm"
@@ -191,9 +228,9 @@ function getWarningMeta(warning: string) {
             More information
           </UButton>
         </div>
-      </article>
-    </div>
-  </UContainer>
+      </template>
+    </UDrawer>
+  </div>
 </template>
 
 <style scoped></style>
