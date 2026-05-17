@@ -1,6 +1,5 @@
 import { createError, defineEventHandler, getRouterParam } from "h3";
 import type { LocationDetail } from "#shared/types/locations";
-import { getLocationSlug } from "#shared/utils/location-route";
 import { inferLocationWarnings } from "../../utils/location-warnings.js";
 import { getDb } from "../../utils/mongodb.js";
 
@@ -61,6 +60,7 @@ function buildProjection() {
   return {
     _id: 0,
     id: { $toString: "$_id" },
+    slug: 1,
     sourceUrl: 1,
     name: 1,
     city: 1,
@@ -93,17 +93,14 @@ export default defineEventHandler(async (event): Promise<LocationDetail> => {
 
   const db = await getDb();
   const locations = db.collection("locations");
-  const rawLocations = (await locations
+  const location = (await locations
     .aggregate([
-      { $match: { status: "published" } },
+      { $match: { status: "published", slug } },
       buildRatingFieldsStage(),
-      { $sort: { name: 1 } },
       { $project: buildProjection() },
+      { $limit: 1 },
     ])
-    .toArray()) as RawLocationDetail[];
-  const location = rawLocations.find(
-    (item) => getLocationSlug(item.name) === slug,
-  );
+    .next()) as RawLocationDetail | null;
 
   if (!location) {
     throw createError({

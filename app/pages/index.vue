@@ -219,7 +219,9 @@ definePageMeta({
           <AppPhotoLanes :photos="selectedLocation?.photos" />
 
           <UButton
-            :to="getLocationPath(selectedLocation.name)"
+            :to="
+              selectedLocation ? getLocationPath(selectedLocation) : undefined
+            "
             class="w-full"
             color="primary"
             icon="i-lucide-info"

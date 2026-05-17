@@ -9,7 +9,7 @@ const SITEMAP_URL = `${BASE_URL}/losloopgebieden-sitemap.xml`;
 const MAX_LISTING_PAGES = 100;
 const JSON_OUTPUT_PATH = "doggydating-locations.json";
 const META_OUTPUT_PATH = "doggydating-locations.meta.json";
-const CACHE_SCHEMA_VERSION = 5;
+const CACHE_SCHEMA_VERSION = 6;
 const FORCE_REFRESH = process.argv.includes("--force");
 const OFF_LEASH_CHARACTERISTIC = "off-leash area";
 
@@ -37,6 +37,23 @@ function absoluteUrl(href) {
 
 function clean(text) {
   return text?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+function slugify(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function titleCaseSlug(slug) {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 const TYPE_LABELS = new Map([
@@ -522,13 +539,18 @@ function extractDescription($) {
   return paragraphs.join("\n\n");
 }
 
-function guessCityFromUrl(url) {
+function guessCityFromUrl(url, name) {
   const slug = new URL(url).pathname.split("/").filter(Boolean).at(-1);
 
   if (!slug) return null;
 
-  const parts = slug.split("-");
-  return parts.at(-1)?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? null;
+  const nameSlug = slugify(name);
+  const citySlug =
+    nameSlug && slug.startsWith(`${nameSlug}-`)
+      ? slug.slice(nameSlug.length + 1)
+      : "";
+
+  return citySlug ? titleCaseSlug(citySlug) : null;
 }
 
 async function scrapeLocation(url) {
@@ -543,7 +565,7 @@ async function scrapeLocation(url) {
   return {
     url,
     name,
-    cityGuess: guessCityFromUrl(url),
+    cityGuess: guessCityFromUrl(url, name),
     province: null,
     latitude,
     longitude,

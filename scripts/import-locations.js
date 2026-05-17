@@ -10,6 +10,39 @@ function hasText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function slugify(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getSourceSlug(sourceUrl) {
+  if (!sourceUrl) return "";
+
+  try {
+    return slugify(
+      new URL(sourceUrl).pathname.split("/").filter(Boolean).at(-1),
+    );
+  } catch {
+    return "";
+  }
+}
+
+function getLocationSlug(location) {
+  const sourceSlug = getSourceSlug(location.url);
+  if (sourceSlug) return sourceSlug;
+
+  const fallbackSlug = slugify(
+    [location.name, location.cityGuess].filter(hasText).join("-"),
+  );
+  if (fallbackSlug) return fallbackSlug;
+
+  throw new Error(`Could not create slug for ${location.url ?? "location"}`);
+}
+
 function toDateOrNull(value) {
   if (!value) return null;
 
@@ -91,6 +124,7 @@ function toLocationDocument(location, existingLocation) {
   ];
 
   return {
+    slug: getLocationSlug(location),
     sourceUrl: location.url,
     source: "doggydating",
     name: location.name,
@@ -200,6 +234,13 @@ try {
       : { modifiedCount: 0 };
 
   await locations.createIndex({ sourceUrl: 1 }, { unique: true });
+  await locations.createIndex(
+    { slug: 1 },
+    {
+      unique: true,
+      partialFilterExpression: { slug: { $type: "string" } },
+    },
+  );
   await locations.createIndex({ location: "2dsphere" });
   await locations.createIndex({ status: 1 });
   await locations.createIndex({ type: 1 });

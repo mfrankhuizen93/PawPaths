@@ -105,7 +105,7 @@ function getFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Point> {
         reviewCount: location.reviewCount,
         ratingCount: location.ratingCount,
         averageRating: location.averageRating,
-        detailPath: getLocationPath(location.name),
+        detailPath: getLocationPath(location),
         photoUrl: location.photos?.[0]?.url ?? null,
         photoAlt: location.photos?.[0]?.alt ?? location.name,
       },

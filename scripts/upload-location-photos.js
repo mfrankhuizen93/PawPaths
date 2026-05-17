@@ -73,7 +73,8 @@ async function uploadPhoto(
   if (!originalUrl) return null;
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const locationSlug = cleanSlug(location.name) || String(location._id);
+  const locationSlug =
+    location.slug || cleanSlug(location.name) || String(location._id);
   const publicId = `pawpaths/locations/${locationSlug}/${index + 1}-${hash(
     originalUrl,
   )}`;
@@ -185,6 +186,7 @@ try {
     .find(query, {
       projection: {
         name: 1,
+        slug: 1,
         photos: 1,
       },
     })

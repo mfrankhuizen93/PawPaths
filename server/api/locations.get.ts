@@ -225,6 +225,7 @@ function buildProjection(): MongoFilter {
   return {
     _id: 0,
     id: { $toString: "$_id" },
+    slug: 1,
     sourceUrl: 1,
     name: 1,
     city: 1,

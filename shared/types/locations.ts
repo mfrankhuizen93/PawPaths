@@ -12,6 +12,8 @@ export type LocationPhoto = {
 
 export type LocationListItem = {
   id: string;
+  slug: string;
+  sourceUrl?: string | null;
   name: string;
   city?: string | null;
   country?: string | null;
