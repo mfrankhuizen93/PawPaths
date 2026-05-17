@@ -31566,7 +31566,16 @@
         "url": "http://www.restaurantas.nl/"
       }
     ],
-    "photos": [],
+    "photos": [
+      {
+        "url": "https://gezondoud.nl/wp-content/uploads/2019/12/beatrixpark.jpg",
+        "alt": "Beatrixpark in Amsterdam"
+      },
+      {
+        "url": "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/18/29/23/8e/beatrixpark-b.jpg?w=900&h=500&s=1",
+        "alt": "Beatrixpark in Amsterdam"
+      }
+    ],
     "reviews": [
       {
         "reviewer": "Jeannette",
@@ -33156,7 +33165,24 @@
         "url": "https://www.theater.nl/restaurant/grand-cafe-sloterplas/?acceptCookies=6425748619e79"
       }
     ],
-    "photos": [],
+    "photos": [
+      {
+        "url": "https://www.amsterdam.nl/publish/pages/989193/sloterpark_gemeente_amsterdam.jpg",
+        "alt": "Sloterplas in Amsterdam"
+      },
+      {
+        "url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF7FbIEANpq6kHRINPb1jSprxz5y3qi0lq3YcD07Xgg57QP4xCPa2pY3WspYpOh9t55oNWyteGtK8SPzycTklcms9zKUyhOndlSC1o4l3GksKXoxszKK55CWNTvUcdGaKdZX4FV=s1360-w1360-h1020-rw",
+        "alt": "Sloterplas in Amsterdam"
+      },
+      {
+        "url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH5Kekrxt1puKnC_3Q2v6BCN8x4yBWN2naf6kxQY6bxea7N0NPk6qUHtZIf4-79XqouB7O1qO8b57qyJ3yrQNW3r9VKc4KZknOj7ZO93_P0c6T8yvH6sy3c0LVRTX5NRMGjBCizgw=s1360-w1360-h1020-rw",
+        "alt": "Sloterplas in Amsterdam"
+      },
+      {
+        "url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAF-zrg8BSMJzxPEOiQc8BfRIVwMTQjiSkqD_46a4WMmrrjy3zx96yd9Zj3ctfgs_FbGxGCnfj4rmtoOOUnxfQzNzeVUsPF-FtHIsFngXthwseE5rDiKJTLvJ8hbMJ5kLA44ldTJ=s1360-w1360-h1020-rw",
+        "alt": "Sloterplas in Amsterdam"
+      }
+    ],
     "reviews": [
       {
         "reviewer": "Stephanie",

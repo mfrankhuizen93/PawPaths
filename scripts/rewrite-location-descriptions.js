@@ -82,19 +82,28 @@ function getRelevantReviews(reviews = []) {
 }
 
 function getSentenceCount(value) {
-  return String(value)
-    .split(/[.!?]+(?:\s|$)/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean).length;
+  const stripped = String(value)
+    .replace(/[#*_>`-]/g, "")
+    .replace(/\[[^\]]+\]\([^)]+\)/g, "")
+    .trim();
+
+  if (!stripped) return 0;
+
+  return stripped.match(/[.!?]+(?=\s|$)/g)?.length ?? 1;
 }
 
-function validateDescription(description) {
-  const trimmed = String(description ?? "").trim();
+function validateMarkdown(markdown) {
+  const trimmed = String(markdown ?? "").trim();
 
-  if (!trimmed) return "Description is empty.";
-  if (isDoggyDatingText(trimmed)) return "Description mentions DoggyDating.";
+  if (!trimmed) return "Markdown description is empty.";
+  if (isDoggyDatingText(trimmed)) {
+    return "Markdown description mentions DoggyDating.";
+  }
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) {
+    return "Markdown description contains HTML.";
+  }
   if (getSentenceCount(trimmed) > MAX_SENTENCES) {
-    return `Description has more than ${MAX_SENTENCES} sentences.`;
+    return `Markdown description has more than ${MAX_SENTENCES} sentences.`;
   }
 
   return null;
@@ -128,11 +137,11 @@ function buildPrompt(location) {
     {
       role: "system",
       content:
-        "You rewrite dog-friendly location descriptions for PawPaths. Write clear, neutral English. Focus on the practical visitor experience: landscape, off-leash rules, water, route length, facilities, parking, safety notes, and anything reviewers consistently mention. Do not mention DoggyDating or the source website. Do not invent facts. Keep it concise: at most 10 sentences. Return JSON only.",
+        "You rewrite dog-friendly location descriptions for PawPaths. Write clear, neutral English in polished Markdown. Focus on the practical visitor experience: landscape, off-leash rules, water, route length, facilities, parking, safety notes, and anything reviewers consistently mention. Do not mention DoggyDating or the source website. Do not invent facts. Keep it compact: at most 8 sentences or bullet items total. Do not start with a title or repeat the location name as a heading. Use 2 to 4 short paragraphs, or 1 to 2 paragraphs plus a maximum of 3 bullets only when it improves scanning. Use tasteful **bold** emphasis for important labels or cautions. Do not use HTML. Return JSON only.",
     },
     {
       role: "user",
-      content: `Rewrite this location description as JSON with exactly one key, "description".\n\nLocation data:\n${JSON.stringify(
+      content: `Rewrite this location description as JSON with exactly one key, "markdown". The markdown should be ready to render directly on a location detail page.\n\nLocation data:\n${JSON.stringify(
         facts,
         null,
         2,
@@ -159,11 +168,11 @@ async function rewriteDescription({ apiKey, model, location }) {
             type: "object",
             additionalProperties: false,
             properties: {
-              description: {
+              markdown: {
                 type: "string",
               },
             },
-            required: ["description"],
+            required: ["markdown"],
           },
           strict: true,
         },
@@ -185,13 +194,13 @@ async function rewriteDescription({ apiKey, model, location }) {
   }
 
   const parsed = JSON.parse(outputText);
-  const validationError = validateDescription(parsed.description);
+  const validationError = validateMarkdown(parsed.markdown);
 
   if (validationError) {
     throw new Error(validationError);
   }
 
-  return parsed.description.trim();
+  return parsed.markdown.trim();
 }
 
 await loadEnvFile();
@@ -217,7 +226,12 @@ try {
     status: "published",
     ...(force || cleanLinksOnly
       ? {}
-      : { descriptionRewrittenAt: { $exists: false } }),
+      : {
+          $or: [
+            { descriptionFormat: { $exists: false } },
+            { descriptionFormat: { $ne: "markdown" } },
+          ],
+        }),
   };
   const query = locations
     .find(filter, {
@@ -230,6 +244,8 @@ try {
         characteristics: 1,
         warnings: 1,
         description: 1,
+        descriptionOriginal: 1,
+        descriptionFormat: 1,
         descriptionRewrittenAt: 1,
         relatedUrls: 1,
         reviews: 1,
@@ -273,7 +289,7 @@ try {
         }
 
         try {
-          const description = await rewriteDescription({
+          const markdown = await rewriteDescription({
             ...openAIConfig,
             location,
           });
@@ -283,8 +299,10 @@ try {
               { _id: location._id },
               {
                 $set: {
-                  description,
-                  descriptionOriginal: location.description ?? "",
+                  description: markdown,
+                  descriptionOriginal:
+                    location.descriptionOriginal ?? location.description ?? "",
+                  descriptionFormat: "markdown",
                   descriptionRewrittenAt: new Date(),
                   descriptionRewriteModel: openAIConfig.model,
                   relatedUrls,
@@ -294,7 +312,7 @@ try {
             );
           } else if (rewrittenCount < 5) {
             console.log(`\n${location.name}`);
-            console.log(description);
+            console.log(markdown);
           }
 
           rewrittenCount += 1;

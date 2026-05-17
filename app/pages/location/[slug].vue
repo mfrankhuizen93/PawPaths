@@ -15,12 +15,12 @@ const locationMeta = computed(() =>
     .filter(Boolean)
     .join(", "),
 );
-const descriptionParts = computed(() =>
-  (location.value?.description ?? "")
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean),
-);
+const descriptionMarkdown = computed({
+  get: () => location.value?.description ?? "",
+  set: (value) => {
+    if (location.value) location.value.description = value;
+  },
+});
 const heroPhoto = computed(() => location.value?.photos?.[0]);
 
 useSeoMeta({
@@ -105,14 +105,16 @@ function backToMap() {
         </section>
 
         <section class="rounded-md border border-slate-200 bg-white p-5">
-          <h2 class="text-xl font-bold text-slate-950">Details</h2>
-          <div class="mt-4 flex flex-col gap-4 text-slate-700">
-            <p v-for="part in descriptionParts" :key="part">
-              {{ part }}
-            </p>
-            <p v-if="descriptionParts.length === 0">
-              No detailed description is available yet.
-            </p>
+          <h2 class="text-xl font-bold text-slate-950">About this place</h2>
+          <UEditor
+            v-if="descriptionMarkdown"
+            v-model="descriptionMarkdown"
+            :editable="false"
+            class="mt-4 min-h-21 w-full"
+            content-type="markdown"
+          />
+          <div v-else class="mt-4 text-slate-700">
+            <p>No detailed description is available yet.</p>
           </div>
         </section>
 

@@ -1,11 +1,30 @@
 <script lang="ts" setup>
 import type {
   LocationListItem,
+  LocationPhoto,
   LocationsResponse,
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
-import { getLocationPath } from "#shared/utils/location-route";
+import AppPhotoModal from "~/components/AppPhotoModal.vue";
 
+const typeOptions: Record<string, { icon: string; label: string }> = {
+  park: {
+    icon: "i-ph:park",
+    label: "Park",
+  },
+  "nature reserve": {
+    icon: "i-material-symbols:forest-rounded",
+    label: "Nature Reserve",
+  },
+  "dog playground": {
+    icon: "i-cil:dog",
+    label: "Dog Playground",
+  },
+  beach: {
+    icon: "i-tabler:beach",
+    label: "Beach",
+  },
+};
 const characteristicOptions: Record<string, { icon: string; label: string }> = {
   "off-leash area": {
     icon: "i-tabler:ease-in-out",
@@ -60,6 +79,28 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
 };
 const activeFilters = useExploreQuery();
 
+const activeSnapPoint = ref<number | null>(null);
+const selectedPhoto = ref<LocationPhoto | null>(null);
+
+const items = ref<TabsItem[]>([
+  {
+    label: "Overview",
+    slot: "overview",
+  },
+  {
+    label: "Photos",
+    slot: "photos",
+  },
+  {
+    label: "Links",
+    slot: "links",
+  },
+  {
+    label: "Reviews",
+    slot: "reviews",
+  },
+]);
+
 const locationsQuery = computed(() => ({
   limit: 20,
   ...activeFilters.value,
@@ -110,6 +151,14 @@ function selectLocation(location: LocationListItem) {
   selectedLocation.value = location;
 }
 
+function getTypeMeta(type: string) {
+  return (
+    typeOptions[type] ?? {
+      icon: "i-ph:park",
+      label: type,
+    }
+  );
+}
 function getCharacteristicMeta(characteristic: string) {
   return (
     characteristicOptions[characteristic] ?? {
@@ -169,66 +218,105 @@ definePageMeta({
       </ClientOnly>
     </div>
 
-    <UDrawer v-model:open="isLocationDrawerOpen">
+    <UDrawer
+      v-model:active-snap-point="activeSnapPoint"
+      v-model:open="isLocationDrawerOpen"
+      :snap-points="[0.6, 1.0]"
+    >
       <template #header>
-        <div class="">
-          <p class="text-brand-600 text-sm font-semibold">Location</p>
-          <h2 class="font-title text-2xl font-extrabold text-slate-950">
-            {{ selectedLocation?.name }}
-          </h2>
-          <p v-if="selectedLocationMeta" class="text-sm text-slate-600">
-            {{ selectedLocationMeta }}
-          </p>
-
-          <div v-if="selectedLocation" class="flex flex-col flex-wrap gap-4">
-            <div class="flex flex-wrap gap-2">
-              <UBadge
-                v-for="type in selectedLocation.type"
-                :key="type"
-                color="primary"
-                variant="soft"
-              >
-                {{ type }}
-              </UBadge>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <UBadge
-                v-for="characteristic in selectedLocation.characteristics"
-                :key="characteristic"
-                color="neutral"
-                variant="soft"
-              >
-                <span>{{ getCharacteristicMeta(characteristic).label }}</span>
-              </UBadge>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <UBadge
-                v-for="warning in selectedLocation.warnings"
-                :key="warning"
-                color="error"
-                variant="soft"
-              >
-                {{ getWarningMeta(warning).label }}
-              </UBadge>
-            </div>
+        <div v-if="selectedLocation" class="flex flex-col gap-4">
+          <div v-if="selectedLocation.type && selectedLocationMeta">
+            <p class="text-brand-600 text-sm font-semibold">
+              {{ getTypeMeta(selectedLocation?.type)?.label }}
+            </p>
+            <h2 class="font-title text-2xl font-extrabold text-slate-950">
+              {{ selectedLocation?.name }}
+            </h2>
+            <p v-if="selectedLocationMeta" class="text-sm text-slate-600">
+              {{ selectedLocationMeta }}
+            </p>
           </div>
+
+          <div
+            v-if="selectedLocation?.characteristics?.length"
+            class="flex flex-wrap gap-2"
+          >
+            <UBadge
+              v-for="characteristic in selectedLocation.characteristics"
+              :key="characteristic"
+              color="neutral"
+              variant="soft"
+            >
+              <span>{{ getCharacteristicMeta(characteristic).label }}</span>
+            </UBadge>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <UBadge
+              v-for="warning in selectedLocation.warnings"
+              :key="warning"
+              color="error"
+              variant="soft"
+            >
+              {{ getWarningMeta(warning).label }}
+            </UBadge>
+          </div>
+
+          <AppPhotoLanes
+            v-if="activeSnapPoint < 1 && selectedLocation?.photos?.length"
+            :photos="selectedLocation?.photos"
+          />
         </div>
       </template>
       <template #body>
-        <div class="flex flex-col gap-4">
-          <AppPhotoLanes :photos="selectedLocation?.photos" />
+        <div v-if="activeSnapPoint > 0.6">
+          <UTabs :items="items" class="w-full" color="neutral" variant="link">
+            <template #overview>
+              <UEditor
+                v-model="selectedLocation.description"
+                :editable="false"
+                class="min-h-21 w-full"
+                content-type="markdown"
+              />
+            </template>
+            <template #photos>
+              <UScrollArea
+                v-slot="{ item }"
+                :items="selectedLocation?.photos"
+                :orientation="orientation"
+                :virtualize="{
+                  gap: 4,
+                  lanes: 2,
+                  estimateSize: 480,
+                }"
+                class="h-128 w-full"
+              >
+                <img
+                  :alt="item.alt"
+                  :height="item.height"
+                  :src="item.url"
+                  :width="item.width"
+                  class="size-full rounded-md object-cover"
+                  loading="lazy"
+                  @click="selectedPhoto = item"
+                />
+              </UScrollArea>
 
-          <UButton
-            :to="
-              selectedLocation ? getLocationPath(selectedLocation) : undefined
-            "
-            class="w-full"
-            color="primary"
-            icon="i-lucide-info"
-            size="sm"
-          >
-            More information
-          </UButton>
+              <AppPhotoModal v-model="selectedPhoto" />
+            </template>
+            <template #reviews> Reviews </template>
+            <template #links>
+              <UButton
+                v-for="url in selectedLocation.relatedUrls"
+                :to="url.url"
+                color="neutral"
+                icon="i-lucide-square-arrow-out-up-right"
+                target="_blank"
+                variant="outline"
+              >
+                {{ url.label }}
+              </UButton>
+            </template>
+          </UTabs>
         </div>
       </template>
     </UDrawer>
