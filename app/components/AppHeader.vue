@@ -12,6 +12,7 @@ defineProps({
 defineEmits(["search"]);
 
 const activeFilters = useExploreQuery();
+const { user, isSignedIn } = useAuth();
 </script>
 
 <template>
@@ -56,6 +57,21 @@ const activeFilters = useExploreQuery();
       </UDrawer>
 
       <UColorModeButton v-if="!isExplore" />
+
+      <UButton
+        :avatar="
+          isSignedIn
+            ? {
+                alt: user?.name,
+                text: user?.name?.slice(0, 1),
+              }
+            : undefined
+        "
+        :icon="isSignedIn ? undefined : 'i-lucide-circle-user-round'"
+        :label="isSignedIn ? undefined : 'Account'"
+        to="/account"
+        variant="subtle"
+      />
     </template>
 
     <template #body>

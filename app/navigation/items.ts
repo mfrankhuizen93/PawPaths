@@ -4,6 +4,7 @@ export const footerNavigationItems = [
   {
     label: "Explore",
     icon: "i-lucide-map-pin",
+    to: "/",
     active: true,
   },
   {
@@ -17,6 +18,7 @@ export const footerNavigationItems = [
   {
     label: "Profile",
     icon: "i-lucide-circle-user-round",
+    to: "/account",
   },
 ] satisfies NavigationMenuItem[];
 
