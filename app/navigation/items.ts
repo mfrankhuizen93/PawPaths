@@ -5,7 +5,6 @@ export const footerNavigationItems = [
     label: "Explore",
     icon: "i-lucide-map-pin",
     to: "/",
-    active: true,
   },
   {
     label: "Saved",

@@ -5,12 +5,25 @@ type UsersResponse = {
   users: AuthUser[];
 };
 
-const { user, isAdmin, isSignedIn, login, logout, register } = useAuth();
+const route = useRoute();
+const {
+  user,
+  isAdmin,
+  isSignedIn,
+  login,
+  logout,
+  register,
+  requestPasswordReset,
+  refreshSession,
+  sendVerificationEmail,
+} = useAuth();
 
-const mode = ref<"login" | "register">("login");
+const mode = ref<"login" | "register" | "forgot">("login");
 const isSubmitting = ref(false);
 const isLoadingUsers = ref(false);
+const isResendingVerification = ref(false);
 const authError = ref("");
+const authMessage = ref("");
 const usersError = ref("");
 const users = ref<AuthUser[]>([]);
 const savingRoleFor = ref("");
@@ -45,16 +58,38 @@ function getErrorMessage(error: unknown) {
     return String(error.data.statusMessage);
   }
 
+  if (
+    typeof error === "object" &&
+    error &&
+    "data" in error &&
+    typeof error.data === "object" &&
+    error.data &&
+    "message" in error.data
+  ) {
+    return String(error.data.message);
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
   return "Something went wrong. Please try again.";
 }
 
 async function submitAuth() {
   authError.value = "";
+  authMessage.value = "";
   isSubmitting.value = true;
 
   try {
-    if (mode.value === "register") {
+    if (mode.value === "forgot") {
+      await requestPasswordReset(authForm.email);
+
+      authMessage.value =
+        "If an account exists for that email, a reset link has been sent.";
+    } else if (mode.value === "register") {
       await register({ ...authForm });
+      authMessage.value = "Account created. Please verify your email address.";
     } else {
       await login({
         email: authForm.email,
@@ -65,6 +100,24 @@ async function submitAuth() {
     authError.value = getErrorMessage(error);
   } finally {
     isSubmitting.value = false;
+  }
+}
+
+async function resendVerification() {
+  authError.value = "";
+  authMessage.value = "";
+  isResendingVerification.value = true;
+
+  try {
+    if (user.value?.email) {
+      await sendVerificationEmail(user.value.email);
+    }
+    authMessage.value = "Verification link sent.";
+    await refreshSession();
+  } catch (error) {
+    authError.value = getErrorMessage(error);
+  } finally {
+    isResendingVerification.value = false;
   }
 }
 
@@ -119,6 +172,15 @@ watch(isAdmin, (canAdmin) => {
 });
 
 onMounted(() => {
+  if (route.query.verified === "true") {
+    authMessage.value = "Your email has been verified.";
+    void refreshSession();
+  }
+
+  if (route.query.error) {
+    authError.value = "That verification link is invalid or has expired.";
+  }
+
   if (isAdmin.value) {
     void loadUsers();
   }
@@ -160,6 +222,10 @@ onMounted(() => {
       </div>
 
       <form class="flex flex-col gap-4" @submit.prevent="submitAuth">
+        <p v-if="mode === 'forgot'" class="text-sm leading-6 text-slate-600">
+          Enter your email and we will send a password reset link.
+        </p>
+
         <UFormField v-if="mode === 'register'" label="Name">
           <UInput
             v-model="authForm.name"
@@ -180,10 +246,12 @@ onMounted(() => {
           />
         </UFormField>
 
-        <UFormField label="Password">
+        <UFormField v-if="mode !== 'forgot'" label="Password">
           <UInput
             v-model="authForm.password"
-            autocomplete="current-password"
+            :autocomplete="
+              mode === 'register' ? 'new-password' : 'current-password'
+            "
             icon="i-lucide-lock"
             placeholder="At least 10 characters"
             required
@@ -199,12 +267,44 @@ onMounted(() => {
           variant="soft"
         />
 
+        <UAlert
+          v-if="authMessage"
+          :title="authMessage"
+          color="success"
+          icon="i-lucide-circle-check"
+          variant="soft"
+        />
+
         <UButton
-          :label="mode === 'register' ? 'Create account' : 'Sign in'"
+          :label="
+            mode === 'forgot'
+              ? 'Send reset link'
+              : mode === 'register'
+                ? 'Create account'
+                : 'Sign in'
+          "
           :loading="isSubmitting"
           block
           icon="i-lucide-arrow-right"
           type="submit"
+        />
+
+        <UButton
+          v-if="mode === 'login'"
+          block
+          color="neutral"
+          label="Forgot password?"
+          variant="link"
+          @click="mode = 'forgot'"
+        />
+
+        <UButton
+          v-if="mode === 'forgot'"
+          block
+          color="neutral"
+          label="Back to sign in"
+          variant="link"
+          @click="mode = 'login'"
         />
       </form>
     </section>
@@ -224,6 +324,12 @@ onMounted(() => {
         </div>
 
         <div class="flex items-center gap-3">
+          <UBadge
+            :color="user?.emailVerified ? 'success' : 'warning'"
+            variant="soft"
+          >
+            {{ user?.emailVerified ? "Verified" : "Unverified" }}
+          </UBadge>
           <UBadge color="neutral" variant="soft">
             {{ user ? roleLabels[user.role] : "" }}
           </UBadge>
@@ -235,6 +341,32 @@ onMounted(() => {
             @click="logout"
           />
         </div>
+      </div>
+
+      <UAlert
+        v-if="authError"
+        :title="authError"
+        color="error"
+        icon="i-lucide-circle-alert"
+        variant="soft"
+      />
+
+      <UAlert
+        v-if="authMessage"
+        :title="authMessage"
+        color="success"
+        icon="i-lucide-circle-check"
+        variant="soft"
+      />
+
+      <div v-if="user && !user.emailVerified">
+        <UButton
+          :loading="isResendingVerification"
+          icon="i-lucide-mail-check"
+          label="Resend verification email"
+          variant="subtle"
+          @click="resendVerification"
+        />
       </div>
     </section>
 

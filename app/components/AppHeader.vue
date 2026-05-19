@@ -25,24 +25,6 @@ const { user, isSignedIn } = useAuth();
     </template>
 
     <template #right>
-      <UInput
-        v-model="activeFilters.q"
-        :ui="{ trailing: 'pe-1' }"
-        icon="i-lucide-search"
-        placeholder="Search for places, areas..."
-      >
-        <template v-if="activeFilters.q?.length" #trailing>
-          <UButton
-            aria-label="Clear input"
-            color="neutral"
-            icon="i-lucide-circle-x"
-            size="sm"
-            variant="link"
-            @click="activeFilters.q = ''"
-          />
-        </template>
-      </UInput>
-
       <UDrawer
         v-if="isExplore"
         description="Refine your search by location, type, and more."
@@ -57,21 +39,6 @@ const { user, isSignedIn } = useAuth();
       </UDrawer>
 
       <UColorModeButton v-if="!isExplore" />
-
-      <UButton
-        :avatar="
-          isSignedIn
-            ? {
-                alt: user?.name,
-                text: user?.name?.slice(0, 1),
-              }
-            : undefined
-        "
-        :icon="isSignedIn ? undefined : 'i-lucide-circle-user-round'"
-        :label="isSignedIn ? undefined : 'Account'"
-        to="/account"
-        variant="subtle"
-      />
     </template>
 
     <template #body>
