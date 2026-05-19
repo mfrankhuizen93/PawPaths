@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/vue";
-import { authClient } from "~~/lib/auth-client";
+import { authClient } from "~/utils/auth-client";
 import type { AuthUser, UserRole } from "#shared/types/auth";
 
 type BetterAuthResult<T> = {
