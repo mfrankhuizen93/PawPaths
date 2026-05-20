@@ -126,6 +126,10 @@ function getSocialProviders() {
   return Object.keys(providers).length ? providers : undefined;
 }
 
+function getIpAddressHeaders() {
+  return ["x-vercel-forwarded-for", "x-forwarded-for"];
+}
+
 function getAuthPlugins() {
   const plugins = [
     admin({
@@ -188,6 +192,15 @@ export const auth = betterAuth({
   baseURL: getFallbackAuthUrl(),
   trustedOrigins: getTrustedOrigins(),
   secret: process.env.BETTER_AUTH_SECRET,
+  advanced: {
+    ipAddress: {
+      ipAddressHeaders: getIpAddressHeaders(),
+    },
+  },
+  rateLimit: {
+    enabled: process.env.NODE_ENV === "production",
+    storage: "database",
+  },
   database: mongodbAdapter(authDb, {
     client: mongoClient,
     transaction: false,
