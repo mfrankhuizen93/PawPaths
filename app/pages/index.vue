@@ -1,6 +1,8 @@
 <script lang="ts" setup>
 import type {
+  EditableLocationFields,
   LocationListItem,
+  LocationReview,
   LocationsResponse,
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
@@ -9,6 +11,7 @@ import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 
 const route = useRoute();
 const router = useRouter();
+const { isSignedIn } = useAuth();
 
 const typeOptions: Record<string, { icon: string; label: string }> = {
   park: {
@@ -85,6 +88,28 @@ const activeFilters = useExploreQuery();
 const activeSnapPoint = ref<number | null>(null);
 const showPhotoFullscreen = ref<boolean>(false);
 const selectedPhotoIndex = ref(0);
+const isSubmittingChange = ref(false);
+const isSubmittingReview = ref(false);
+const contributionMessage = ref("");
+const contributionError = ref("");
+const reviewMessage = ref("");
+const reviewError = ref("");
+const changeForm = reactive<EditableLocationFields>({
+  name: "",
+  city: "",
+  province: "",
+  country: "",
+  latitude: null,
+  longitude: null,
+  type: [],
+  characteristics: [],
+  description: "",
+  relatedUrls: [],
+});
+const reviewForm = reactive({
+  rating: 5,
+  text: "",
+});
 
 const items = ref<TabsItem[]>([
   {
@@ -102,6 +127,10 @@ const items = ref<TabsItem[]>([
   {
     label: "Reviews",
     slot: "reviews",
+  },
+  {
+    label: "Suggest edit",
+    slot: "suggest-edit",
   },
 ]);
 
@@ -156,6 +185,98 @@ function applyMapResults(response: LocationsResponse) {
   total.value = response.total;
 }
 
+function getErrorMessage(errorValue: unknown) {
+  if (
+    typeof errorValue === "object" &&
+    errorValue &&
+    "data" in errorValue &&
+    typeof errorValue.data === "object" &&
+    errorValue.data &&
+    "statusMessage" in errorValue.data
+  ) {
+    return String(errorValue.data.statusMessage);
+  }
+
+  return errorValue instanceof Error
+    ? errorValue.message
+    : "Something went wrong. Please try again.";
+}
+
+function syncChangeForm(location: LocationListItem | null) {
+  changeForm.name = location?.name ?? "";
+  changeForm.city = location?.city ?? "";
+  changeForm.province = location?.province ?? "";
+  changeForm.country = location?.country ?? "Netherlands";
+  changeForm.latitude = location?.latitude ?? null;
+  changeForm.longitude = location?.longitude ?? null;
+  changeForm.type = [...(location?.type ?? [])];
+  changeForm.characteristics = [...(location?.characteristics ?? [])];
+  changeForm.description = location?.description ?? "";
+  changeForm.relatedUrls = [...(location?.relatedUrls ?? [])];
+}
+
+function getReviewName(review: LocationReview) {
+  return review.reviewer ?? review.reviewerName ?? "PawPaths user";
+}
+
+function getReviewDate(review: LocationReview) {
+  if (review.dateText) return review.dateText;
+  if (typeof review.date === "string") return review.date.slice(0, 10);
+
+  return "";
+}
+
+async function submitChange() {
+  if (!selectedLocation.value) return;
+
+  contributionError.value = "";
+  contributionMessage.value = "";
+  isSubmittingChange.value = true;
+
+  try {
+    await $fetch(`/api/locations/${selectedLocation.value.slug}/changes`, {
+      method: "POST",
+      body: changeForm,
+    });
+    contributionMessage.value =
+      "Thanks. Your suggested change is waiting for maintainer review.";
+  } catch (errorValue) {
+    contributionError.value = getErrorMessage(errorValue);
+  } finally {
+    isSubmittingChange.value = false;
+  }
+}
+
+async function submitReview() {
+  if (!selectedLocation.value) return;
+
+  reviewError.value = "";
+  reviewMessage.value = "";
+  isSubmittingReview.value = true;
+
+  try {
+    const response = await $fetch<{ review: LocationReview }>(
+      `/api/locations/${selectedLocation.value.slug}/reviews`,
+      {
+        method: "POST",
+        body: reviewForm,
+      },
+    );
+    selectedLocation.value.reviews = [
+      ...(selectedLocation.value.reviews ?? []),
+      response.review,
+    ];
+    selectedLocation.value.reviewCount += 1;
+    reviewForm.rating = 5;
+    reviewForm.text = "";
+    reviewMessage.value = "Review added. Thank you.";
+  } catch (errorValue) {
+    reviewError.value = getErrorMessage(errorValue);
+  } finally {
+    isSubmittingReview.value = false;
+  }
+}
+
 function getLocationQuerySlug() {
   const value = route.query.location;
 
@@ -200,6 +321,7 @@ async function openLocationBySlug(slug: string) {
 function selectLocation(location: LocationListItem) {
   selectedLocation.value = location;
   selectedLocationError.value = "";
+  syncChangeForm(location);
   replaceLocationQuery(location.slug);
 }
 
@@ -240,6 +362,14 @@ watch(
     void openLocationBySlug(slug);
   },
 );
+
+watch(selectedLocation, (location) => {
+  syncChangeForm(location);
+  contributionError.value = "";
+  contributionMessage.value = "";
+  reviewError.value = "";
+  reviewMessage.value = "";
+});
 </script>
 
 <template>
@@ -377,7 +507,172 @@ watch(
                 :photos="selectedLocation?.photos"
               />
             </template>
-            <template #reviews> Reviews </template>
+            <template #reviews>
+              <div class="flex flex-col gap-5">
+                <form
+                  v-if="isSignedIn"
+                  class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4"
+                  @submit.prevent="submitReview"
+                >
+                  <div class="grid gap-3 sm:grid-cols-[8rem_1fr]">
+                    <UFormField label="Rating">
+                      <UInput
+                        v-model.number="reviewForm.rating"
+                        max="5"
+                        min="1"
+                        type="number"
+                      />
+                    </UFormField>
+                    <UFormField label="Review">
+                      <textarea
+                        v-model="reviewForm.text"
+                        class="focus:border-brand-500 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none"
+                        required
+                      />
+                    </UFormField>
+                  </div>
+                  <UAlert
+                    v-if="reviewError"
+                    :title="reviewError"
+                    color="error"
+                    icon="i-lucide-circle-alert"
+                    variant="soft"
+                  />
+                  <UAlert
+                    v-if="reviewMessage"
+                    :title="reviewMessage"
+                    color="success"
+                    icon="i-lucide-circle-check"
+                    variant="soft"
+                  />
+                  <div>
+                    <UButton
+                      :loading="isSubmittingReview"
+                      icon="i-lucide-star"
+                      label="Add review"
+                      type="submit"
+                    />
+                  </div>
+                </form>
+
+                <UAlert
+                  v-else
+                  color="warning"
+                  icon="i-lucide-lock"
+                  title="Sign in to add a review."
+                  variant="soft"
+                />
+
+                <div class="flex flex-col gap-3">
+                  <article
+                    v-for="(review, index) in selectedLocation.reviews"
+                    :key="`${getReviewName(review)}-${index}`"
+                    class="rounded-md border border-slate-200 bg-white p-4"
+                  >
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p class="font-semibold text-slate-950">
+                        {{ getReviewName(review) }}
+                      </p>
+                      <UBadge
+                        v-if="review.rating"
+                        color="neutral"
+                        variant="soft"
+                      >
+                        {{ review.rating }}/5
+                      </UBadge>
+                      <span class="text-xs text-slate-500">
+                        {{ getReviewDate(review) }}
+                      </span>
+                    </div>
+                    <p
+                      class="mt-2 text-sm leading-6 whitespace-pre-line text-slate-700"
+                    >
+                      {{ review.text }}
+                    </p>
+                  </article>
+                </div>
+              </div>
+            </template>
+            <template #suggest-edit>
+              <form
+                v-if="isSignedIn"
+                class="flex flex-col gap-4 rounded-md border border-slate-200 bg-white p-4"
+                @submit.prevent="submitChange"
+              >
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <UFormField label="Name">
+                    <UInput v-model="changeForm.name" icon="i-lucide-map-pin" />
+                  </UFormField>
+                  <UFormField label="City">
+                    <UInput
+                      v-model="changeForm.city"
+                      icon="i-lucide-building-2"
+                    />
+                  </UFormField>
+                  <UFormField label="Province">
+                    <UInput v-model="changeForm.province" icon="i-lucide-map" />
+                  </UFormField>
+                  <UFormField label="Country">
+                    <UInput
+                      v-model="changeForm.country"
+                      icon="i-lucide-globe-2"
+                    />
+                  </UFormField>
+                  <UFormField label="Latitude">
+                    <UInput
+                      v-model.number="changeForm.latitude"
+                      step="any"
+                      type="number"
+                    />
+                  </UFormField>
+                  <UFormField label="Longitude">
+                    <UInput
+                      v-model.number="changeForm.longitude"
+                      step="any"
+                      type="number"
+                    />
+                  </UFormField>
+                </div>
+
+                <UFormField label="Description">
+                  <textarea
+                    v-model="changeForm.description"
+                    class="focus:border-brand-500 min-h-32 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none"
+                  />
+                </UFormField>
+
+                <UAlert
+                  v-if="contributionError"
+                  :title="contributionError"
+                  color="error"
+                  icon="i-lucide-circle-alert"
+                  variant="soft"
+                />
+                <UAlert
+                  v-if="contributionMessage"
+                  :title="contributionMessage"
+                  color="success"
+                  icon="i-lucide-circle-check"
+                  variant="soft"
+                />
+                <div>
+                  <UButton
+                    :loading="isSubmittingChange"
+                    icon="i-lucide-send"
+                    label="Submit change"
+                    type="submit"
+                  />
+                </div>
+              </form>
+
+              <UAlert
+                v-else
+                color="warning"
+                icon="i-lucide-lock"
+                title="Sign in to suggest a change."
+                variant="soft"
+              />
+            </template>
             <template #links>
               <UButton
                 v-for="url in selectedLocation.relatedUrls"

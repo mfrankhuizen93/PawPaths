@@ -13,6 +13,7 @@ export const footerNavigationItems = [
   {
     label: "Add",
     icon: "i-lucide-circle-plus",
+    to: "/add",
   },
   {
     label: "Profile",

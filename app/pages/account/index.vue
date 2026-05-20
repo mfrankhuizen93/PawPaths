@@ -1,14 +1,20 @@
 <script lang="ts" setup>
 import type { AuthUser, UserRole } from "#shared/types/auth";
+import type { LocationContribution } from "#shared/types/locations";
 
 type UsersResponse = {
   users: AuthUser[];
+};
+
+type ContributionsResponse = {
+  contributions: LocationContribution[];
 };
 
 const route = useRoute();
 const {
   user,
   isAdmin,
+  isMaintainer,
   isSignedIn,
   login,
   logout,
@@ -28,6 +34,10 @@ const authError = ref("");
 const authMessage = ref("");
 const usersError = ref("");
 const users = ref<AuthUser[]>([]);
+const contributions = ref<LocationContribution[]>([]);
+const contributionsError = ref("");
+const isLoadingContributions = ref(false);
+const reviewingContribution = ref("");
 const savingRoleFor = ref("");
 const profileError = ref("");
 const profileMessage = ref("");
@@ -243,6 +253,44 @@ async function loadUsers() {
   }
 }
 
+async function loadContributions() {
+  if (!isMaintainer.value) return;
+
+  contributionsError.value = "";
+  isLoadingContributions.value = true;
+
+  try {
+    const response = await $fetch<ContributionsResponse>("/api/contributions");
+    contributions.value = response.contributions;
+  } catch (error) {
+    contributionsError.value = getErrorMessage(error);
+  } finally {
+    isLoadingContributions.value = false;
+  }
+}
+
+async function reviewContribution(
+  contribution: LocationContribution,
+  action: "approve" | "reject",
+) {
+  contributionsError.value = "";
+  reviewingContribution.value = contribution.id;
+
+  try {
+    await $fetch(`/api/contributions/${contribution.id}`, {
+      method: "PATCH",
+      body: { action },
+    });
+    contributions.value = contributions.value.filter(
+      (item) => item.id !== contribution.id,
+    );
+  } catch (error) {
+    contributionsError.value = getErrorMessage(error);
+  } finally {
+    reviewingContribution.value = "";
+  }
+}
+
 async function updateRole(targetUser: AuthUser, role: UserRole) {
   usersError.value = "";
   savingRoleFor.value = targetUser.id;
@@ -277,6 +325,12 @@ watch(isAdmin, (canAdmin) => {
   }
 });
 
+watch(isMaintainer, (canReview) => {
+  if (canReview) {
+    void loadContributions();
+  }
+});
+
 watch(
   user,
   (currentUser) => {
@@ -307,6 +361,10 @@ onMounted(() => {
 
   if (isAdmin.value) {
     void loadUsers();
+  }
+
+  if (isMaintainer.value) {
+    void loadContributions();
   }
 });
 </script>
@@ -636,6 +694,145 @@ onMounted(() => {
           variant="subtle"
           @click="resendVerification"
         />
+      </div>
+    </section>
+
+    <section v-if="isMaintainer" class="flex flex-col gap-4">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h2 class="font-title text-2xl font-extrabold text-slate-950">
+            Community submissions
+          </h2>
+          <p class="text-sm text-slate-600">
+            Review pending location additions and suggested edits.
+          </p>
+        </div>
+        <UButton
+          :loading="isLoadingContributions"
+          icon="i-lucide-refresh-cw"
+          variant="subtle"
+          @click="loadContributions"
+        />
+      </div>
+
+      <UAlert
+        v-if="contributionsError"
+        :title="contributionsError"
+        color="error"
+        icon="i-lucide-circle-alert"
+        variant="soft"
+      />
+
+      <div
+        v-if="contributions.length === 0"
+        class="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600"
+      >
+        No pending submissions.
+      </div>
+
+      <div v-else class="flex flex-col gap-3">
+        <article
+          v-for="contribution in contributions"
+          :key="contribution.id"
+          class="flex flex-col gap-4 rounded-md border border-slate-200 bg-white p-4 shadow-sm"
+        >
+          <div class="flex flex-col gap-3 sm:flex-row sm:justify-between">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <UBadge color="neutral" variant="soft">
+                  {{
+                    contribution.kind === "new-location"
+                      ? "New location"
+                      : "Location edit"
+                  }}
+                </UBadge>
+                <p class="font-semibold text-slate-950">
+                  {{ contribution.payload.name }}
+                </p>
+              </div>
+              <p class="mt-1 text-sm text-slate-600">
+                Submitted by {{ contribution.submitter.name }} for
+                {{ contribution.locationName || contribution.payload.city }}
+              </p>
+            </div>
+
+            <div class="flex gap-2">
+              <UButton
+                :loading="reviewingContribution === contribution.id"
+                color="success"
+                icon="i-lucide-check"
+                label="Approve"
+                variant="subtle"
+                @click="reviewContribution(contribution, 'approve')"
+              />
+              <UButton
+                :disabled="reviewingContribution === contribution.id"
+                color="error"
+                icon="i-lucide-x"
+                label="Reject"
+                variant="subtle"
+                @click="reviewContribution(contribution, 'reject')"
+              />
+            </div>
+          </div>
+
+          <dl class="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="font-semibold text-slate-950">Place</dt>
+              <dd class="text-slate-600">
+                {{ contribution.payload.city }},
+                {{ contribution.payload.country || "Netherlands" }}
+              </dd>
+            </div>
+            <div>
+              <dt class="font-semibold text-slate-950">Coordinates</dt>
+              <dd class="text-slate-600">
+                {{ contribution.payload.latitude || "No latitude" }},
+                {{ contribution.payload.longitude || "no longitude" }}
+              </dd>
+            </div>
+            <div>
+              <dt class="font-semibold text-slate-950">Type</dt>
+              <dd class="text-slate-600">
+                {{ contribution.payload.type.join(", ") || "No type" }}
+              </dd>
+            </div>
+            <div>
+              <dt class="font-semibold text-slate-950">Characteristics</dt>
+              <dd class="text-slate-600">
+                {{
+                  contribution.payload.characteristics.join(", ") ||
+                  "No characteristics"
+                }}
+              </dd>
+            </div>
+          </dl>
+
+          <div
+            v-if="contribution.payload.coordinatePoints?.length"
+            class="flex flex-col gap-2 text-sm"
+          >
+            <p class="font-semibold text-slate-950">Additional points</p>
+            <div class="flex flex-wrap gap-2">
+              <UBadge
+                v-for="point in contribution.payload.coordinatePoints"
+                :key="point.id ?? `${point.label}-${point.latitude}`"
+                color="neutral"
+                variant="soft"
+              >
+                {{ point.label }}: {{ point.latitude }},
+                {{ point.longitude }}
+              </UBadge>
+            </div>
+          </div>
+
+          <p
+            v-if="contribution.payload.description"
+            class="text-sm leading-6 whitespace-pre-line text-slate-700"
+          >
+            {{ contribution.payload.description }}
+          </p>
+        </article>
       </div>
     </section>
 

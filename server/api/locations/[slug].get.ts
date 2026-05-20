@@ -70,6 +70,7 @@ function buildProjection() {
     longitude: 1,
     type: 1,
     characteristics: 1,
+    coordinatePoints: 1,
     warnings: { $ifNull: ["$warnings", []] },
     description: 1,
     relatedUrls: 1,

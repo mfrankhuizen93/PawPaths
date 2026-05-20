@@ -10,6 +10,21 @@ export type LocationPhoto = {
   height?: number | null;
 };
 
+export type LocationCoordinateKind =
+  | "general"
+  | "parking"
+  | "poi"
+  | "entrance"
+  | "other";
+
+export type LocationCoordinatePoint = {
+  id?: string | null;
+  kind: LocationCoordinateKind;
+  label: string;
+  latitude: number;
+  longitude: number;
+};
+
 export type LocationListItem = {
   id: string;
   slug: string;
@@ -22,6 +37,7 @@ export type LocationListItem = {
   longitude?: number | null;
   type: string[];
   characteristics: string[];
+  coordinatePoints?: LocationCoordinatePoint[];
   warnings: string[];
   reviewCount: number;
   ratingCount: number;
@@ -40,7 +56,9 @@ export type LocationRelatedUrl = {
 
 export type LocationReview = {
   reviewer?: string | null;
+  reviewerName?: string | null;
   date?: string | null;
+  dateText?: string | null;
   rating?: number | null;
   text?: string | null;
 };
@@ -67,4 +85,46 @@ export type LocationFilters = {
   excludeType?: string[];
   characteristic?: string[];
   excludeCharacteristic?: string[];
+};
+
+export type EditableLocationFields = {
+  name: string;
+  city?: string | null;
+  province?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  type: string[];
+  characteristics: string[];
+  description?: string | null;
+  relatedUrls?: LocationRelatedUrl[];
+  photos?: LocationPhoto[];
+  coordinatePoints?: LocationCoordinatePoint[];
+};
+
+export type LocationContributionKind = "new-location" | "location-change";
+export type LocationContributionStatus = "pending" | "approved" | "rejected";
+
+export type LocationContribution = {
+  id: string;
+  kind: LocationContributionKind;
+  status: LocationContributionStatus;
+  locationId?: string | null;
+  locationSlug?: string | null;
+  locationName?: string | null;
+  payload: EditableLocationFields;
+  submitter: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  reviewer?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  reviewNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string | null;
 };
