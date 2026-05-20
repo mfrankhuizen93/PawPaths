@@ -12,6 +12,7 @@ defineProps({
 defineEmits(["search"]);
 
 const activeFilters = useExploreQuery();
+const { user, isSignedIn } = useAuth();
 </script>
 
 <template>
@@ -24,24 +25,6 @@ const activeFilters = useExploreQuery();
     </template>
 
     <template #right>
-      <UInput
-        v-model="activeFilters.q"
-        :ui="{ trailing: 'pe-1' }"
-        icon="i-lucide-search"
-        placeholder="Search for places, areas..."
-      >
-        <template v-if="activeFilters.q?.length" #trailing>
-          <UButton
-            aria-label="Clear input"
-            color="neutral"
-            icon="i-lucide-circle-x"
-            size="sm"
-            variant="link"
-            @click="activeFilters.q = ''"
-          />
-        </template>
-      </UInput>
-
       <UDrawer
         v-if="isExplore"
         description="Refine your search by location, type, and more."

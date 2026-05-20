@@ -53,7 +53,12 @@ export default defineNuxtConfig({
   vite: {
     plugins: [vueStyleTailwindReference(), tailwindcss()],
     optimizeDeps: {
-      include: ["@vue/devtools-core", "@vue/devtools-kit"],
+      include: [
+        "@better-auth/infra/client",
+        "@vue/devtools-core",
+        "@vue/devtools-kit",
+        "better-auth/vue",
+      ],
     },
   },
   head: {
