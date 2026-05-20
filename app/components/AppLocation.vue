@@ -59,15 +59,23 @@ const mapStyle =
   config.public.mapStyleUrl || "https://demotiles.maplibre.org/style.json";
 
 const activeLocations = computed(() => {
-  if (props.variant === "single") {
-    return props.location ? [props.location] : [];
+  const locations =
+    props.variant === "single"
+      ? props.location
+        ? [props.location]
+        : []
+      : props.variant === "search" && hasSearched.value
+        ? fetchedLocations.value
+        : props.locations;
+
+  if (
+    !props.location ||
+    locations.some((item) => item.id === props.location?.id)
+  ) {
+    return locations;
   }
 
-  if (props.variant === "search" && hasSearched.value) {
-    return fetchedLocations.value;
-  }
-
-  return props.locations;
+  return [props.location, ...locations];
 });
 
 const filterKey = computed(() => JSON.stringify(props.filters));
@@ -181,15 +189,41 @@ function fitToLocations() {
   });
 }
 
+function getFocusOffset() {
+  if (props.variant !== "search" || !props.location || !mapContainer.value) {
+    return [0, 0] as [number, number];
+  }
+
+  const height = mapContainer.value.clientHeight;
+
+  return [0, -Math.min(260, Math.max(120, height * 0.28))] as [number, number];
+}
+
 function zoomToCoordinates(coordinates: [number, number]) {
   if (!map.value) return;
 
   map.value.easeTo({
     center: coordinates,
     zoom: Math.max(map.value.getZoom(), 14),
+    offset: getFocusOffset(),
     duration: 800,
     essential: true,
   });
+}
+
+function getLocationCoordinates(location?: LocationListItem | null) {
+  if (
+    !location ||
+    !Number.isFinite(location.latitude) ||
+    !Number.isFinite(location.longitude)
+  ) {
+    return null;
+  }
+
+  return [location.longitude as number, location.latitude as number] as [
+    number,
+    number,
+  ];
 }
 
 function isStoredMapViewport(value: unknown): value is StoredMapViewport {
@@ -210,6 +244,7 @@ function isStoredMapViewport(value: unknown): value is StoredMapViewport {
 
 function readStoredMapViewport() {
   if (props.variant !== "search") return null;
+  if (getLocationCoordinates(props.location)) return null;
 
   try {
     const storedValue = window.localStorage.getItem(mapViewportStorageKey);
@@ -484,14 +519,17 @@ onMounted(async () => {
 
   const maplibregl = await import("maplibre-gl");
   const storedViewport = readStoredMapViewport();
+  const focusedCoordinates = getLocationCoordinates(props.location);
   const initialCenter = storedViewport
     ? ([storedViewport.lng, storedViewport.lat] as [number, number])
-    : mappedLocations.value.length > 0
-      ? ([
-          mappedLocations.value[0]?.longitude,
-          mappedLocations.value[0]?.latitude,
-        ] as [number, number])
-      : ([5.2913, 52.1326] as [number, number]);
+    : focusedCoordinates
+      ? focusedCoordinates
+      : mappedLocations.value.length > 0
+        ? ([
+            mappedLocations.value[0]?.longitude,
+            mappedLocations.value[0]?.latitude,
+          ] as [number, number])
+        : ([5.2913, 52.1326] as [number, number]);
 
   map.value = new maplibregl.Map({
     container: mapContainer.value,
@@ -509,7 +547,11 @@ onMounted(async () => {
   map.value.on("load", () => {
     addLocationLayers();
     addUserLocationLayer();
-    if (!storedViewport) fitToLocations();
+    if (focusedCoordinates) {
+      zoomToCoordinates(focusedCoordinates);
+    } else if (!storedViewport) {
+      fitToLocations();
+    }
     isReady.value = true;
     queueVisibleSearch();
   });
@@ -527,6 +569,17 @@ watch(filterKey, () => {
 });
 
 watch(userLocation, syncUserLocation);
+
+watch(
+  () => props.location?.id,
+  () => {
+    const coordinates = getLocationCoordinates(props.location);
+
+    if (isReady.value && coordinates) {
+      zoomToCoordinates(coordinates);
+    }
+  },
+);
 
 onBeforeRouteLeave(() => {
   storeMapViewport();

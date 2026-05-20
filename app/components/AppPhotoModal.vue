@@ -1,24 +1,45 @@
 <script lang="ts" setup>
 import type { LocationPhoto } from "#shared/types/locations";
 
-const model = defineModel({
-  type: Object as PropType<LocationPhoto>,
+const open = defineModel({
+  type: Boolean,
+});
+
+defineProps({
+  locationName: {
+    type: String,
+    required: true,
+  },
+  photos: {
+    type: Array as PropType<LocationPhoto[]>,
+    default: () => [],
+  },
+  index: {
+    type: Number,
+    default: 0,
+  },
 });
 </script>
 
 <template>
-  <UModal v-model:open="model" :title="model?.alt" fullscreen>
+  <UModal v-model:open="open" :title="`Photo of ${locationName}`" fullscreen>
     <template #body>
-      <div class="flex h-full flex-col items-center justify-center">
+      <UCarousel
+        v-slot="{ item }"
+        :items="photos"
+        :start-index="index"
+        dots
+        loop
+      >
         <NuxtImg
-          :alt="model.alt"
-          :height="model.height"
-          :src="model.url"
-          :width="model.width"
-          class="rounded-md object-contain"
+          :alt="item.alt"
+          :height="item.height"
+          :src="item.url"
+          :width="item.width"
+          class="h-full rounded-md object-contain"
           loading="lazy"
         />
-      </div>
+      </UCarousel>
     </template>
   </UModal>
 </template>

@@ -16,6 +16,7 @@ export type LocationListItem = {
   sourceUrl?: string | null;
   name: string;
   city?: string | null;
+  province?: string | null;
   country?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -25,6 +26,9 @@ export type LocationListItem = {
   reviewCount: number;
   ratingCount: number;
   averageRating?: number | null;
+  description?: string | null;
+  relatedUrls?: LocationRelatedUrl[];
+  reviews?: LocationReview[];
   photos: LocationPhoto[];
   distanceMeters?: number;
 };
