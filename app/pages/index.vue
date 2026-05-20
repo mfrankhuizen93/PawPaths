@@ -6,6 +6,10 @@ import type {
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
 import AppPhotoModal from "~/components/AppPhotoModal.vue";
+import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
+
+const route = useRoute();
+const router = useRouter();
 
 const typeOptions: Record<string, { icon: string; label: string }> = {
   park: {
@@ -116,10 +120,15 @@ const { data, error, pending, refresh } = await useFetch<LocationsResponse>(
 const locations = ref<LocationListItem[]>([]);
 const total = ref(0);
 const selectedLocation = ref<LocationListItem | null>(null);
+const selectedLocationError = ref("");
 const isLocationDrawerOpen = computed({
   get: () => Boolean(selectedLocation.value),
   set: (open) => {
-    if (!open) selectedLocation.value = null;
+    if (open) return;
+
+    selectedLocation.value = null;
+    selectedLocationError.value = "";
+    replaceLocationQuery(null);
   },
 });
 
@@ -147,8 +156,51 @@ function applyMapResults(response: LocationsResponse) {
   total.value = response.total;
 }
 
+function getLocationQuerySlug() {
+  const value = route.query.location;
+
+  if (Array.isArray(value)) return value[0] ?? "";
+
+  return typeof value === "string" ? value : "";
+}
+
+function replaceLocationQuery(slug: string | null) {
+  const query = { ...route.query };
+
+  if (slug) {
+    query.location = slug;
+  } else {
+    delete query.location;
+  }
+
+  void router.replace({ query });
+}
+
+async function openLocationBySlug(slug: string) {
+  if (!slug) {
+    selectedLocation.value = null;
+    selectedLocationError.value = "";
+    return;
+  }
+
+  if (selectedLocation.value?.slug === slug) return;
+
+  selectedLocationError.value = "";
+
+  try {
+    selectedLocation.value = await $fetch<LocationListItem>(
+      `/api/locations/${slug}`,
+    );
+  } catch {
+    selectedLocation.value = null;
+    selectedLocationError.value = "Location not found";
+  }
+}
+
 function selectLocation(location: LocationListItem) {
   selectedLocation.value = location;
+  selectedLocationError.value = "";
+  replaceLocationQuery(location.slug);
 }
 
 function getTypeMeta(type: string) {
@@ -179,6 +231,15 @@ function getWarningMeta(warning: string) {
 definePageMeta({
   layout: "explore",
 });
+
+await openLocationBySlug(getLocationQuerySlug());
+
+watch(
+  () => getLocationQuerySlug(),
+  (slug) => {
+    void openLocationBySlug(slug);
+  },
+);
 </script>
 
 <template>
@@ -191,11 +252,12 @@ definePageMeta({
     </div>
 
     <div
-      v-if="error"
+      v-if="error || selectedLocationError"
       class="rounded-md border border-red-200 bg-red-50 p-4 text-red-800"
     >
-      {{ error }}
+      {{ selectedLocationError || error }}
       <button
+        v-if="error"
         class="ml-2 font-semibold underline"
         type="button"
         @click="refresh()"
@@ -209,6 +271,7 @@ definePageMeta({
         <LazyAppLocation
           :filters="activeFilters"
           :limit="60"
+          :location="selectedLocation"
           :locations="locations"
           class="h-full"
           variant="search"
@@ -225,9 +288,9 @@ definePageMeta({
     >
       <template #header>
         <div v-if="selectedLocation" class="flex flex-col gap-4">
-          <div v-if="selectedLocation.type && selectedLocationMeta">
+          <div v-if="selectedLocation?.type?.[0] && selectedLocationMeta">
             <p class="text-brand-600 text-sm font-semibold">
-              {{ getTypeMeta(selectedLocation?.type)?.label }}
+              {{ getTypeMeta(selectedLocation.type[0])?.label }}
             </p>
             <h2 class="font-title text-2xl font-extrabold text-slate-950">
               {{ selectedLocation?.name }}
