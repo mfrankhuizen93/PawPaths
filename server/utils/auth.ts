@@ -18,6 +18,7 @@ type BetterAuthUserDocument = {
   email: string;
   emailVerified?: boolean;
   name: string;
+  image?: string | null;
   role?: UserRole | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -176,6 +177,7 @@ function toAuthUser(user: BetterAuthUserDocument): AuthUser {
     email: user.email,
     emailVerified: Boolean(user.emailVerified),
     name: user.name,
+    image: user.image ?? null,
     role,
     createdAt: toDateString(user.createdAt),
     updatedAt: toDateString(user.updatedAt),
