@@ -16,6 +16,7 @@ type BetterAuthSession = {
     id: string;
     email: string;
     name: string;
+    image?: string | null;
     role?: string | null;
   };
   session: unknown;
@@ -43,6 +44,7 @@ function toAuthUser(user: BetterAuthSession["user"]): AuthUser {
     email: user.email,
     emailVerified: Boolean(user.emailVerified),
     name: user.name,
+    image: user.image ?? null,
     role,
     createdAt: String(user.createdAt ?? new Date().toISOString()),
     updatedAt: String(user.updatedAt ?? new Date().toISOString()),
@@ -81,12 +83,27 @@ export function useAuth() {
     email: string;
     password: string;
     name?: string;
+    image?: string | null;
   }) {
     const result = (await getRequestAuthClient().signUp.email({
       name: payload.name?.trim() || payload.email,
       email: payload.email,
       password: payload.password,
+      image: payload.image ?? undefined,
       callbackURL: "/account?verified=true",
+    })) as BetterAuthResult<unknown>;
+
+    assertAuthResult(result);
+    return await refreshSession();
+  }
+
+  async function updateProfile(payload: {
+    name?: string;
+    image?: string | null;
+  }) {
+    const result = (await getRequestAuthClient().updateUser({
+      name: payload.name,
+      image: payload.image,
     })) as BetterAuthResult<unknown>;
 
     assertAuthResult(result);
@@ -149,6 +166,7 @@ export function useAuth() {
     isMaintainer,
     refreshSession,
     register,
+    updateProfile,
     login,
     logout,
     sendVerificationEmail,

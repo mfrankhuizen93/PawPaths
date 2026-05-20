@@ -18,6 +18,7 @@ type BetterAuthUserDocument = {
   email: string;
   emailVerified?: boolean;
   name: string;
+  image?: string | null;
   role?: UserRole | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -57,31 +58,11 @@ function getOrigin(value: string) {
   }
 }
 
-function getHost(value: string) {
-  return getUrlHost(value) ?? value;
-}
-
 function getFallbackAuthUrl() {
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
 
   return "http://localhost:3000";
-}
-
-function getAuthAllowedHosts() {
-  return Array.from(
-    new Set([
-      ...getEnvList("BETTER_AUTH_ALLOWED_HOSTS").map(getHost),
-      ...getEnvList("BETTER_AUTH_TRUSTED_ORIGINS").map(getHost),
-      "pawpaths.nl",
-      "www.pawpaths.nl",
-      "localhost:3000",
-      "127.0.0.1:3000",
-      "*.vercel.app",
-      getUrlHost(process.env.BETTER_AUTH_URL),
-      process.env.VERCEL_URL,
-    ]),
-  ).filter((host): host is string => Boolean(host));
 }
 
 function getTrustedOrigins() {
@@ -146,6 +127,10 @@ function getSocialProviders() {
   return Object.keys(providers).length ? providers : undefined;
 }
 
+function getIpAddressHeaders() {
+  return ["x-vercel-forwarded-for", "x-forwarded-for"];
+}
+
 function getAuthPlugins() {
   const plugins = [
     admin({
@@ -155,13 +140,19 @@ function getAuthPlugins() {
   ];
 
   if (process.env.BETTER_AUTH_API_KEY) {
-    plugins.push(
-      dash({
-        apiKey: process.env.BETTER_AUTH_API_KEY,
-        apiUrl: process.env.BETTER_AUTH_API_URL,
-        kvUrl: process.env.BETTER_AUTH_KV_URL,
-      }),
-    );
+    const dashOptions: Parameters<typeof dash>[0] = {
+      apiKey: process.env.BETTER_AUTH_API_KEY,
+    };
+
+    if (process.env.BETTER_AUTH_API_URL) {
+      dashOptions.apiUrl = process.env.BETTER_AUTH_API_URL;
+    }
+
+    if (process.env.BETTER_AUTH_KV_URL) {
+      dashOptions.kvUrl = process.env.BETTER_AUTH_KV_URL;
+    }
+
+    plugins.push(dash(dashOptions));
   }
 
   return plugins;
@@ -186,6 +177,7 @@ function toAuthUser(user: BetterAuthUserDocument): AuthUser {
     email: user.email,
     emailVerified: Boolean(user.emailVerified),
     name: user.name,
+    image: user.image ?? null,
     role,
     createdAt: toDateString(user.createdAt),
     updatedAt: toDateString(user.updatedAt),
@@ -199,12 +191,18 @@ async function getBetterAuthUserCollection(db: Db = authDb) {
 
 export const auth = betterAuth({
   appName: "PawPaths",
-  baseURL: {
-    allowedHosts: getAuthAllowedHosts(),
-    fallback: getFallbackAuthUrl(),
-  },
+  baseURL: getFallbackAuthUrl(),
   trustedOrigins: getTrustedOrigins(),
   secret: process.env.BETTER_AUTH_SECRET,
+  advanced: {
+    ipAddress: {
+      ipAddressHeaders: getIpAddressHeaders(),
+    },
+  },
+  rateLimit: {
+    enabled: process.env.NODE_ENV === "production",
+    storage: "database",
+  },
   database: mongodbAdapter(authDb, {
     client: mongoClient,
     transaction: false,
