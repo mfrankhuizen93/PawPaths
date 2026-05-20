@@ -2,28 +2,41 @@
 import type { LocationPhoto } from "#shared/types/locations";
 
 defineProps({
+  locationName: {
+    type: String,
+    required: true,
+  },
   photos: {
     type: Array as PropType<LocationPhoto[]>,
   },
 });
 
-const selectedPhoto = ref<LocationPhoto | null>(null);
+const showPhotoFullscreen = ref<boolean>(false);
+const selectedPhotoIndex = ref(0);
 </script>
 
 <template>
   <div class="app-photo-lanes__container">
     <div class="app-photo-lanes">
       <NuxtImg
-        v-for="photo in photos"
+        v-for="(photo, index) in photos"
         :key="photo.url"
         :alt="photo.alt"
         :src="photo.url"
         class="h-full w-full object-cover"
-        @click="selectedPhoto = photo"
+        @click="
+          showPhotoFullscreen = true;
+          selectedPhotoIndex = index;
+        "
       />
     </div>
 
-    <AppPhotoModal v-model="selectedPhoto" />
+    <AppPhotoModal
+      v-model="showPhotoFullscreen"
+      :index="selectedPhotoIndex"
+      :location-name="locationName"
+      :photos="photos"
+    />
   </div>
 </template>
 
