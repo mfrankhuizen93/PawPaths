@@ -42,6 +42,25 @@ function getUrlHost(url: string | undefined) {
   }
 }
 
+function getEnvList(name: string) {
+  return String(process.env[name] ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function getOrigin(value: string) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getHost(value: string) {
+  return getUrlHost(value) ?? value;
+}
+
 function getFallbackAuthUrl() {
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
@@ -50,13 +69,53 @@ function getFallbackAuthUrl() {
 }
 
 function getAuthAllowedHosts() {
+  return Array.from(
+    new Set([
+      ...getEnvList("BETTER_AUTH_ALLOWED_HOSTS").map(getHost),
+      ...getEnvList("BETTER_AUTH_TRUSTED_ORIGINS").map(getHost),
+      "pawpaths.nl",
+      "www.pawpaths.nl",
+      "localhost:3000",
+      "127.0.0.1:3000",
+      "*.vercel.app",
+      getUrlHost(process.env.BETTER_AUTH_URL),
+      process.env.VERCEL_URL,
+    ]),
+  ).filter((host): host is string => Boolean(host));
+}
+
+function getTrustedOrigins() {
+  return Array.from(
+    new Set([
+      ...getEnvList("BETTER_AUTH_TRUSTED_ORIGINS"),
+      getOrigin(getFallbackAuthUrl()),
+      "https://pawpaths.nl",
+      "https://www.pawpaths.nl",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+    ]),
+  ).filter((origin): origin is string => Boolean(origin));
+}
+
+function getTrustedAccountLinkingProviders() {
   return [
-    "localhost:3000",
-    "127.0.0.1:3000",
-    "*.vercel.app",
-    getUrlHost(process.env.BETTER_AUTH_URL),
-    process.env.VERCEL_URL,
-  ].filter((host): host is string => Boolean(host));
+    process.env.GITHUB_CLIENT_ID ? "github" : null,
+    process.env.GOOGLE_CLIENT_ID ? "google" : null,
+    process.env.DISCORD_CLIENT_ID ? "discord" : null,
+  ].filter((provider): provider is string => Boolean(provider));
+}
+
+function getAccountOptions() {
+  const trustedProviders = getTrustedAccountLinkingProviders();
+
+  if (!trustedProviders.length) return undefined;
+
+  return {
+    accountLinking: {
+      enabled: true,
+      trustedProviders,
+    },
+  };
 }
 
 function getSocialProviders() {
@@ -144,11 +203,13 @@ export const auth = betterAuth({
     allowedHosts: getAuthAllowedHosts(),
     fallback: getFallbackAuthUrl(),
   },
+  trustedOrigins: getTrustedOrigins(),
   secret: process.env.BETTER_AUTH_SECRET,
   database: mongodbAdapter(authDb, {
     client: mongoClient,
     transaction: false,
   }),
+  account: getAccountOptions(),
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 10,
