@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import type {
   LocationListItem,
-  LocationPhoto,
   LocationsResponse,
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
@@ -84,7 +83,8 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
 const activeFilters = useExploreQuery();
 
 const activeSnapPoint = ref<number | null>(null);
-const selectedPhoto = ref<LocationPhoto | null>(null);
+const showPhotoFullscreen = ref<boolean>(false);
+const selectedPhotoIndex = ref(0);
 
 const items = ref<TabsItem[]>([
   {
@@ -285,6 +285,7 @@ watch(
       v-model:active-snap-point="activeSnapPoint"
       v-model:open="isLocationDrawerOpen"
       :snap-points="[0.6, 1.0]"
+      :close-threshold="0.2"
     >
       <template #header>
         <div v-if="selectedLocation" class="flex flex-col gap-4">
@@ -326,6 +327,7 @@ watch(
 
           <AppPhotoLanes
             v-if="activeSnapPoint < 1 && selectedLocation?.photos?.length"
+            :location-name="selectedLocation.name"
             :photos="selectedLocation?.photos"
           />
         </div>
@@ -343,28 +345,37 @@ watch(
             </template>
             <template #photos>
               <UScrollArea
-                v-slot="{ item }"
+                v-slot="{ item, index }"
                 :items="selectedLocation?.photos"
-                :orientation="orientation"
                 :virtualize="{
                   gap: 4,
                   lanes: 2,
                   estimateSize: 480,
                 }"
                 class="h-128 w-full"
+                orientation="vertical"
               >
-                <img
+                <NuxtImg
                   :alt="item.alt"
                   :height="item.height"
                   :src="item.url"
                   :width="item.width"
                   class="size-full rounded-md object-cover"
                   loading="lazy"
-                  @click="selectedPhoto = item"
+                  @click="
+                    showPhotoFullscreen = true;
+                    selectedPhotoIndex = index;
+                  "
                 />
               </UScrollArea>
 
-              <AppPhotoModal v-model="selectedPhoto" />
+              <AppPhotoModal
+                v-if="selectedLocation"
+                v-model="showPhotoFullscreen"
+                :index="selectedPhotoIndex"
+                :location-name="selectedLocation.name"
+                :photos="selectedLocation?.photos"
+              />
             </template>
             <template #reviews> Reviews </template>
             <template #links>
