@@ -58,9 +58,35 @@ function getOrigin(value: string) {
   }
 }
 
-function getFallbackAuthUrl() {
+function getOriginFromHost(host: string | undefined) {
+  if (!host) return null;
+
+  return getOrigin(host.includes("://") ? host : `https://${host}`);
+}
+
+function getVercelDeploymentOrigins() {
+  return [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  ]
+    .map(getOriginFromHost)
+    .filter((origin): origin is string => Boolean(origin));
+}
+
+function getAuthBaseUrl() {
+  if (process.env.VERCEL_ENV === "preview") {
+    const previewOrigin = getOriginFromHost(process.env.VERCEL_URL);
+
+    if (previewOrigin) {
+      return previewOrigin;
+    }
+  }
+
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+
+  const vercelOrigin = getOriginFromHost(process.env.VERCEL_URL);
+  if (vercelOrigin) return vercelOrigin;
 
   return "http://localhost:3000";
 }
@@ -69,7 +95,8 @@ function getTrustedOrigins() {
   return Array.from(
     new Set([
       ...getEnvList("BETTER_AUTH_TRUSTED_ORIGINS"),
-      getOrigin(getFallbackAuthUrl()),
+      ...getVercelDeploymentOrigins(),
+      getOrigin(getAuthBaseUrl()),
       "https://pawpaths.nl",
       "https://www.pawpaths.nl",
       "http://localhost:3000",
@@ -191,7 +218,7 @@ async function getBetterAuthUserCollection(db: Db = authDb) {
 
 export const auth = betterAuth({
   appName: "PawPaths",
-  baseURL: getFallbackAuthUrl(),
+  baseURL: getAuthBaseUrl(),
   trustedOrigins: getTrustedOrigins(),
   secret: process.env.BETTER_AUTH_SECRET,
   advanced: {

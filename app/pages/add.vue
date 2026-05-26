@@ -42,6 +42,13 @@ const photoError = ref("");
 const geocodeError = ref("");
 const activePointId = ref("general");
 let reverseGeocodeTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+type PhotoMetadata = {
+  capturedAt?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
 const form = reactive<EditableLocationFields>({
   name: "",
   city: "",
@@ -123,6 +130,153 @@ function getErrorMessage(errorValue: unknown) {
     : "Something went wrong. Please try again.";
 }
 
+function readAscii(view: DataView, offset: number, length: number) {
+  let value = "";
+
+  for (let index = 0; index < length; index += 1) {
+    const code = view.getUint8(offset + index);
+    if (code === 0) break;
+    value += String.fromCharCode(code);
+  }
+
+  return value.trim();
+}
+
+function readExifDate(value: string | null | undefined) {
+  if (!value) return null;
+
+  const match = value.match(
+    /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/,
+  );
+
+  if (!match) return null;
+
+  const [, year, month, day, hours, minutes, seconds] = match;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hours),
+    Number(minutes),
+    Number(seconds),
+  );
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function readRational(view: DataView, offset: number, littleEndian: boolean) {
+  const numerator = view.getUint32(offset, littleEndian);
+  const denominator = view.getUint32(offset + 4, littleEndian);
+
+  return denominator ? numerator / denominator : 0;
+}
+
+function getExifTagValue(
+  view: DataView,
+  tiffOffset: number,
+  entryOffset: number,
+  littleEndian: boolean,
+) {
+  const type = view.getUint16(entryOffset + 2, littleEndian);
+  const count = view.getUint32(entryOffset + 4, littleEndian);
+  const valueOffset = entryOffset + 8;
+  const typeSize =
+    type === 2 || type === 7 ? 1 : type === 3 ? 2 : type === 4 ? 4 : 8;
+  const byteLength = count * typeSize;
+  const dataOffset =
+    byteLength <= 4
+      ? valueOffset
+      : tiffOffset + view.getUint32(valueOffset, littleEndian);
+
+  if (type === 2) return readAscii(view, dataOffset, count);
+  if (type === 3) return view.getUint16(dataOffset, littleEndian);
+  if (type === 4) return view.getUint32(dataOffset, littleEndian);
+  if (type === 5) {
+    return Array.from({ length: count }, (_, index) =>
+      readRational(view, dataOffset + index * 8, littleEndian),
+    );
+  }
+
+  return null;
+}
+
+function readIfd(
+  view: DataView,
+  tiffOffset: number,
+  ifdOffset: number,
+  littleEndian: boolean,
+) {
+  const tags = new Map<number, unknown>();
+  const entryCount = view.getUint16(ifdOffset, littleEndian);
+
+  for (let index = 0; index < entryCount; index += 1) {
+    const entryOffset = ifdOffset + 2 + index * 12;
+    const tag = view.getUint16(entryOffset, littleEndian);
+    tags.set(tag, getExifTagValue(view, tiffOffset, entryOffset, littleEndian));
+  }
+
+  return tags;
+}
+
+function gpsToDecimal(values: unknown, ref: unknown) {
+  if (!Array.isArray(values) || values.length < 3) return null;
+
+  const decimal =
+    Number(values[0]) + Number(values[1]) / 60 + Number(values[2]) / 3600;
+  const direction = typeof ref === "string" ? ref.toUpperCase() : "";
+
+  return direction === "S" || direction === "W" ? -decimal : decimal;
+}
+
+function parseExifMetadata(buffer: ArrayBuffer): PhotoMetadata {
+  const view = new DataView(buffer);
+
+  if (view.byteLength < 4 || view.getUint16(0) !== 0xffd8) return {};
+
+  let offset = 2;
+
+  while (offset + 4 < view.byteLength) {
+    if (view.getUint8(offset) !== 0xff) break;
+
+    const marker = view.getUint8(offset + 1);
+    const size = view.getUint16(offset + 2);
+
+    if (marker === 0xe1 && readAscii(view, offset + 4, 6) === "Exif") {
+      const tiffOffset = offset + 10;
+      const littleEndian = readAscii(view, tiffOffset, 2) === "II";
+      const firstIfdOffset =
+        tiffOffset + view.getUint32(tiffOffset + 4, littleEndian);
+      const ifd0 = readIfd(view, tiffOffset, firstIfdOffset, littleEndian);
+      const exifOffset = Number(ifd0.get(0x8769));
+      const gpsOffset = Number(ifd0.get(0x8825));
+      const exif =
+        Number.isFinite(exifOffset) && exifOffset > 0
+          ? readIfd(view, tiffOffset, tiffOffset + exifOffset, littleEndian)
+          : new Map<number, unknown>();
+      const gps =
+        Number.isFinite(gpsOffset) && gpsOffset > 0
+          ? readIfd(view, tiffOffset, tiffOffset + gpsOffset, littleEndian)
+          : new Map<number, unknown>();
+      const latitude = gpsToDecimal(gps.get(0x0002), gps.get(0x0001));
+      const longitude = gpsToDecimal(gps.get(0x0004), gps.get(0x0003));
+
+      return {
+        capturedAt: readExifDate(
+          String(
+            exif.get(0x9003) ?? exif.get(0x9004) ?? ifd0.get(0x0132) ?? "",
+          ),
+        ),
+        latitude,
+        longitude,
+      };
+    }
+
+    offset += 2 + size;
+  }
+
+  return {};
+}
+
 async function fileToLocationPhoto(file: File): Promise<LocationPhoto> {
   if (!file.type.startsWith("image/")) {
     throw new Error("Choose JPG, PNG, or WebP photos.");
@@ -132,6 +286,8 @@ async function fileToLocationPhoto(file: File): Promise<LocationPhoto> {
     throw new Error("Choose photos under 5 MB.");
   }
 
+  const buffer = await file.arrayBuffer();
+  const metadata = parseExifMetadata(buffer);
   const bitmap = await createImageBitmap(file);
   const maxSize = 1200;
   const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
@@ -151,11 +307,44 @@ async function fileToLocationPhoto(file: File): Promise<LocationPhoto> {
   bitmap.close();
 
   return {
+    id: createPointId(),
     url: canvas.toDataURL("image/jpeg", 0.72),
     alt: form.name || file.name,
     width,
     height,
+    capturedAt: metadata.capturedAt ?? null,
+    uploadedAt: new Date().toISOString(),
+    latitude: metadata.latitude ?? null,
+    longitude: metadata.longitude ?? null,
+    sourceName: file.name,
   };
+}
+
+function addPoiFromPhoto(photo: LocationPhoto) {
+  if (!Number.isFinite(photo.latitude) || !Number.isFinite(photo.longitude)) {
+    return;
+  }
+
+  const existingPoint = form.coordinatePoints?.some(
+    (point) =>
+      point.kind === "poi" &&
+      Math.abs(point.latitude - (photo.latitude as number)) < 0.00001 &&
+      Math.abs(point.longitude - (photo.longitude as number)) < 0.00001,
+  );
+
+  if (existingPoint) return;
+
+  const point: LocationCoordinatePoint = {
+    id: createPointId(),
+    kind: "poi",
+    label: photo.sourceName ? `Photo: ${photo.sourceName}` : "Photo POI",
+    latitude: Number((photo.latitude as number).toFixed(6)),
+    longitude: Number((photo.longitude as number).toFixed(6)),
+    sourcePhotoId: photo.id ?? null,
+  };
+
+  form.coordinatePoints = [...(form.coordinatePoints ?? []), point];
+  activePointId.value = point.id ?? "general";
 }
 
 async function handlePhotoChange(event: Event) {
@@ -170,15 +359,32 @@ async function handlePhotoChange(event: Event) {
   try {
     const photos = await Promise.all(files.map(fileToLocationPhoto));
     form.photos = [...(form.photos ?? []), ...photos].slice(0, 4);
+    photos.forEach(addPoiFromPhoto);
   } catch (errorValue) {
     photoError.value = getErrorMessage(errorValue);
   }
 }
 
 function removePhoto(index: number) {
+  const photoId = form.photos?.[index]?.id;
   form.photos = (form.photos ?? []).filter(
     (_, photoIndex) => photoIndex !== index,
   );
+
+  if (photoId) {
+    form.coordinatePoints = (form.coordinatePoints ?? []).filter(
+      (point) => point.sourcePhotoId !== photoId,
+    );
+  }
+}
+
+function formatPhotoDate(value: string | null | undefined) {
+  if (!value) return "";
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 function getPointLabel(kind: LocationCoordinateKind) {
@@ -528,6 +734,17 @@ onBeforeUnmount(() => {
                 :src="photo.url"
                 class="aspect-[4/3] w-full object-cover"
               />
+              <div
+                class="border-t border-slate-200 bg-white p-2 text-xs text-slate-600"
+              >
+                <p v-if="photo.capturedAt">
+                  Taken {{ formatPhotoDate(photo.capturedAt) }}
+                </p>
+                <p v-else>Photo date unavailable</p>
+                <p v-if="photo.latitude && photo.longitude">
+                  POI created from photo location
+                </p>
+              </div>
               <UButton
                 class="absolute top-2 right-2"
                 color="neutral"

@@ -4,10 +4,16 @@ export type LocationResult = {
 };
 
 export type LocationPhoto = {
+  id?: string | null;
   url: string;
   alt?: string | null;
   width?: number | null;
   height?: number | null;
+  capturedAt?: string | null;
+  uploadedAt?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  sourceName?: string | null;
 };
 
 export type LocationCoordinateKind =
@@ -23,6 +29,7 @@ export type LocationCoordinatePoint = {
   label: string;
   latitude: number;
   longitude: number;
+  sourcePhotoId?: string | null;
 };
 
 export type LocationListItem = {

@@ -154,10 +154,16 @@ function cleanPhotos(value: unknown): LocationPhoto[] {
       if (!item || typeof item !== "object") return null;
 
       const photo = item as Record<string, unknown>;
+      const id = cleanText(photo.id, 80) || null;
       const url = cleanText(photo.url, 2_000_000);
       const alt = cleanText(photo.alt, 160) || null;
       const width = Number(photo.width);
       const height = Number(photo.height);
+      const capturedAt = cleanText(photo.capturedAt, 80) || null;
+      const uploadedAt = cleanText(photo.uploadedAt, 80) || null;
+      const latitude = cleanNumber(photo.latitude, -90, 90);
+      const longitude = cleanNumber(photo.longitude, -180, 180);
+      const sourceName = cleanText(photo.sourceName, 240) || null;
 
       if (
         !url.startsWith("data:image/") &&
@@ -168,10 +174,16 @@ function cleanPhotos(value: unknown): LocationPhoto[] {
       }
 
       return {
+        id,
         url,
         alt,
         width: Number.isFinite(width) && width > 0 ? width : null,
         height: Number.isFinite(height) && height > 0 ? height : null,
+        capturedAt,
+        uploadedAt,
+        latitude,
+        longitude,
+        sourceName,
       };
     })
     .filter((item): item is LocationPhoto => Boolean(item))
@@ -208,6 +220,7 @@ function cleanCoordinatePoints(value: unknown): LocationCoordinatePoint[] {
         label,
         latitude,
         longitude,
+        sourcePhotoId: cleanText(point.sourcePhotoId, 80) || null,
       };
     })
     .filter((item): item is LocationCoordinatePoint => Boolean(item))
