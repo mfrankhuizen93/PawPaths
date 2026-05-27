@@ -36,6 +36,18 @@ const selectedCoordinates = computed<[number, number] | null>(() => {
   return [props.longitude as number, props.latitude as number];
 });
 
+const markerKey = computed(() =>
+  JSON.stringify(
+    (props.markers ?? []).map((marker) => [
+      marker.id,
+      marker.label,
+      marker.kind,
+      marker.latitude,
+      marker.longitude,
+    ]),
+  ),
+);
+
 function getSelectionFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Point> {
   const markers = (props.markers ?? []).filter(
     (marker) =>
@@ -166,21 +178,21 @@ onMounted(async () => {
 });
 
 watch(
-  () => [selectedCoordinates.value, props.markers],
-  ([coordinates]) => {
+  () => [selectedCoordinates.value?.join(","), markerKey.value],
+  () => {
     syncSelection();
 
     const activeMap = map.value;
+    const coordinates = selectedCoordinates.value;
 
     if (isReady.value && coordinates && activeMap) {
       activeMap.easeTo({
-        center: coordinates as [number, number],
+        center: coordinates,
         zoom: Math.max(activeMap.getZoom(), 14),
         duration: 450,
       });
     }
   },
-  { deep: true },
 );
 
 onBeforeUnmount(() => {

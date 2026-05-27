@@ -456,6 +456,27 @@ async function reverseGeocodeGeneralLocation() {
   }
 }
 
+function resetForm() {
+  if (reverseGeocodeTimer) {
+    window.clearTimeout(reverseGeocodeTimer);
+    reverseGeocodeTimer = null;
+  }
+
+  activePointId.value = "general";
+  form.name = "";
+  form.city = "";
+  form.province = "";
+  form.country = "Netherlands";
+  form.latitude = null;
+  form.longitude = null;
+  form.type = [];
+  form.characteristics = [];
+  form.coordinatePoints = [];
+  form.description = "";
+  form.relatedUrls = [];
+  form.photos = [];
+}
+
 async function submitLocation() {
   error.value = "";
   message.value = "";
@@ -467,17 +488,7 @@ async function submitLocation() {
       body: form,
     });
     message.value = "Thanks. Your location is waiting for maintainer review.";
-    form.name = "";
-    form.city = "";
-    form.province = "";
-    form.latitude = null;
-    form.longitude = null;
-    form.type = [];
-    form.characteristics = [];
-    form.coordinatePoints = [];
-    form.description = "";
-    form.relatedUrls = [];
-    form.photos = [];
+    resetForm();
   } catch (submitError) {
     error.value = getErrorMessage(submitError);
   } finally {
@@ -487,9 +498,16 @@ async function submitLocation() {
 
 watch(
   () => [form.latitude, form.longitude],
-  () => {
+  ([latitude, longitude]) => {
     if (reverseGeocodeTimer) {
       window.clearTimeout(reverseGeocodeTimer);
+      reverseGeocodeTimer = null;
+    }
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      geocodeError.value = "";
+      isReverseGeocoding.value = false;
+      return;
     }
 
     reverseGeocodeTimer = window.setTimeout(() => {
@@ -750,6 +768,7 @@ onBeforeUnmount(() => {
                 color="neutral"
                 icon="i-lucide-x"
                 size="xs"
+                type="button"
                 variant="solid"
                 @click="removePhoto(index)"
               />
