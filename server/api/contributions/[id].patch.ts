@@ -17,10 +17,10 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const action = body?.action;
 
-  if (action !== "approve" && action !== "reject") {
+  if (action !== "approve" && action !== "reject" && action !== "save") {
     throw createError({
       statusCode: 400,
-      statusMessage: "Choose approve or reject.",
+      statusMessage: "Choose approve, reject, or save.",
     });
   }
 
@@ -31,6 +31,8 @@ export default defineEventHandler(async (event) => {
       reviewer,
       action,
       note: body?.note,
+      payload:
+        action === "approve" || action === "save" ? body?.payload : undefined,
     }),
   };
 });

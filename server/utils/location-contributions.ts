@@ -10,6 +10,7 @@ import type {
   LocationPhoto,
   LocationRelatedUrl,
 } from "#shared/types/locations";
+import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { getLocationSlug } from "#shared/utils/location-route";
 import type { AuthUser } from "#shared/types/auth";
 
@@ -72,12 +73,11 @@ const CHARACTERISTICS = new Set([
 ]);
 
 const COORDINATE_KINDS = new Set<LocationCoordinateKind>([
-  "general",
-  "parking",
-  "poi",
-  "entrance",
-  "other",
+  ...locationCoordinateKindOptions.map((option) => option.value),
 ]);
+const COORDINATE_KIND_LABELS = new Map(
+  locationCoordinateKindOptions.map((option) => [option.value, option.label]),
+);
 
 function cleanText(value: unknown, maxLength = 200) {
   if (typeof value !== "string") return "";
@@ -202,14 +202,7 @@ function cleanCoordinatePoints(value: unknown): LocationCoordinatePoint[] {
       const longitude = cleanNumber(point.longitude, -180, 180);
       const kindValue = cleanText(point.kind, 40) as LocationCoordinateKind;
       const kind = COORDINATE_KINDS.has(kindValue) ? kindValue : "other";
-      const fallbackLabel =
-        kind === "parking"
-          ? "Parking location"
-          : kind === "poi"
-            ? "POI"
-            : kind === "entrance"
-              ? "Entrance"
-              : "Point";
+      const fallbackLabel = COORDINATE_KIND_LABELS.get(kind) ?? "Point";
       const label = cleanText(point.label, 120) || fallbackLabel;
 
       if (latitude === null || longitude === null) return null;
@@ -301,6 +294,12 @@ function toObjectId(id: string) {
   return new ObjectId(id);
 }
 
+function toIsoString(value: Date | string | undefined | null) {
+  if (!value) return null;
+
+  return value instanceof Date ? value.toISOString() : value;
+}
+
 function toContribution(document: ContributionDocument): LocationContribution {
   return {
     id: document._id?.toString() ?? "",
@@ -313,21 +312,26 @@ function toContribution(document: ContributionDocument): LocationContribution {
     submitter: document.submitter,
     reviewer: document.reviewer ?? null,
     reviewNote: document.reviewNote ?? null,
-    createdAt: document.createdAt.toISOString(),
-    updatedAt: document.updatedAt.toISOString(),
-    reviewedAt: document.reviewedAt?.toISOString() ?? null,
+    createdAt: toIsoString(document.createdAt) ?? new Date().toISOString(),
+    updatedAt: toIsoString(document.updatedAt) ?? new Date().toISOString(),
+    reviewedAt: toIsoString(document.reviewedAt),
   };
 }
 
 export async function getContributionsCollection(db: Db) {
   const contributions = db.collection<ContributionDocument>("contributions");
+
+  return contributions;
+}
+
+export async function ensureContributionIndexes(db: Db) {
+  const contributions = db.collection<ContributionDocument>("contributions");
+
   await Promise.all([
     contributions.createIndex({ status: 1, createdAt: -1 }),
     contributions.createIndex({ locationId: 1, status: 1 }),
     contributions.createIndex({ "submitter.id": 1, createdAt: -1 }),
   ]);
-
-  return contributions;
 }
 
 export async function createLocationContribution(options: {
@@ -454,8 +458,9 @@ export async function reviewContribution(options: {
   db: Db;
   id: string;
   reviewer: AuthUser;
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "save";
   note?: unknown;
+  payload?: unknown;
 }) {
   const contributions = await getContributionsCollection(options.db);
   const _id = toObjectId(options.id);
@@ -485,17 +490,62 @@ export async function reviewContribution(options: {
     });
   }
 
+  const payload =
+    (options.action === "approve" || options.action === "save") &&
+    options.payload !== undefined
+      ? sanitizeLocationPayload(options.payload)
+      : contribution.payload;
+  const contributionForReview = {
+    ...contribution,
+    payload,
+  };
+
   if (options.action === "approve") {
-    await approveContribution(options.db, contribution);
+    await approveContribution(options.db, contributionForReview);
   }
 
   const now = new Date();
   const status = options.action === "approve" ? "approved" : "rejected";
+  const isSave = options.action === "save";
+
+  if (isSave) {
+    const saveResult = await contributions.updateOne(
+      { _id },
+      {
+        $set: {
+          payload,
+          locationName: payload.name,
+          updatedAt: now,
+        },
+      },
+    );
+
+    if (saveResult.matchedCount === 0) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Contribution not found.",
+      });
+    }
+
+    const savedContribution = await contributions.findOne({ _id });
+
+    if (!savedContribution) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Contribution not found.",
+      });
+    }
+
+    return toContribution(savedContribution);
+  }
+
   const result = await contributions.findOneAndUpdate(
     { _id },
     {
       $set: {
         status,
+        payload,
+        locationName: payload.name,
         reviewer: getUserSummary(options.reviewer),
         reviewNote: cleanLongText(options.note, 1000) || null,
         reviewedAt: now,

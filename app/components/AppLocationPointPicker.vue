@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { GeoJSONSource, Map, MapMouseEvent } from "maplibre-gl";
+import type { GeocodeResult } from "#shared/types/geo";
 import type { LocationCoordinateKind } from "#shared/types/locations";
 
 type PickerMarker = {
@@ -14,11 +15,13 @@ const props = defineProps<{
   latitude?: number | null;
   longitude?: number | null;
   markers?: PickerMarker[];
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
   "update:latitude": [value: number | null];
   "update:longitude": [value: number | null];
+  selected: [value: GeocodeResult];
 }>();
 
 const config = useRuntimeConfig();
@@ -81,9 +84,63 @@ function syncSelection() {
   getSelectionSource()?.setData(getSelectionFeatureCollection());
 }
 
+function fitMarkersToView() {
+  const activeMap = map.value;
+  const coordinates = (props.markers ?? [])
+    .filter(
+      (marker) =>
+        Number.isFinite(marker.latitude) && Number.isFinite(marker.longitude),
+    )
+    .map(
+      (marker) =>
+        [marker.longitude as number, marker.latitude as number] as [
+          number,
+          number,
+        ],
+    );
+
+  if (!activeMap || coordinates.length === 0) return;
+
+  if (coordinates.length === 1) {
+    activeMap.easeTo({
+      center: coordinates[0],
+      zoom: Math.max(activeMap.getZoom(), 14),
+      duration: 450,
+    });
+    return;
+  }
+
+  const lngValues = coordinates.map(([longitude]) => longitude);
+  const latValues = coordinates.map(([, latitude]) => latitude);
+
+  activeMap.fitBounds(
+    [
+      [Math.min(...lngValues), Math.min(...latValues)],
+      [Math.max(...lngValues), Math.max(...latValues)],
+    ],
+    {
+      padding: 64,
+      maxZoom: 15,
+      duration: 450,
+    },
+  );
+}
+
 function setCoordinates(coordinates: [number, number]) {
   emit("update:longitude", Number(coordinates[0].toFixed(6)));
   emit("update:latitude", Number(coordinates[1].toFixed(6)));
+}
+
+function searchAddress(result: GeocodeResult) {
+  const coordinates: [number, number] = [result.longitude, result.latitude];
+
+  setCoordinates(coordinates);
+  emit("selected", result);
+  map.value?.easeTo({
+    center: coordinates,
+    zoom: Math.max(map.value.getZoom(), 14),
+    duration: 450,
+  });
 }
 
 function addSelectionLayer() {
@@ -121,6 +178,34 @@ function addSelectionLayer() {
         "#c2410c",
         "entrance",
         "#7c3aed",
+        "water",
+        "#0891b2",
+        "swimming",
+        "#0284c7",
+        "dog-playground",
+        "#16a34a",
+        "off-leash-area",
+        "#65a30d",
+        "bench",
+        "#ca8a04",
+        "toilet",
+        "#0f766e",
+        "cafe",
+        "#a16207",
+        "viewpoint",
+        "#9333ea",
+        "shade",
+        "#15803d",
+        "waste-bin",
+        "#475569",
+        "rest-area",
+        "#0d9488",
+        "hazard",
+        "#dc2626",
+        "livestock",
+        "#854d0e",
+        "photo-spot",
+        "#db2777",
         "#475569",
       ],
       "circle-radius": 8,
@@ -170,9 +255,14 @@ onMounted(async () => {
   map.value.on("load", () => {
     addSelectionLayer();
     isReady.value = true;
+    if (props.readonly) {
+      fitMarkersToView();
+    }
   });
 
   map.value.on("click", (event: MapMouseEvent) => {
+    if (props.readonly) return;
+
     setCoordinates([event.lngLat.lng, event.lngLat.lat]);
   });
 });
@@ -184,6 +274,11 @@ watch(
 
     const activeMap = map.value;
     const coordinates = selectedCoordinates.value;
+
+    if (isReady.value && props.readonly) {
+      fitMarkersToView();
+      return;
+    }
 
     if (isReady.value && coordinates && activeMap) {
       activeMap.easeTo({
@@ -201,7 +296,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-md border border-slate-200">
-    <div ref="mapContainer" class="h-80 min-h-80 w-full" />
+  <div class="relative overflow-hidden rounded-md border border-slate-200">
+    <div
+      ref="mapContainer"
+      :class="readonly ? 'h-64 min-h-64' : 'h-80 min-h-80'"
+      class="w-full"
+    />
+    <div v-if="!readonly" class="absolute top-3 left-3 z-10 w-64">
+      <AppAddressSearch
+        placeholder="Search address or place"
+        @selected="searchAddress"
+      />
+    </div>
   </div>
 </template>

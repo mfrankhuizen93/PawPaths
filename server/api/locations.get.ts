@@ -6,6 +6,14 @@ import { inferLocationWarnings } from "../utils/location-warnings.js";
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
+const CHARACTERISTIC_POINT_KIND_MAP: Record<string, string[]> = {
+  "food and drink": ["cafe"],
+  "off-leash area": ["off-leash-area"],
+  "swimming water": ["swimming", "water"],
+};
+const TYPE_POINT_KIND_MAP: Record<string, string[]> = {
+  "dog playground": ["dog-playground"],
+};
 
 type MongoFilter = Record<string, unknown>;
 type PipelineStage = Record<string, unknown>;
@@ -78,6 +86,25 @@ function asArray(value: QueryValue | QueryValue[]): string[] {
   );
 }
 
+function addAndClause(filter: MongoFilter, clause: MongoFilter) {
+  filter.$and = [...((filter.$and as MongoFilter[] | undefined) ?? []), clause];
+}
+
+function buildFieldOrPointKindClause(
+  field: string,
+  value: string,
+  mappedPointKinds: string[],
+): MongoFilter {
+  if (mappedPointKinds.length === 0) return { [field]: value };
+
+  return {
+    $or: [
+      { [field]: value },
+      { "coordinatePoints.kind": { $in: mappedPointKinds } },
+    ],
+  };
+}
+
 function buildFilter(query: QueryObject): MongoFilter {
   const filter: MongoFilter = {
     status: "published",
@@ -86,13 +113,35 @@ function buildFilter(query: QueryObject): MongoFilter {
   const types = asArray(query.type).filter(Boolean);
   const excludedTypes = asArray(query.excludeType).filter(Boolean);
   if (types.length > 0) {
-    filter.type = { $in: types };
+    const mappedPointKinds = types.flatMap(
+      (type) => TYPE_POINT_KIND_MAP[type] ?? [],
+    );
+
+    if (mappedPointKinds.length > 0) {
+      addAndClause(filter, {
+        $or: [
+          { type: { $in: types } },
+          { "coordinatePoints.kind": { $in: mappedPointKinds } },
+        ],
+      });
+    } else {
+      filter.type = { $in: types };
+    }
   }
   if (excludedTypes.length > 0) {
     filter.type = {
       ...((filter.type as MongoFilter | undefined) ?? {}),
       $nin: excludedTypes,
     };
+    const mappedPointKinds = excludedTypes.flatMap(
+      (type) => TYPE_POINT_KIND_MAP[type] ?? [],
+    );
+
+    if (mappedPointKinds.length > 0) {
+      addAndClause(filter, {
+        "coordinatePoints.kind": { $nin: mappedPointKinds },
+      });
+    }
   }
 
   const characteristics = asArray(query.characteristic).filter(Boolean);
@@ -100,13 +149,31 @@ function buildFilter(query: QueryObject): MongoFilter {
     Boolean,
   );
   if (characteristics.length > 0) {
-    filter.characteristics = { $all: characteristics };
+    for (const characteristic of characteristics) {
+      addAndClause(
+        filter,
+        buildFieldOrPointKindClause(
+          "characteristics",
+          characteristic,
+          CHARACTERISTIC_POINT_KIND_MAP[characteristic] ?? [],
+        ),
+      );
+    }
   }
   if (excludedCharacteristics.length > 0) {
     filter.characteristics = {
       ...((filter.characteristics as MongoFilter | undefined) ?? {}),
       $nin: excludedCharacteristics,
     };
+    const mappedPointKinds = excludedCharacteristics.flatMap(
+      (characteristic) => CHARACTERISTIC_POINT_KIND_MAP[characteristic] ?? [],
+    );
+
+    if (mappedPointKinds.length > 0) {
+      addAndClause(filter, {
+        "coordinatePoints.kind": { $nin: mappedPointKinds },
+      });
+    }
   }
 
   const searchQuery = toSearchQuery(query.q);

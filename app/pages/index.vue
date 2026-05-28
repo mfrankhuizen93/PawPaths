@@ -1,17 +1,20 @@
 <script lang="ts" setup>
 import type {
   EditableLocationFields,
+  LocationCoordinatePoint,
   LocationListItem,
   LocationReview,
   LocationsResponse,
 } from "#shared/types/locations";
+import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
 import AppPhotoModal from "~/components/AppPhotoModal.vue";
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
+import type { NavigationAppPreference } from "#shared/types/auth";
 
 const route = useRoute();
 const router = useRouter();
-const { isSignedIn } = useAuth();
+const { user, isSignedIn } = useAuth();
 
 const typeOptions: Record<string, { icon: string; label: string }> = {
   park: {
@@ -121,6 +124,10 @@ const items = ref<TabsItem[]>([
     slot: "photos",
   },
   {
+    label: "Map",
+    slot: "map",
+  },
+  {
     label: "Links",
     slot: "links",
   },
@@ -170,6 +177,44 @@ const selectedLocationMeta = computed(() =>
 const selectedLocationPhoto = computed(
   () => selectedLocation.value?.photos?.[0] ?? null,
 );
+const selectedLocationMapPoints = computed<LocationCoordinatePoint[]>(() => {
+  if (!selectedLocation.value) return [];
+
+  const points = [...(selectedLocation.value.coordinatePoints ?? [])].filter(
+    (point) =>
+      Number.isFinite(point.latitude) && Number.isFinite(point.longitude),
+  );
+  const hasGeneralPoint = points.some((point) => point.kind === "general");
+
+  if (
+    !hasGeneralPoint &&
+    Number.isFinite(selectedLocation.value.latitude) &&
+    Number.isFinite(selectedLocation.value.longitude)
+  ) {
+    points.unshift({
+      id: `${selectedLocation.value.id}-general`,
+      kind: "general",
+      label: "General location",
+      latitude: selectedLocation.value.latitude as number,
+      longitude: selectedLocation.value.longitude as number,
+    });
+  }
+
+  return points;
+});
+const selectedLocationMapCenter = computed(() => {
+  const generalPoint = selectedLocationMapPoints.value.find(
+    (point) => point.kind === "general",
+  );
+  const firstPoint = generalPoint ?? selectedLocationMapPoints.value[0];
+
+  return firstPoint
+    ? {
+        latitude: firstPoint.latitude,
+        longitude: firstPoint.longitude,
+      }
+    : null;
+});
 
 watch(
   data,
@@ -224,6 +269,84 @@ function getReviewDate(review: LocationReview) {
   if (typeof review.date === "string") return review.date.slice(0, 10);
 
   return "";
+}
+
+function getPointKindLabel(kind: LocationCoordinatePoint["kind"]) {
+  return (
+    locationCoordinateKindOptions.find((option) => option.value === kind)
+      ?.label ?? "Point"
+  );
+}
+
+function getPointLabel(point: LocationCoordinatePoint) {
+  return point.label || getPointKindLabel(point.kind);
+}
+
+function getAppleMapsUrl(point: LocationCoordinatePoint) {
+  const label = encodeURIComponent(getPointLabel(point));
+
+  return `https://maps.apple.com/?daddr=${point.latitude},${point.longitude}&q=${label}`;
+}
+
+function getGoogleMapsUrl(point: LocationCoordinatePoint) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${point.latitude},${point.longitude}`;
+}
+
+function getWazeUrl(point: LocationCoordinatePoint) {
+  return `https://waze.com/ul?ll=${point.latitude},${point.longitude}&navigate=yes`;
+}
+
+function getDeviceNavigationPreference(): Exclude<
+  NavigationAppPreference,
+  "device"
+> {
+  if (!import.meta.client) return "google";
+
+  const platform = navigator.platform.toLowerCase();
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  if (
+    platform.includes("mac") ||
+    platform.includes("iphone") ||
+    platform.includes("ipad") ||
+    userAgent.includes("iphone") ||
+    userAgent.includes("ipad")
+  ) {
+    return "apple";
+  }
+
+  return "google";
+}
+
+function getNavigationPreference() {
+  const preference = user.value?.navigationAppPreference ?? "device";
+
+  return preference === "device" ? getDeviceNavigationPreference() : preference;
+}
+
+function getNavigationLabel() {
+  const labels: Record<Exclude<NavigationAppPreference, "device">, string> = {
+    apple: "Apple Maps",
+    google: "Google Maps",
+    waze: "Waze",
+  };
+
+  return labels[getNavigationPreference()];
+}
+
+function getNavigationIcon() {
+  return getNavigationPreference() === "google"
+    ? "i-lucide-route"
+    : "i-lucide-navigation";
+}
+
+function getNavigationUrl(point: LocationCoordinatePoint) {
+  const preference = getNavigationPreference();
+
+  if (preference === "apple") return getAppleMapsUrl(point);
+  if (preference === "waze") return getWazeUrl(point);
+
+  return getGoogleMapsUrl(point);
 }
 
 async function submitChange() {
@@ -506,6 +629,69 @@ watch(selectedLocation, (location) => {
                 :location-name="selectedLocation.name"
                 :photos="selectedLocation?.photos"
               />
+            </template>
+            <template #map>
+              <div class="flex flex-col gap-4">
+                <AppLocationPointPicker
+                  v-if="selectedLocationMapPoints.length > 0"
+                  :latitude="selectedLocationMapCenter?.latitude"
+                  :longitude="selectedLocationMapCenter?.longitude"
+                  :markers="selectedLocationMapPoints"
+                  readonly
+                />
+
+                <UAlert
+                  v-else
+                  color="neutral"
+                  icon="i-lucide-map-pin-off"
+                  title="No mapped points for this location yet."
+                  variant="soft"
+                />
+
+                <div
+                  v-if="selectedLocationMapPoints.length > 0"
+                  class="grid gap-3"
+                >
+                  <article
+                    v-for="point in selectedLocationMapPoints"
+                    :key="
+                      point.id ??
+                      `${point.kind}-${point.latitude}-${point.longitude}`
+                    "
+                    class="rounded-md border border-slate-200 bg-white p-4"
+                  >
+                    <div
+                      class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <p class="font-semibold text-slate-950">
+                            {{ getPointLabel(point) }}
+                          </p>
+                          <UBadge color="neutral" variant="soft">
+                            {{ getPointKindLabel(point.kind) }}
+                          </UBadge>
+                        </div>
+                        <p class="mt-1 text-sm text-slate-600">
+                          {{ point.latitude.toFixed(6) }},
+                          {{ point.longitude.toFixed(6) }}
+                        </p>
+                      </div>
+
+                      <div class="flex flex-wrap gap-2">
+                        <UButton
+                          :icon="getNavigationIcon()"
+                          :label="getNavigationLabel()"
+                          :to="getNavigationUrl(point)"
+                          color="neutral"
+                          target="_blank"
+                          variant="outline"
+                        />
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </div>
             </template>
             <template #reviews>
               <div class="flex flex-col gap-5">

@@ -1,6 +1,10 @@
 import { createAuthClient } from "better-auth/vue";
 import { authClient } from "~/utils/auth-client";
-import type { AuthUser, UserRole } from "#shared/types/auth";
+import type {
+  AuthUser,
+  NavigationAppPreference,
+  UserRole,
+} from "#shared/types/auth";
 
 type BetterAuthResult<T> = {
   data: T | null;
@@ -46,6 +50,11 @@ function toAuthUser(user: BetterAuthSession["user"]): AuthUser {
     name: user.name,
     image: user.image ?? null,
     role,
+    navigationAppPreference: ["apple", "google", "waze", "device"].includes(
+      String(user.navigationAppPreference),
+    )
+      ? (user.navigationAppPreference as NavigationAppPreference)
+      : "device",
     createdAt: String(user.createdAt ?? new Date().toISOString()),
     updatedAt: String(user.updatedAt ?? new Date().toISOString()),
   };
@@ -70,6 +79,16 @@ export function useAuth() {
   );
 
   async function refreshSession() {
+    try {
+      const response = await $fetch<{ user: AuthUser }>("/api/auth/profile");
+      user.value = response.user;
+      isLoaded.value = true;
+
+      return user.value;
+    } catch {
+      // Fall back to Better Auth so auth errors still surface consistently.
+    }
+
     const result =
       (await getRequestAuthClient().getSession()) as BetterAuthResult<BetterAuthSession | null>;
     const session = assertAuthResult(result);
@@ -84,22 +103,37 @@ export function useAuth() {
     password: string;
     name?: string;
     image?: string | null;
+    navigationAppPreference?: NavigationAppPreference;
   }) {
     const result = (await getRequestAuthClient().signUp.email({
       name: payload.name?.trim() || payload.email,
       email: payload.email,
       password: payload.password,
       image: payload.image ?? undefined,
+      navigationAppPreference: payload.navigationAppPreference ?? "device",
       callbackURL: "/account?verified=true",
     })) as BetterAuthResult<unknown>;
 
     assertAuthResult(result);
-    return await refreshSession();
+    await refreshSession();
+
+    if (user.value && payload.navigationAppPreference) {
+      const response = await $fetch<{ user: AuthUser }>("/api/auth/profile", {
+        method: "PATCH",
+        body: {
+          navigationAppPreference: payload.navigationAppPreference,
+        },
+      });
+      user.value = response.user;
+    }
+
+    return user.value;
   }
 
   async function updateProfile(payload: {
     name?: string;
     image?: string | null;
+    navigationAppPreference?: NavigationAppPreference;
   }) {
     const result = (await getRequestAuthClient().updateUser({
       name: payload.name,
@@ -107,6 +141,19 @@ export function useAuth() {
     })) as BetterAuthResult<unknown>;
 
     assertAuthResult(result);
+
+    if (payload.navigationAppPreference) {
+      const response = await $fetch<{ user: AuthUser }>("/api/auth/profile", {
+        method: "PATCH",
+        body: {
+          navigationAppPreference: payload.navigationAppPreference,
+        },
+      });
+      user.value = response.user;
+      isLoaded.value = true;
+      return user.value;
+    }
+
     return await refreshSession();
   }
 

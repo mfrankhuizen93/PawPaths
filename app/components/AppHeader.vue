@@ -41,6 +41,14 @@ const { user, isSignedIn } = useAuth();
       <UColorModeButton v-if="!isExplore" />
     </template>
 
+    <UNavigationMenu
+      :items="headerNavigationItems"
+      :ui="{
+        link: 'gap-1.5',
+        linkLeadingIcon: 'size-4',
+      }"
+    />
+
     <template #body>
       <UNavigationMenu
         :items="headerNavigationItems"

@@ -1,6 +1,17 @@
 <script lang="ts" setup>
-import type { AuthUser, UserRole } from "#shared/types/auth";
-import type { LocationContribution } from "#shared/types/locations";
+import type {
+  AuthUser,
+  NavigationAppPreference,
+  UserRole,
+} from "#shared/types/auth";
+import type {
+  EditableLocationFields,
+  LocationContribution,
+  LocationCoordinateKind,
+  LocationCoordinatePoint,
+} from "#shared/types/locations";
+import { locationCoordinateKindOptions } from "#shared/types/locations";
+import type { GeocodeResult } from "#shared/types/geo";
 
 type UsersResponse = {
   users: AuthUser[];
@@ -35,9 +46,15 @@ const authMessage = ref("");
 const usersError = ref("");
 const users = ref<AuthUser[]>([]);
 const contributions = ref<LocationContribution[]>([]);
+const contributionEdits = reactive<Record<string, EditableLocationFields>>({});
+const contributionActivePointIds = reactive<Record<string, string>>({});
+const contributionEditModes = reactive<Record<string, boolean>>({});
+const contributionPlaceNames = reactive<Record<string, string>>({});
 const contributionsError = ref("");
 const isLoadingContributions = ref(false);
 const reviewingContribution = ref("");
+const reviewingContributionAction = ref<"approve" | "reject" | "save" | "">("");
+const generatingNameFor = ref("");
 const savingRoleFor = ref("");
 const profileError = ref("");
 const profileMessage = ref("");
@@ -46,6 +63,7 @@ const imageError = ref("");
 const profileForm = reactive({
   name: "",
   image: null as string | null,
+  navigationAppPreference: "device" as NavigationAppPreference,
 });
 
 const authForm = reactive({
@@ -53,6 +71,7 @@ const authForm = reactive({
   email: "",
   password: "",
   image: null as string | null,
+  navigationAppPreference: "device" as NavigationAppPreference,
 });
 
 const roleOptions = [
@@ -61,11 +80,41 @@ const roleOptions = [
   { label: "Administrator", value: "admin" },
 ] satisfies { label: string; value: UserRole }[];
 
+const navigationAppOptions = [
+  { label: "Device default", value: "device" },
+  { label: "Apple Maps", value: "apple" },
+  { label: "Google Maps", value: "google" },
+  { label: "Waze", value: "waze" },
+] satisfies { label: string; value: NavigationAppPreference }[];
+
 const roleLabels: Record<UserRole, string> = {
   admin: "Administrator",
   maintainer: "Maintainer",
   user: "User",
 };
+
+const typeOptions = [
+  "park",
+  "nature reserve",
+  "dog playground",
+  "beach",
+] as const;
+const characteristicOptions = [
+  "off-leash area",
+  "fenced",
+  "food and drink",
+  "horse trails",
+  "mountain bike trails",
+  "swimming water",
+  "walking trails",
+  "wheelchair accessible",
+] as const;
+const pointKindOptions = locationCoordinateKindOptions.filter(
+  (option) => option.value !== "general",
+) as {
+  label: string;
+  value: Exclude<LocationCoordinateKind, "general">;
+}[];
 
 function getErrorMessage(error: unknown) {
   if (
@@ -105,6 +154,340 @@ function getInitials(name: string | undefined, email: string | undefined) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+}
+
+function cloneLocationFields(
+  payload: EditableLocationFields,
+): EditableLocationFields {
+  return {
+    name: payload.name ?? "",
+    city: payload.city ?? "",
+    province: payload.province ?? "",
+    country: payload.country ?? "Netherlands",
+    latitude: payload.latitude ?? null,
+    longitude: payload.longitude ?? null,
+    type: [...(payload.type ?? [])],
+    characteristics: [...(payload.characteristics ?? [])],
+    description: payload.description ?? "",
+    relatedUrls: (payload.relatedUrls ?? []).map((url) => ({ ...url })),
+    photos: (payload.photos ?? []).map((photo) => ({ ...photo })),
+    coordinatePoints: (payload.coordinatePoints ?? []).map((point) => ({
+      ...point,
+    })),
+  };
+}
+
+function syncContributionEdits() {
+  const activeIds = new Set(contributions.value.map((item) => item.id));
+
+  for (const contribution of contributions.value) {
+    contributionEdits[contribution.id] ??= cloneLocationFields(
+      contribution.payload,
+    );
+    contributionActivePointIds[contribution.id] ??= "general";
+    contributionEditModes[contribution.id] ??= false;
+    contributionPlaceNames[contribution.id] ??= "";
+  }
+
+  for (const id of Object.keys(contributionEdits)) {
+    if (!activeIds.has(id)) {
+      delete contributionEdits[id];
+    }
+  }
+
+  for (const id of Object.keys(contributionActivePointIds)) {
+    if (!activeIds.has(id)) {
+      delete contributionActivePointIds[id];
+    }
+  }
+
+  for (const id of Object.keys(contributionEditModes)) {
+    if (!activeIds.has(id)) {
+      delete contributionEditModes[id];
+    }
+  }
+
+  for (const id of Object.keys(contributionPlaceNames)) {
+    if (!activeIds.has(id)) {
+      delete contributionPlaceNames[id];
+    }
+  }
+}
+
+function getContributionEdit(contribution: LocationContribution) {
+  contributionEdits[contribution.id] ??= cloneLocationFields(
+    contribution.payload,
+  );
+
+  return contributionEdits[contribution.id];
+}
+
+function getContributionMapMarkers(payload: EditableLocationFields) {
+  return [
+    {
+      id: "general",
+      kind: "general" as const,
+      label: "General location",
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+    },
+    ...(payload.coordinatePoints ?? []),
+  ];
+}
+
+function getContributionActivePointId(contribution: LocationContribution) {
+  contributionActivePointIds[contribution.id] ??= "general";
+
+  return contributionActivePointIds[contribution.id];
+}
+
+function setContributionActivePointId(
+  contribution: LocationContribution,
+  id: string | null | undefined,
+) {
+  contributionActivePointIds[contribution.id] = id ?? "general";
+}
+
+function isEditingContribution(contribution: LocationContribution) {
+  return contributionEditModes[contribution.id] === true;
+}
+
+function editContribution(contribution: LocationContribution) {
+  contributionEdits[contribution.id] = cloneLocationFields(
+    contribution.payload,
+  );
+  contributionActivePointIds[contribution.id] = "general";
+  contributionEditModes[contribution.id] = true;
+  contributionPlaceNames[contribution.id] = "";
+}
+
+function cancelContributionEdit(contribution: LocationContribution) {
+  contributionEdits[contribution.id] = cloneLocationFields(
+    contribution.payload,
+  );
+  contributionActivePointIds[contribution.id] = "general";
+  contributionEditModes[contribution.id] = false;
+  contributionPlaceNames[contribution.id] = "";
+}
+
+function getContributionActivePoint(contribution: LocationContribution) {
+  const activePointId = getContributionActivePointId(contribution);
+
+  if (activePointId === "general") return null;
+
+  return (
+    getContributionEdit(contribution).coordinatePoints?.find(
+      (point) => point.id === activePointId,
+    ) ?? null
+  );
+}
+
+function getContributionActiveLatitude(contribution: LocationContribution) {
+  const activePoint = getContributionActivePoint(contribution);
+
+  return activePoint?.latitude ?? getContributionEdit(contribution).latitude;
+}
+
+function getContributionActiveLongitude(contribution: LocationContribution) {
+  const activePoint = getContributionActivePoint(contribution);
+
+  return activePoint?.longitude ?? getContributionEdit(contribution).longitude;
+}
+
+function setContributionActiveLatitude(
+  contribution: LocationContribution,
+  value: number | null,
+) {
+  const activePoint = getContributionActivePoint(contribution);
+
+  if (activePoint) {
+    if (value !== null) activePoint.latitude = value;
+    return;
+  }
+
+  getContributionEdit(contribution).latitude = value;
+}
+
+function setContributionActiveLongitude(
+  contribution: LocationContribution,
+  value: number | null,
+) {
+  const activePoint = getContributionActivePoint(contribution);
+
+  if (activePoint) {
+    if (value !== null) activePoint.longitude = value;
+    return;
+  }
+
+  getContributionEdit(contribution).longitude = value;
+}
+
+function toggleLocationValue(
+  values: string[],
+  value: string,
+  checked: boolean,
+) {
+  if (checked && !values.includes(value)) values.push(value);
+  if (!checked) values.splice(values.indexOf(value), 1);
+}
+
+function createPointId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+}
+
+function getPointLabel(kind: LocationCoordinateKind) {
+  return (
+    pointKindOptions.find((option) => option.value === kind)?.label ?? "Point"
+  );
+}
+
+function updatePointKind(
+  point: LocationCoordinatePoint,
+  kind: Exclude<LocationCoordinateKind, "general">,
+) {
+  const currentDefaultLabel = getPointLabel(point.kind);
+  const nextDefaultLabel = getPointLabel(kind);
+  const shouldUpdateLabel =
+    !point.label.trim() || point.label === currentDefaultLabel;
+
+  point.kind = kind;
+
+  if (shouldUpdateLabel) {
+    point.label = nextDefaultLabel;
+  }
+}
+
+function addContributionPoint(
+  contribution: LocationContribution,
+  form: EditableLocationFields,
+  kind: Exclude<LocationCoordinateKind, "general">,
+) {
+  const point: LocationCoordinatePoint = {
+    id: createPointId(),
+    kind,
+    label: getPointLabel(kind),
+    latitude:
+      Number.isFinite(form.latitude) && form.latitude !== null
+        ? form.latitude
+        : 52.1326,
+    longitude:
+      Number.isFinite(form.longitude) && form.longitude !== null
+        ? form.longitude
+        : 5.2913,
+  };
+
+  form.coordinatePoints = [...(form.coordinatePoints ?? []), point];
+  setContributionActivePointId(contribution, point.id);
+}
+
+function removeContributionPoint(
+  contribution: LocationContribution,
+  form: EditableLocationFields,
+  id: string | null | undefined,
+) {
+  form.coordinatePoints = (form.coordinatePoints ?? []).filter(
+    (point) => point.id !== id,
+  );
+
+  if (getContributionActivePointId(contribution) === id) {
+    setContributionActivePointId(contribution, "general");
+  }
+}
+
+function getContributionPayload(
+  contribution: LocationContribution,
+): EditableLocationFields {
+  return cloneLocationFields(getContributionEdit(contribution));
+}
+
+function getPlaceNameFromSearchResult(result: GeocodeResult) {
+  return (
+    result.fullLabel
+      ?.split(",")
+      .map((part) => part.trim())
+      .find(Boolean) ||
+    result.label
+      .split(",")
+      .map((part) => part.trim())
+      .find(Boolean) ||
+    ""
+  );
+}
+
+function handleContributionPlaceSelected(
+  contribution: LocationContribution,
+  result: GeocodeResult,
+) {
+  if (getContributionActivePointId(contribution) !== "general") return;
+
+  const form = getContributionEdit(contribution);
+  const placeName = getPlaceNameFromSearchResult(result);
+  contributionPlaceNames[contribution.id] = placeName;
+
+  if (!form.name.trim() && placeName) {
+    form.name = placeName;
+  }
+
+  form.city = result.city ?? form.city;
+  form.province = result.province ?? form.province;
+  form.country = result.country ?? form.country;
+}
+
+async function generateContributionName(contribution: LocationContribution) {
+  const form = getContributionEdit(contribution);
+
+  if (!Number.isFinite(form.latitude) || !Number.isFinite(form.longitude)) {
+    contributionsError.value = "Choose a general location first.";
+    return;
+  }
+
+  contributionsError.value = "";
+
+  if (contributionPlaceNames[contribution.id]) {
+    form.name = contributionPlaceNames[contribution.id];
+    return;
+  }
+
+  generatingNameFor.value = contribution.id;
+
+  try {
+    const response = await $fetch<{ name?: string | null }>(
+      "/api/geo/reverse",
+      {
+        query: {
+          lat: form.latitude,
+          lng: form.longitude,
+        },
+      },
+    );
+
+    if (response.name) {
+      form.name = response.name;
+    } else {
+      contributionsError.value =
+        "No park, area, or street name found for that point.";
+    }
+  } catch (error) {
+    contributionsError.value = getErrorMessage(error);
+  } finally {
+    generatingNameFor.value = "";
+  }
+}
+
+function formatContributionDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatPhotoDate(value: string | null | undefined) {
+  if (!value) return "";
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 async function fileToProfileImage(file: File) {
@@ -210,6 +593,7 @@ async function saveProfile() {
     await updateProfile({
       name: profileForm.name.trim() || user.value?.name,
       image: profileForm.image,
+      navigationAppPreference: profileForm.navigationAppPreference,
     });
     profileMessage.value = "Profile updated.";
   } catch (error) {
@@ -262,6 +646,7 @@ async function loadContributions() {
   try {
     const response = await $fetch<ContributionsResponse>("/api/contributions");
     contributions.value = response.contributions;
+    syncContributionEdits();
   } catch (error) {
     contributionsError.value = getErrorMessage(error);
   } finally {
@@ -271,23 +656,58 @@ async function loadContributions() {
 
 async function reviewContribution(
   contribution: LocationContribution,
-  action: "approve" | "reject",
+  action: "approve" | "reject" | "save",
 ) {
+  if (reviewingContribution.value) return;
+
   contributionsError.value = "";
   reviewingContribution.value = contribution.id;
+  reviewingContributionAction.value = action;
 
   try {
-    await $fetch(`/api/contributions/${contribution.id}`, {
-      method: "PATCH",
-      body: { action },
-    });
+    const response = await $fetch<{ contribution: LocationContribution }>(
+      `/api/contributions/${contribution.id}`,
+      {
+        method: "PATCH",
+        body: {
+          action,
+          ...(action === "approve" || action === "save"
+            ? { payload: getContributionPayload(contribution) }
+            : {}),
+        },
+      },
+    );
+
+    if (action === "save") {
+      const index = contributions.value.findIndex(
+        (item) => item.id === response.contribution.id,
+      );
+
+      if (index >= 0) {
+        contributions.value[index] = response.contribution;
+      }
+
+      contributionEdits[contribution.id] = cloneLocationFields(
+        response.contribution.payload,
+      );
+      contributionActivePointIds[contribution.id] = "general";
+      contributionEditModes[contribution.id] = false;
+      contributionPlaceNames[contribution.id] = "";
+      return;
+    }
+
     contributions.value = contributions.value.filter(
       (item) => item.id !== contribution.id,
     );
+    delete contributionEdits[contribution.id];
+    delete contributionActivePointIds[contribution.id];
+    delete contributionEditModes[contribution.id];
+    delete contributionPlaceNames[contribution.id];
   } catch (error) {
     contributionsError.value = getErrorMessage(error);
   } finally {
     reviewingContribution.value = "";
+    reviewingContributionAction.value = "";
   }
 }
 
@@ -336,6 +756,8 @@ watch(
   (currentUser) => {
     profileForm.name = currentUser?.name ?? "";
     profileForm.image = currentUser?.image ?? null;
+    profileForm.navigationAppPreference =
+      currentUser?.navigationAppPreference ?? "device";
     selectedProfileImage.value = currentUser?.image ?? null;
   },
   { immediate: true },
@@ -457,6 +879,14 @@ onMounted(() => {
               />
             </div>
           </div>
+        </UFormField>
+
+        <UFormField v-if="mode === 'register'" label="Navigation app">
+          <USelect
+            v-model="authForm.navigationAppPreference"
+            :items="navigationAppOptions"
+            icon="i-lucide-navigation"
+          />
         </UFormField>
 
         <UFormField label="Email">
@@ -658,6 +1088,14 @@ onMounted(() => {
               />
             </div>
           </UFormField>
+
+          <UFormField label="Navigation app">
+            <USelect
+              v-model="profileForm.navigationAppPreference"
+              :items="navigationAppOptions"
+              icon="i-lucide-navigation"
+            />
+          </UFormField>
         </div>
 
         <div class="flex items-end">
@@ -754,84 +1192,464 @@ onMounted(() => {
                 Submitted by {{ contribution.submitter.name }} for
                 {{ contribution.locationName || contribution.payload.city }}
               </p>
+              <p class="mt-1 text-xs text-slate-500">
+                {{ formatContributionDate(contribution.createdAt) }}
+              </p>
             </div>
 
-            <div class="flex gap-2">
+            <div
+              v-if="isEditingContribution(contribution)"
+              class="flex flex-wrap gap-2"
+            >
               <UButton
-                :loading="reviewingContribution === contribution.id"
+                :loading="
+                  reviewingContribution === contribution.id &&
+                  reviewingContributionAction === 'approve'
+                "
+                color="success"
+                icon="i-lucide-check"
+                label="Save and approve"
+                type="button"
+                variant="subtle"
+                @click="reviewContribution(contribution, 'approve')"
+              />
+              <UButton
+                :loading="
+                  reviewingContribution === contribution.id &&
+                  reviewingContributionAction === 'save'
+                "
+                color="neutral"
+                icon="i-lucide-save"
+                label="Save"
+                type="button"
+                variant="subtle"
+                @click="reviewContribution(contribution, 'save')"
+              />
+              <UButton
+                :disabled="reviewingContribution === contribution.id"
+                color="neutral"
+                icon="i-lucide-x"
+                label="Cancel"
+                type="button"
+                variant="ghost"
+                @click="cancelContributionEdit(contribution)"
+              />
+            </div>
+
+            <div v-else class="flex flex-wrap gap-2">
+              <UButton
+                :loading="
+                  reviewingContribution === contribution.id &&
+                  reviewingContributionAction === 'approve'
+                "
                 color="success"
                 icon="i-lucide-check"
                 label="Approve"
+                type="button"
                 variant="subtle"
                 @click="reviewContribution(contribution, 'approve')"
+              />
+              <UButton
+                :disabled="reviewingContribution === contribution.id"
+                color="neutral"
+                icon="i-lucide-pencil"
+                label="Edit"
+                type="button"
+                variant="subtle"
+                @click="editContribution(contribution)"
               />
               <UButton
                 :disabled="reviewingContribution === contribution.id"
                 color="error"
                 icon="i-lucide-x"
                 label="Reject"
+                type="button"
                 variant="subtle"
                 @click="reviewContribution(contribution, 'reject')"
               />
             </div>
           </div>
 
-          <dl class="grid gap-3 text-sm sm:grid-cols-2">
+          <div
+            v-if="!isEditingContribution(contribution)"
+            class="grid gap-3 text-sm sm:grid-cols-2"
+          >
             <div>
-              <dt class="font-semibold text-slate-950">Place</dt>
-              <dd class="text-slate-600">
+              <p class="font-semibold text-slate-950">Place</p>
+              <p class="text-slate-600">
                 {{ contribution.payload.city }},
                 {{ contribution.payload.country || "Netherlands" }}
-              </dd>
+              </p>
             </div>
             <div>
-              <dt class="font-semibold text-slate-950">Coordinates</dt>
-              <dd class="text-slate-600">
-                {{ contribution.payload.latitude || "No latitude" }},
-                {{ contribution.payload.longitude || "no longitude" }}
-              </dd>
-            </div>
-            <div>
-              <dt class="font-semibold text-slate-950">Type</dt>
-              <dd class="text-slate-600">
+              <p class="font-semibold text-slate-950">Type</p>
+              <p class="text-slate-600">
                 {{ contribution.payload.type.join(", ") || "No type" }}
-              </dd>
+              </p>
             </div>
             <div>
-              <dt class="font-semibold text-slate-950">Characteristics</dt>
-              <dd class="text-slate-600">
+              <p class="font-semibold text-slate-950">Characteristics</p>
+              <p class="text-slate-600">
                 {{
                   contribution.payload.characteristics.join(", ") ||
                   "No characteristics"
                 }}
-              </dd>
+              </p>
             </div>
-          </dl>
-
-          <div
-            v-if="contribution.payload.coordinatePoints?.length"
-            class="flex flex-col gap-2 text-sm"
-          >
-            <p class="font-semibold text-slate-950">Additional points</p>
-            <div class="flex flex-wrap gap-2">
-              <UBadge
-                v-for="point in contribution.payload.coordinatePoints"
-                :key="point.id ?? `${point.label}-${point.latitude}`"
-                color="neutral"
-                variant="soft"
-              >
-                {{ point.label }}: {{ point.latitude }},
-                {{ point.longitude }}
-              </UBadge>
+            <div class="sm:col-span-2">
+              <p class="mb-2 font-semibold text-slate-950">Location points</p>
+              <AppLocationPointPicker
+                :latitude="contribution.payload.latitude"
+                :longitude="contribution.payload.longitude"
+                :markers="getContributionMapMarkers(contribution.payload)"
+                readonly
+              />
             </div>
+            <p
+              v-if="contribution.payload.description"
+              class="leading-6 whitespace-pre-line text-slate-700 sm:col-span-2"
+            >
+              {{ contribution.payload.description }}
+            </p>
           </div>
 
-          <p
-            v-if="contribution.payload.description"
-            class="text-sm leading-6 whitespace-pre-line text-slate-700"
-          >
-            {{ contribution.payload.description }}
-          </p>
+          <div v-else class="contents">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <UFormField label="Name" required>
+                <div class="flex gap-2">
+                  <UInput
+                    v-model="getContributionEdit(contribution).name"
+                    class="min-w-0 flex-1"
+                    icon="i-lucide-map-pin"
+                    required
+                  />
+                  <UButton
+                    :loading="generatingNameFor === contribution.id"
+                    color="neutral"
+                    icon="i-lucide-sparkles"
+                    label="Generate"
+                    type="button"
+                    variant="subtle"
+                    @click="generateContributionName(contribution)"
+                  />
+                </div>
+              </UFormField>
+              <UFormField label="City" required>
+                <UInput
+                  v-model="getContributionEdit(contribution).city"
+                  icon="i-lucide-building-2"
+                  required
+                />
+              </UFormField>
+              <UFormField label="Province">
+                <UInput
+                  v-model="getContributionEdit(contribution).province"
+                  icon="i-lucide-map"
+                />
+              </UFormField>
+              <UFormField label="Country">
+                <UInput
+                  v-model="getContributionEdit(contribution).country"
+                  icon="i-lucide-globe-2"
+                />
+              </UFormField>
+            </div>
+
+            <UFormField label="Location points" required>
+              <div class="flex flex-col gap-3">
+                <AppLocationPointPicker
+                  :latitude="getContributionActiveLatitude(contribution)"
+                  :longitude="getContributionActiveLongitude(contribution)"
+                  :markers="[
+                    {
+                      id: 'general',
+                      kind: 'general',
+                      label: 'General location',
+                      latitude: getContributionEdit(contribution).latitude,
+                      longitude: getContributionEdit(contribution).longitude,
+                    },
+                    ...(getContributionEdit(contribution).coordinatePoints ??
+                      []),
+                  ]"
+                  @selected="
+                    handleContributionPlaceSelected(contribution, $event)
+                  "
+                  @update:latitude="
+                    setContributionActiveLatitude(contribution, $event)
+                  "
+                  @update:longitude="
+                    setContributionActiveLongitude(contribution, $event)
+                  "
+                />
+                <UAlert
+                  color="neutral"
+                  description="Adjust the general point on the map before approving."
+                  icon="i-lucide-map-pin"
+                  title="Review map placement"
+                  variant="soft"
+                />
+                <div class="flex flex-wrap gap-2">
+                  <UButton
+                    color="neutral"
+                    icon="i-lucide-car"
+                    label="Add parking"
+                    type="button"
+                    variant="outline"
+                    @click="
+                      addContributionPoint(
+                        contribution,
+                        getContributionEdit(contribution),
+                        'parking',
+                      )
+                    "
+                  />
+                  <UButton
+                    color="neutral"
+                    icon="i-lucide-door-open"
+                    label="Add entrance"
+                    type="button"
+                    variant="outline"
+                    @click="
+                      addContributionPoint(
+                        contribution,
+                        getContributionEdit(contribution),
+                        'entrance',
+                      )
+                    "
+                  />
+                  <UButton
+                    color="neutral"
+                    icon="i-lucide-map-pinned"
+                    label="Add POI"
+                    type="button"
+                    variant="outline"
+                    @click="
+                      addContributionPoint(
+                        contribution,
+                        getContributionEdit(contribution),
+                        'poi',
+                      )
+                    "
+                  />
+                  <UButton
+                    color="neutral"
+                    icon="i-lucide-plus"
+                    label="Add other point"
+                    type="button"
+                    variant="outline"
+                    @click="
+                      addContributionPoint(
+                        contribution,
+                        getContributionEdit(contribution),
+                        'other',
+                      )
+                    "
+                  />
+                </div>
+                <div
+                  :class="
+                    getContributionActivePointId(contribution) === 'general'
+                      ? 'border-brand-500 bg-brand-50'
+                      : 'border-slate-200'
+                  "
+                  class="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_auto]"
+                >
+                  <div class="flex min-w-0 items-center gap-3">
+                    <div
+                      class="bg-brand-100 text-brand-700 flex size-10 shrink-0 items-center justify-center rounded-full"
+                    >
+                      <UIcon name="i-lucide-map-pin" />
+                    </div>
+                    <div class="min-w-0">
+                      <p class="font-semibold text-slate-950">
+                        General location
+                      </p>
+                      <p class="text-sm text-slate-600">
+                        Required map point for search and discovery.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex items-center">
+                    <UButton
+                      :variant="
+                        getContributionActivePointId(contribution) === 'general'
+                          ? 'solid'
+                          : 'subtle'
+                      "
+                      color="neutral"
+                      icon="i-lucide-crosshair"
+                      label="Select"
+                      type="button"
+                      @click="
+                        setContributionActivePointId(contribution, 'general')
+                      "
+                    />
+                  </div>
+                </div>
+                <div
+                  v-for="point in getContributionEdit(contribution)
+                    .coordinatePoints"
+                  :key="point.id ?? `${point.label}-${point.latitude}`"
+                  :class="
+                    getContributionActivePointId(contribution) === point.id
+                      ? 'border-brand-500 bg-brand-50'
+                      : 'border-slate-200'
+                  "
+                  class="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_11rem_auto]"
+                >
+                  <UFormField label="Label">
+                    <UInput v-model="point.label" />
+                  </UFormField>
+                  <UFormField label="Type">
+                    <select
+                      :value="point.kind"
+                      class="focus:border-brand-500 h-9 rounded-md border border-slate-200 px-3 text-sm outline-none"
+                      @change="
+                        updatePointKind(
+                          point,
+                          ($event.target as HTMLSelectElement).value as Exclude<
+                            LocationCoordinateKind,
+                            'general'
+                          >,
+                        )
+                      "
+                    >
+                      <option
+                        v-for="option in pointKindOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </UFormField>
+                  <div class="flex items-end gap-2">
+                    <UButton
+                      :variant="
+                        getContributionActivePointId(contribution) === point.id
+                          ? 'solid'
+                          : 'subtle'
+                      "
+                      color="neutral"
+                      icon="i-lucide-crosshair"
+                      label="Select"
+                      type="button"
+                      @click="
+                        setContributionActivePointId(contribution, point.id)
+                      "
+                    />
+                    <UButton
+                      color="error"
+                      icon="i-lucide-trash-2"
+                      type="button"
+                      variant="ghost"
+                      @click="
+                        removeContributionPoint(
+                          contribution,
+                          getContributionEdit(contribution),
+                          point.id,
+                        )
+                      "
+                    />
+                  </div>
+                </div>
+              </div>
+            </UFormField>
+
+            <UFormField label="Description">
+              <textarea
+                v-model="getContributionEdit(contribution).description"
+                class="focus:border-brand-500 min-h-32 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none"
+              />
+            </UFormField>
+
+            <UFormField
+              v-if="getContributionEdit(contribution).photos?.length"
+              label="Photos"
+            >
+              <div class="grid gap-3 sm:grid-cols-3">
+                <div
+                  v-for="(photo, index) in getContributionEdit(contribution)
+                    .photos"
+                  :key="`${photo.url.slice(0, 40)}-${index}`"
+                  class="relative overflow-hidden rounded-md border border-slate-200"
+                >
+                  <img
+                    :alt="photo.alt || 'Submitted location photo'"
+                    :src="photo.url"
+                    class="aspect-[4/3] w-full object-cover"
+                  />
+                  <div
+                    class="border-t border-slate-200 bg-white p-2 text-xs text-slate-600"
+                  >
+                    <p v-if="photo.capturedAt">
+                      Taken {{ formatPhotoDate(photo.capturedAt) }}
+                    </p>
+                    <p v-else>Photo date unavailable</p>
+                    <p v-if="photo.latitude && photo.longitude">
+                      Photo includes location data
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </UFormField>
+
+            <div class="grid gap-5 sm:grid-cols-2">
+              <UFormField label="Type">
+                <div class="grid gap-2">
+                  <label
+                    v-for="option in typeOptions"
+                    :key="option"
+                    class="flex items-center gap-2 text-sm text-slate-700"
+                  >
+                    <input
+                      :checked="
+                        getContributionEdit(contribution).type.includes(option)
+                      "
+                      class="size-4"
+                      type="checkbox"
+                      @change="
+                        toggleLocationValue(
+                          getContributionEdit(contribution).type,
+                          option,
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    />
+                    {{ option }}
+                  </label>
+                </div>
+              </UFormField>
+
+              <UFormField label="Characteristics">
+                <div class="grid gap-2">
+                  <label
+                    v-for="option in characteristicOptions"
+                    :key="option"
+                    class="flex items-center gap-2 text-sm text-slate-700"
+                  >
+                    <input
+                      :checked="
+                        getContributionEdit(
+                          contribution,
+                        ).characteristics.includes(option)
+                      "
+                      class="size-4"
+                      type="checkbox"
+                      @change="
+                        toggleLocationValue(
+                          getContributionEdit(contribution).characteristics,
+                          option,
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    />
+                    {{ option }}
+                  </label>
+                </div>
+              </UFormField>
+            </div>
+          </div>
         </article>
       </div>
     </section>

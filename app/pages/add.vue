@@ -5,6 +5,7 @@ import type {
   LocationCoordinatePoint,
   LocationPhoto,
 } from "#shared/types/locations";
+import { locationCoordinateKindOptions } from "#shared/types/locations";
 
 const { isSignedIn } = useAuth();
 
@@ -24,12 +25,9 @@ const characteristicOptions = [
   "walking trails",
   "wheelchair accessible",
 ] as const;
-const pointKindOptions = [
-  { label: "Parking location", value: "parking" },
-  { label: "POI", value: "poi" },
-  { label: "Entrance", value: "entrance" },
-  { label: "Other", value: "other" },
-] satisfies {
+const pointKindOptions = locationCoordinateKindOptions.filter(
+  (option) => option.value !== "general",
+) as {
   label: string;
   value: Exclude<LocationCoordinateKind, "general">;
 }[];
@@ -393,6 +391,22 @@ function getPointLabel(kind: LocationCoordinateKind) {
   );
 }
 
+function updatePointKind(
+  point: LocationCoordinatePoint,
+  kind: Exclude<LocationCoordinateKind, "general">,
+) {
+  const currentDefaultLabel = getPointLabel(point.kind);
+  const nextDefaultLabel = getPointLabel(kind);
+  const shouldUpdateLabel =
+    !point.label.trim() || point.label === currentDefaultLabel;
+
+  point.kind = kind;
+
+  if (shouldUpdateLabel) {
+    point.label = nextDefaultLabel;
+  }
+}
+
 function createPointId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -605,6 +619,14 @@ onBeforeUnmount(() => {
             />
             <UButton
               color="neutral"
+              icon="i-lucide-door-open"
+              label="Add entrance"
+              type="button"
+              variant="outline"
+              @click="addCoordinatePoint('entrance')"
+            />
+            <UButton
+              color="neutral"
               icon="i-lucide-map-pinned"
               label="Add POI"
               type="button"
@@ -667,8 +689,17 @@ onBeforeUnmount(() => {
             </UFormField>
             <UFormField label="Type">
               <select
-                v-model="point.kind"
+                :value="point.kind"
                 class="focus:border-brand-500 h-9 rounded-md border border-slate-200 px-3 text-sm outline-none"
+                @change="
+                  updatePointKind(
+                    point,
+                    ($event.target as HTMLSelectElement).value as Exclude<
+                      LocationCoordinateKind,
+                      'general'
+                    >,
+                  )
+                "
               >
                 <option
                   v-for="option in pointKindOptions"
