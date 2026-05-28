@@ -6,6 +6,7 @@ import type {
   LocationPhoto,
 } from "#shared/types/locations";
 import { locationCoordinateKindOptions } from "#shared/types/locations";
+import { z } from "zod";
 
 const { isSignedIn } = useAuth();
 
@@ -31,6 +32,86 @@ const pointKindOptions = locationCoordinateKindOptions.filter(
   label: string;
   value: Exclude<LocationCoordinateKind, "general">;
 }[];
+const pointKindValues = pointKindOptions.map((option) => option.value);
+const typeItems = typeOptions.map((option) => ({
+  label: option,
+  value: option,
+}));
+const characteristicItems = characteristicOptions.map((option) => ({
+  label: option,
+  value: option,
+}));
+
+function isPointKind(
+  value: unknown,
+): value is Exclude<LocationCoordinateKind, "general"> {
+  return (
+    typeof value === "string" &&
+    pointKindValues.includes(
+      value as Exclude<LocationCoordinateKind, "general">,
+    )
+  );
+}
+
+const locationPhotoSchema = z
+  .object({
+    url: z.string().min(1),
+    alt: z.string().nullable().optional(),
+    width: z.number().nullable().optional(),
+    height: z.number().nullable().optional(),
+    capturedAt: z.string().nullable().optional(),
+    uploadedAt: z.string().nullable().optional(),
+    latitude: z.number().nullable().optional(),
+    longitude: z.number().nullable().optional(),
+    sourceName: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const coordinatePointSchema = z.object({
+  id: z.string().nullable().optional(),
+  kind: z.custom<Exclude<LocationCoordinateKind, "general">>(isPointKind, {
+    message: "Choose a point type.",
+  }),
+  label: z.string().trim().min(1, "Enter a point label."),
+  latitude: z.number().finite("Set this point on the map."),
+  longitude: z.number().finite("Set this point on the map."),
+  sourcePhotoId: z.string().nullable().optional(),
+});
+
+const addLocationSchema = z
+  .object({
+    name: z.string().trim().min(1, "Enter a location name."),
+    city: z.string().trim().min(1, "Enter a city."),
+    province: z.string().nullable().optional(),
+    country: z.string().trim().min(1, "Enter a country."),
+    latitude: z.number().finite().nullable(),
+    longitude: z.number().finite().nullable(),
+    type: z.array(z.enum(typeOptions)).min(1, "Choose at least one type."),
+    characteristics: z.array(z.enum(characteristicOptions)),
+    coordinatePoints: z.array(coordinatePointSchema),
+    description: z.string().optional(),
+    relatedUrls: z
+      .array(
+        z.object({
+          label: z.string(),
+          url: z.string(),
+        }),
+      )
+      .optional(),
+    photos: z
+      .array(locationPhotoSchema)
+      .max(4, "Choose no more than 4 photos.")
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (!Number.isFinite(value.latitude) || !Number.isFinite(value.longitude)) {
+      context.addIssue({
+        code: "custom",
+        path: ["latitude"],
+        message: "Set the general location on the map.",
+      });
+    }
+  });
 
 const isSubmitting = ref(false);
 const isReverseGeocoding = ref(false);
@@ -39,6 +120,7 @@ const error = ref("");
 const photoError = ref("");
 const geocodeError = ref("");
 const activePointId = ref("general");
+const photoFiles = ref<File[]>([]);
 let reverseGeocodeTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 type PhotoMetadata = {
@@ -105,11 +187,6 @@ const activeLongitude = computed({
     form.longitude = value;
   },
 });
-
-function toggleValue(values: string[], value: string, checked: boolean) {
-  if (checked && !values.includes(value)) values.push(value);
-  if (!checked) values.splice(values.indexOf(value), 1);
-}
 
 function getErrorMessage(errorValue: unknown) {
   if (
@@ -345,12 +422,11 @@ function addPoiFromPhoto(photo: LocationPhoto) {
   activePointId.value = point.id ?? "general";
 }
 
-async function handlePhotoChange(event: Event) {
+async function handlePhotoChange() {
   photoError.value = "";
 
-  const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []).slice(0, 4);
-  input.value = "";
+  const files = photoFiles.value.slice(0, 4);
+  photoFiles.value = [];
 
   if (!files.length) return;
 
@@ -489,6 +565,7 @@ function resetForm() {
   form.description = "";
   form.relatedUrls = [];
   form.photos = [];
+  photoFiles.value = [];
 }
 
 async function submitLocation() {
@@ -567,27 +644,29 @@ onBeforeUnmount(() => {
       </template>
     </UAlert>
 
-    <form
+    <UForm
       v-else
+      :schema="addLocationSchema"
+      :state="form"
       class="flex flex-col gap-5 rounded-md border border-slate-200 bg-white p-5 shadow-sm"
-      @submit.prevent="submitLocation"
+      @submit="submitLocation"
     >
       <div class="grid gap-4 sm:grid-cols-2">
-        <UFormField label="Name" required>
+        <UFormField label="Name" name="name" required>
           <UInput v-model="form.name" icon="i-lucide-map-pin" required />
         </UFormField>
-        <UFormField label="City" required>
+        <UFormField label="City" name="city" required>
           <UInput v-model="form.city" icon="i-lucide-building-2" required />
         </UFormField>
-        <UFormField label="Province">
+        <UFormField label="Province" name="province">
           <UInput v-model="form.province" icon="i-lucide-map" />
         </UFormField>
-        <UFormField label="Country">
+        <UFormField label="Country" name="country">
           <UInput v-model="form.country" icon="i-lucide-globe-2" />
         </UFormField>
       </div>
 
-      <UFormField label="Location points" required>
+      <UFormField label="Location points" name="latitude" required>
         <div class="flex flex-col gap-3">
           <AppLocationPointPicker
             v-model:latitude="activeLatitude"
@@ -675,7 +754,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div
-            v-for="point in form.coordinatePoints"
+            v-for="(point, pointIndex) in form.coordinatePoints"
             :key="point.id ?? point.label"
             :class="
               activePointId === point.id
@@ -684,31 +763,27 @@ onBeforeUnmount(() => {
             "
             class="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_11rem_auto]"
           >
-            <UFormField label="Label">
+            <UFormField
+              label="Label"
+              :name="`coordinatePoints.${pointIndex}.label`"
+            >
               <UInput v-model="point.label" />
             </UFormField>
-            <UFormField label="Type">
-              <select
-                :value="point.kind"
-                class="focus:border-brand-500 h-9 rounded-md border border-slate-200 px-3 text-sm outline-none"
-                @change="
+            <UFormField
+              label="Type"
+              :name="`coordinatePoints.${pointIndex}.kind`"
+            >
+              <USelect
+                :items="pointKindOptions"
+                :model-value="point.kind"
+                class="w-full"
+                @update:model-value="
                   updatePointKind(
                     point,
-                    ($event.target as HTMLSelectElement).value as Exclude<
-                      LocationCoordinateKind,
-                      'general'
-                    >,
+                    $event as Exclude<LocationCoordinateKind, 'general'>,
                   )
                 "
-              >
-                <option
-                  v-for="option in pointKindOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
+              />
             </UFormField>
             <div class="flex items-end gap-2">
               <UButton
@@ -734,31 +809,37 @@ onBeforeUnmount(() => {
         </div>
       </UFormField>
 
-      <UFormField label="Description">
-        <textarea
+      <UFormField label="Description" name="description">
+        <UTextarea
           v-model="form.description"
-          class="focus:border-brand-500 min-h-32 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none"
+          autoresize
+          class="w-full"
+          :rows="5"
         />
       </UFormField>
 
-      <UFormField label="Photos">
+      <UFormField label="Photos" name="photos">
         <div class="flex flex-col gap-3">
           <div class="flex flex-wrap items-center gap-2">
-            <UButton
-              as="label"
-              color="neutral"
-              icon="i-lucide-image-plus"
-              label="Select photos"
-              variant="subtle"
+            <UFileUpload
+              v-model="photoFiles"
+              v-slot="{ open }"
+              accept="image/jpeg,image/png,image/webp"
+              :dropzone="false"
+              multiple
+              :preview="false"
+              reset
+              @change="handlePhotoChange"
             >
-              <input
-                accept="image/jpeg,image/png,image/webp"
-                class="sr-only"
-                multiple
-                type="file"
-                @change="handlePhotoChange"
+              <UButton
+                color="neutral"
+                icon="i-lucide-image-plus"
+                label="Select photos"
+                type="button"
+                variant="subtle"
+                @click="open()"
               />
-            </UButton>
+            </UFileUpload>
             <span class="text-sm text-slate-500">
               {{ form.photos?.length ?? 0 }}/4 selected
             </span>
@@ -809,52 +890,16 @@ onBeforeUnmount(() => {
       </UFormField>
 
       <div class="grid gap-5 sm:grid-cols-2">
-        <UFormField label="Type">
-          <div class="grid gap-2">
-            <label
-              v-for="option in typeOptions"
-              :key="option"
-              class="flex items-center gap-2 text-sm text-slate-700"
-            >
-              <input
-                :checked="form.type.includes(option)"
-                class="size-4"
-                type="checkbox"
-                @change="
-                  toggleValue(
-                    form.type,
-                    option,
-                    ($event.target as HTMLInputElement).checked,
-                  )
-                "
-              />
-              {{ option }}
-            </label>
-          </div>
+        <UFormField label="Type" name="type">
+          <UCheckboxGroup v-model="form.type" :items="typeItems" name="type" />
         </UFormField>
 
-        <UFormField label="Characteristics">
-          <div class="grid gap-2">
-            <label
-              v-for="option in characteristicOptions"
-              :key="option"
-              class="flex items-center gap-2 text-sm text-slate-700"
-            >
-              <input
-                :checked="form.characteristics.includes(option)"
-                class="size-4"
-                type="checkbox"
-                @change="
-                  toggleValue(
-                    form.characteristics,
-                    option,
-                    ($event.target as HTMLInputElement).checked,
-                  )
-                "
-              />
-              {{ option }}
-            </label>
-          </div>
+        <UFormField label="Characteristics" name="characteristics">
+          <UCheckboxGroup
+            v-model="form.characteristics"
+            :items="characteristicItems"
+            name="characteristics"
+          />
         </UFormField>
       </div>
 
@@ -881,6 +926,6 @@ onBeforeUnmount(() => {
           type="submit"
         />
       </div>
-    </form>
+    </UForm>
   </div>
 </template>
