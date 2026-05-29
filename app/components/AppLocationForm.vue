@@ -66,6 +66,7 @@ const characteristicItems = characteristicOptions.map((option) => ({
   label: option,
   value: option,
 }));
+const secondaryToolbarButtonClass = "hidden sm:inline-flex";
 const descriptionEditorToolbarItems = [
   [
     {
@@ -104,6 +105,7 @@ const descriptionEditorToolbarItems = [
       icon: "i-lucide-strikethrough",
       kind: "mark",
       mark: "strike",
+      class: secondaryToolbarButtonClass,
       tooltip: { text: "Strikethrough" },
     },
   ],
@@ -111,6 +113,7 @@ const descriptionEditorToolbarItems = [
     {
       icon: "i-lucide-quote",
       kind: "blockquote",
+      class: secondaryToolbarButtonClass,
       tooltip: { text: "Quote" },
     },
     {
@@ -128,6 +131,7 @@ const descriptionEditorToolbarItems = [
     {
       icon: "i-lucide-link",
       kind: "link",
+      class: secondaryToolbarButtonClass,
       tooltip: { text: "Link" },
     },
     {
