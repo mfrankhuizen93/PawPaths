@@ -108,6 +108,8 @@ const changeForm = reactive<EditableLocationFields>({
   characteristics: [],
   description: "",
   relatedUrls: [],
+  photos: [],
+  coordinatePoints: [],
 });
 const reviewForm = reactive({
   rating: 5,
@@ -257,7 +259,13 @@ function syncChangeForm(location: LocationListItem | null) {
   changeForm.type = [...(location?.type ?? [])];
   changeForm.characteristics = [...(location?.characteristics ?? [])];
   changeForm.description = location?.description ?? "";
-  changeForm.relatedUrls = [...(location?.relatedUrls ?? [])];
+  changeForm.relatedUrls = (location?.relatedUrls ?? []).map((url) => ({
+    ...url,
+  }));
+  changeForm.photos = (location?.photos ?? []).map((photo) => ({ ...photo }));
+  changeForm.coordinatePoints = (location?.coordinatePoints ?? []).map(
+    (point) => ({ ...point }),
+  );
 }
 
 function getReviewName(review: LocationReview) {
@@ -780,76 +788,17 @@ watch(selectedLocation, (location) => {
               </div>
             </template>
             <template #suggest-edit>
-              <form
+              <AppLocationForm
                 v-if="isSignedIn"
-                class="flex flex-col gap-4 rounded-md border border-slate-200 bg-white p-4"
-                @submit.prevent="submitChange"
-              >
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <UFormField label="Name">
-                    <UInput v-model="changeForm.name" icon="i-lucide-map-pin" />
-                  </UFormField>
-                  <UFormField label="City">
-                    <UInput
-                      v-model="changeForm.city"
-                      icon="i-lucide-building-2"
-                    />
-                  </UFormField>
-                  <UFormField label="Province">
-                    <UInput v-model="changeForm.province" icon="i-lucide-map" />
-                  </UFormField>
-                  <UFormField label="Country">
-                    <UInput
-                      v-model="changeForm.country"
-                      icon="i-lucide-globe-2"
-                    />
-                  </UFormField>
-                  <UFormField label="Latitude">
-                    <UInput
-                      v-model.number="changeForm.latitude"
-                      step="any"
-                      type="number"
-                    />
-                  </UFormField>
-                  <UFormField label="Longitude">
-                    <UInput
-                      v-model.number="changeForm.longitude"
-                      step="any"
-                      type="number"
-                    />
-                  </UFormField>
-                </div>
-
-                <UFormField label="Description">
-                  <textarea
-                    v-model="changeForm.description"
-                    class="focus:border-brand-500 min-h-32 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none"
-                  />
-                </UFormField>
-
-                <UAlert
-                  v-if="contributionError"
-                  :title="contributionError"
-                  color="error"
-                  icon="i-lucide-circle-alert"
-                  variant="soft"
-                />
-                <UAlert
-                  v-if="contributionMessage"
-                  :title="contributionMessage"
-                  color="success"
-                  icon="i-lucide-circle-check"
-                  variant="soft"
-                />
-                <div>
-                  <UButton
-                    :loading="isSubmittingChange"
-                    icon="i-lucide-send"
-                    label="Submit change"
-                    type="submit"
-                  />
-                </div>
-              </form>
+                v-model="changeForm"
+                :error="contributionError"
+                :message="contributionMessage"
+                point-help="Adjust the location points that should be changed."
+                :reset-key="selectedLocation?.id"
+                :submitting="isSubmittingChange"
+                submit-label="Submit change"
+                @submit="submitChange"
+              />
 
               <UAlert
                 v-else
