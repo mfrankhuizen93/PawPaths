@@ -1027,9 +1027,13 @@ onBeforeUnmount(() => {
         <UFormField label="Description" name="description">
           <UEditor
             v-model="form.description"
-            class="min-h-32 w-full"
+            class="min-h-32 w-full overflow-hidden rounded-md border border-slate-200 bg-white"
             content-type="markdown"
             placeholder="Write a Markdown description..."
+            :ui="{
+              content: 'min-h-32',
+              base: 'min-h-32 px-3 py-2 text-sm leading-5 font-sans text-slate-950 sm:px-3 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
+            }"
           >
             <template #default="{ editor }">
               <UEditorToolbar
