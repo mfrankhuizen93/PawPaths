@@ -172,6 +172,10 @@ test("approving a new location creates one published location and completes the 
 
   const location = db.collections.locations.documents[0];
   assert.equal(location.slug, "loop-park-amsterdam");
+  assert.equal(
+    location.sourceUrl,
+    `pawpaths:contribution:${contribution._id.toString()}`,
+  );
   assert.equal(location.status, "published");
   assert.ok(location.sourceContributionId.equals(contribution._id));
   assert.equal(result.status, "approved");

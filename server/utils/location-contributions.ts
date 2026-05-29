@@ -452,9 +452,11 @@ async function approveContribution(
     }
 
     const slug = await getAvailableSlug(locations, contribution.payload);
+    const sourceUrl = `pawpaths:contribution:${contribution._id.toString()}`;
     const result = await locations.insertOne({
       ...contribution.payload,
       slug,
+      sourceUrl,
       status: "published",
       sourceContributionId: contribution._id,
       location,
