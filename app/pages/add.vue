@@ -41,6 +41,89 @@ const characteristicItems = characteristicOptions.map((option) => ({
   label: option,
   value: option,
 }));
+const descriptionEditorToolbarItems = [
+  [
+    {
+      icon: "i-lucide-heading-1",
+      kind: "heading",
+      level: 1,
+      tooltip: { text: "Heading 1" },
+    },
+    {
+      icon: "i-lucide-heading-2",
+      kind: "heading",
+      level: 2,
+      tooltip: { text: "Heading 2" },
+    },
+    {
+      icon: "i-lucide-heading-3",
+      kind: "heading",
+      level: 3,
+      tooltip: { text: "Heading 3" },
+    },
+  ],
+  [
+    {
+      icon: "i-lucide-bold",
+      kind: "mark",
+      mark: "bold",
+      tooltip: { text: "Bold" },
+    },
+    {
+      icon: "i-lucide-italic",
+      kind: "mark",
+      mark: "italic",
+      tooltip: { text: "Italic" },
+    },
+    {
+      icon: "i-lucide-strikethrough",
+      kind: "mark",
+      mark: "strike",
+      tooltip: { text: "Strikethrough" },
+    },
+  ],
+  [
+    {
+      icon: "i-lucide-quote",
+      kind: "blockquote",
+      tooltip: { text: "Quote" },
+    },
+    {
+      icon: "i-lucide-list",
+      kind: "bulletList",
+      tooltip: { text: "Bullet list" },
+    },
+    {
+      icon: "i-lucide-list-ordered",
+      kind: "orderedList",
+      tooltip: { text: "Numbered list" },
+    },
+  ],
+  [
+    {
+      icon: "i-lucide-link",
+      kind: "link",
+      tooltip: { text: "Link" },
+    },
+    {
+      icon: "i-lucide-remove-formatting",
+      kind: "clearFormatting",
+      tooltip: { text: "Clear formatting" },
+    },
+  ],
+  [
+    {
+      icon: "i-lucide-undo-2",
+      kind: "undo",
+      tooltip: { text: "Undo" },
+    },
+    {
+      icon: "i-lucide-redo-2",
+      kind: "redo",
+      tooltip: { text: "Redo" },
+    },
+  ],
+];
 const acceptedPhotoTypes = [
   "image/jpeg",
   "image/png",
@@ -947,7 +1030,15 @@ onBeforeUnmount(() => {
             class="min-h-32 w-full"
             content-type="markdown"
             placeholder="Write a Markdown description..."
-          />
+          >
+            <template #default="{ editor }">
+              <UEditorToolbar
+                :editor="editor"
+                :items="descriptionEditorToolbarItems"
+                class="border-b border-slate-200 px-2 py-1"
+              />
+            </template>
+          </UEditor>
         </UFormField>
 
         <div class="grid gap-4 sm:grid-cols-2">
