@@ -905,61 +905,13 @@ onBeforeUnmount(() => {
           :key="point.id + '-' + pointIndex"
         >
           <MapMarkerCard
+            v-if="form?.coordinatePoints?.[pointIndex]"
             v-model="form.coordinatePoints[pointIndex]"
             :is-active="activePointId === point.id"
             @click="activePointId = point.id ?? 'general'"
+            @remove="removeCoordinatePoint"
           />
         </template>
-        <div
-          v-for="(point, pointIndex) in form.coordinatePoints"
-          :key="point.id ?? point.label"
-          :class="
-            activePointId === point.id
-              ? 'border-brand-500 bg-brand-50'
-              : 'border-slate-200'
-          "
-          class="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_11rem_auto]"
-        >
-          <UFormField
-            label="Label"
-            :name="`coordinatePoints.${pointIndex}.label`"
-          >
-            <UInput v-model="point.label" />
-          </UFormField>
-          <UFormField
-            label="Type"
-            :name="`coordinatePoints.${pointIndex}.kind`"
-          >
-            <USelect
-              :items="pointKindOptions"
-              :model-value="point.kind"
-              class="w-full"
-              @update:model-value="
-                updatePointKind(
-                  point,
-                  $event as Exclude<LocationCoordinateKind, 'general'>,
-                )
-              "
-            />
-          </UFormField>
-          <div class="flex items-end gap-2">
-            <UButton
-              color="neutral"
-              icon="i-lucide-crosshair"
-              label="Select"
-              type="button"
-              :variant="activePointId === point.id ? 'solid' : 'subtle'"
-              @click="activePointId = point.id ?? 'general'"
-            />
-            <UButton
-              color="error"
-              icon="i-lucide-trash-2"
-              type="button"
-              variant="ghost"
-              @click="removeCoordinatePoint(point.id)"
-            />
-          </div>
-        </div>
         <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
           Filling city, province, and country from the general location...
         </p>

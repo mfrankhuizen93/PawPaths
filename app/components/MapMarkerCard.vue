@@ -1,48 +1,55 @@
 <script lang="ts" setup>
-import type { LocationCoordinatePoint } from "#shared/types/locations";
-import type { SelectItem } from "@nuxt/ui/components/Select.vue";
+import {
+  locationCoordinateKindOptions,
+  type LocationCoordinatePoint,
+} from "#shared/types/locations";
 
 const marker = defineModel({
   type: Object as PropType<LocationCoordinatePoint>,
   required: true,
 });
 
-const props = defineProps({
+defineProps({
   isActive: {
     type: Boolean,
     default: false,
   },
 });
 
-const emit = defineEmits(["select", "remove"]);
-
-const pointKindOptions = locationCoordinateKindOptions;
+const emit = defineEmits(["remove"]);
 
 const isGeneralLocation = computed(() => marker.value.kind === "general");
+
+const pointKindOptions = locationCoordinateKindOptions.filter(
+  (option) => option.value !== "general",
+);
 </script>
 
 <template>
   <div
-    class="flex gap-2 rounded border p-3"
+    class="flex justify-between gap-2 rounded border p-3"
     :class="{ 'border-brand-500 bg-brand-50 border': isActive }"
   >
-    <UButton
-      @click="emit('select', marker.id)"
-      icon="i-lucide-crosshair"
-      color="neutral"
-      variant="ghost"
+    <UButton color="neutral" icon="i-lucide-crosshair" variant="ghost" />
+
+    <UInput
+      v-if="isGeneralLocation"
+      v-model="marker.label"
+      class="w-full flex-1"
+      readonly
     />
 
     <USelectMenu
+      v-else
       v-model="marker.kind"
       :disabled="isGeneralLocation"
       :items="pointKindOptions"
-      class="w-48"
-      value-key="value"
+      class="w-full flex-1"
       placeholder="Kind"
+      value-key="value"
     />
 
-    <UInput v-model="marker.label" placeholder="Label" />
+    <UInput v-if="false" v-model="marker.label" placeholder="Label" />
     <UButton
       v-if="isActive && !isGeneralLocation"
       @click="emit('remove', marker.id)"
