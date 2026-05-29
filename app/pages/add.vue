@@ -41,6 +41,13 @@ const characteristicItems = characteristicOptions.map((option) => ({
   label: option,
   value: option,
 }));
+const maxPhotoCount = 4;
+const maxPhotoSizeBytes = 5 * 1024 * 1024;
+const acceptedPhotoTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as string[];
 
 function isPointKind(
   value: unknown,
@@ -66,6 +73,18 @@ const locationPhotoSchema = z
     sourceName: z.string().nullable().optional(),
   })
   .passthrough();
+
+const photoFileSchema = z
+  .custom<File>(
+    (value) => typeof File !== "undefined" && value instanceof File,
+    { message: "Choose JPG, PNG, or WebP photos." },
+  )
+  .refine((file) => acceptedPhotoTypes.includes(file.type), {
+    message: "Choose JPG, PNG, or WebP photos.",
+  })
+  .refine((file) => file.size <= maxPhotoSizeBytes, {
+    message: "Choose photos under 5 MB.",
+  });
 
 const coordinatePointSchema = z.object({
   id: z.string().nullable().optional(),
@@ -117,10 +136,19 @@ const isSubmitting = ref(false);
 const isReverseGeocoding = ref(false);
 const message = ref("");
 const error = ref("");
-const photoError = ref("");
 const geocodeError = ref("");
 const activePointId = ref("general");
 const photoFiles = ref<File[]>([]);
+const addLocationForm = ref<{
+  clear: (name?: string | RegExp) => void;
+  setErrors: (
+    errors: {
+      name?: string;
+      message: string;
+    }[],
+    name?: string | RegExp,
+  ) => void;
+} | null>(null);
 let reverseGeocodeTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 type PhotoMetadata = {
@@ -143,6 +171,37 @@ const form = reactive<EditableLocationFields>({
   relatedUrls: [],
   photos: [],
 });
+
+function parsePhotoFiles(files: File[]) {
+  return z
+    .array(photoFileSchema)
+    .min(1)
+    .superRefine((selectedFiles, context) => {
+      if ((form.photos?.length ?? 0) + selectedFiles.length > maxPhotoCount) {
+        context.addIssue({
+          code: "custom",
+          message: `Choose no more than ${maxPhotoCount} photos.`,
+        });
+      }
+    })
+    .parse(files);
+}
+
+function setPhotoFieldError(message: string) {
+  addLocationForm.value?.setErrors([{ name: "photos", message }], "photos");
+}
+
+function clearPhotoFieldError() {
+  addLocationForm.value?.clear("photos");
+}
+
+function getZodErrorMessage(errorValue: unknown) {
+  if (errorValue instanceof z.ZodError) {
+    return errorValue.issues[0]?.message ?? "Choose valid photos.";
+  }
+
+  return getErrorMessage(errorValue);
+}
 
 const mapMarkers = computed(() => [
   {
@@ -353,14 +412,6 @@ function parseExifMetadata(buffer: ArrayBuffer): PhotoMetadata {
 }
 
 async function fileToLocationPhoto(file: File): Promise<LocationPhoto> {
-  if (!file.type.startsWith("image/")) {
-    throw new Error("Choose JPG, PNG, or WebP photos.");
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error("Choose photos under 5 MB.");
-  }
-
   const buffer = await file.arrayBuffer();
   const metadata = parseExifMetadata(buffer);
   const bitmap = await createImageBitmap(file);
@@ -423,19 +474,20 @@ function addPoiFromPhoto(photo: LocationPhoto) {
 }
 
 async function handlePhotoChange() {
-  photoError.value = "";
+  clearPhotoFieldError();
 
-  const files = photoFiles.value.slice(0, 4);
+  const files = photoFiles.value;
   photoFiles.value = [];
 
   if (!files.length) return;
 
   try {
-    const photos = await Promise.all(files.map(fileToLocationPhoto));
-    form.photos = [...(form.photos ?? []), ...photos].slice(0, 4);
+    const validFiles = parsePhotoFiles(files);
+    const photos = await Promise.all(validFiles.map(fileToLocationPhoto));
+    form.photos = [...(form.photos ?? []), ...photos].slice(0, maxPhotoCount);
     photos.forEach(addPoiFromPhoto);
   } catch (errorValue) {
-    photoError.value = getErrorMessage(errorValue);
+    setPhotoFieldError(getZodErrorMessage(errorValue));
   }
 }
 
@@ -566,6 +618,7 @@ function resetForm() {
   form.relatedUrls = [];
   form.photos = [];
   photoFiles.value = [];
+  clearPhotoFieldError();
 }
 
 async function submitLocation() {
@@ -646,6 +699,7 @@ onBeforeUnmount(() => {
 
     <UForm
       v-else
+      ref="addLocationForm"
       :schema="addLocationSchema"
       :state="form"
       class="flex flex-col gap-5 rounded-md border border-slate-200 bg-white p-5 shadow-sm"
@@ -844,14 +898,6 @@ onBeforeUnmount(() => {
               {{ form.photos?.length ?? 0 }}/4 selected
             </span>
           </div>
-
-          <UAlert
-            v-if="photoError"
-            :title="photoError"
-            color="error"
-            icon="i-lucide-image-off"
-            variant="soft"
-          />
 
           <div v-if="form.photos?.length" class="grid gap-3 sm:grid-cols-3">
             <div
