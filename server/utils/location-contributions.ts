@@ -321,8 +321,6 @@ function toContribution(document: ContributionDocument): LocationContribution {
 }
 
 export async function getContributionsCollection(db: Db) {
-  await ensureContributionIndexes(db);
-
   const contributions = db.collection<ContributionDocument>("contributions");
 
   return contributions;
