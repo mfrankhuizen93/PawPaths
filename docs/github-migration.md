@@ -4,12 +4,12 @@ Use this checklist when moving this repository from GitLab to GitHub.
 
 ## Repository
 
-1. Create an empty GitHub repository, for example `<github-owner>/pawpaths`.
+1. Create or confirm the empty GitHub repository at `git@github.com:mfrankhuizen93/PawPaths.git`.
 2. Push every local branch and tag:
 
    ```bash
    git remote rename origin gitlab
-   git remote add origin git@github.com:<github-owner>/pawpaths.git
+   git remote add origin git@github.com:mfrankhuizen93/PawPaths.git
    git push origin --all
    git push origin --tags
    ```
