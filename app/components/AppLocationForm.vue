@@ -935,11 +935,15 @@ onBeforeUnmount(() => {
           }"
         >
           <template #default="{ editor }">
-            <UEditorToolbar
-              :editor="editor"
-              :items="descriptionEditorToolbarItems"
-              class="border-b border-slate-200 px-2 py-1"
-            />
+            <div
+              class="max-w-full overflow-x-auto border-b border-slate-200 px-2 py-1 [-webkit-overflow-scrolling:touch]"
+            >
+              <UEditorToolbar
+                :editor="editor"
+                :items="descriptionEditorToolbarItems"
+                class="min-w-max"
+              />
+            </div>
           </template>
         </UEditor>
       </UFormField>
