@@ -41,13 +41,15 @@ const characteristicItems = characteristicOptions.map((option) => ({
   label: option,
   value: option,
 }));
-const maxPhotoCount = 4;
-const maxPhotoSizeBytes = 5 * 1024 * 1024;
 const acceptedPhotoTypes = [
   "image/jpeg",
   "image/png",
   "image/webp",
 ] as string[];
+const largePhotoSizeBytes = 2 * 1024 * 1024;
+const largePhotoDimension = 1800;
+const compressedPhotoMaxDimension = 1600;
+const compressedPhotoQuality = 0.74;
 
 function isPointKind(
   value: unknown,
@@ -81,9 +83,6 @@ const photoFileSchema = z
   )
   .refine((file) => acceptedPhotoTypes.includes(file.type), {
     message: "Choose JPG, PNG, or WebP photos.",
-  })
-  .refine((file) => file.size <= maxPhotoSizeBytes, {
-    message: "Choose photos under 5 MB.",
   });
 
 const coordinatePointSchema = z.object({
@@ -117,10 +116,7 @@ const addLocationSchema = z
         }),
       )
       .optional(),
-    photos: z
-      .array(locationPhotoSchema)
-      .max(4, "Choose no more than 4 photos.")
-      .optional(),
+    photos: z.array(locationPhotoSchema).optional(),
   })
   .superRefine((value, context) => {
     if (!Number.isFinite(value.latitude) || !Number.isFinite(value.longitude)) {
@@ -173,18 +169,7 @@ const form = reactive<EditableLocationFields>({
 });
 
 function parsePhotoFiles(files: File[]) {
-  return z
-    .array(photoFileSchema)
-    .min(1)
-    .superRefine((selectedFiles, context) => {
-      if ((form.photos?.length ?? 0) + selectedFiles.length > maxPhotoCount) {
-        context.addIssue({
-          code: "custom",
-          message: `Choose no more than ${maxPhotoCount} photos.`,
-        });
-      }
-    })
-    .parse(files);
+  return z.array(photoFileSchema).min(1).parse(files);
 }
 
 function setPhotoFieldError(message: string) {
@@ -411,14 +396,51 @@ function parseExifMetadata(buffer: ArrayBuffer): PhotoMetadata {
   return {};
 }
 
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () =>
+      reject(new Error("Could not process that photo.")),
+    );
+    reader.readAsDataURL(file);
+  });
+}
+
 async function fileToLocationPhoto(file: File): Promise<LocationPhoto> {
   const buffer = await file.arrayBuffer();
   const metadata = parseExifMetadata(buffer);
   const bitmap = await createImageBitmap(file);
-  const maxSize = 1200;
-  const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+  const shouldCompress =
+    file.size > largePhotoSizeBytes ||
+    Math.max(bitmap.width, bitmap.height) > largePhotoDimension;
+  const scale = shouldCompress
+    ? Math.min(
+        1,
+        compressedPhotoMaxDimension / Math.max(bitmap.width, bitmap.height),
+      )
+    : 1;
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  if (!shouldCompress) {
+    const url = await fileToDataUrl(file);
+    bitmap.close();
+
+    return {
+      id: createPointId(),
+      url,
+      alt: form.name || file.name,
+      width,
+      height,
+      capturedAt: metadata.capturedAt ?? null,
+      uploadedAt: new Date().toISOString(),
+      latitude: metadata.latitude ?? null,
+      longitude: metadata.longitude ?? null,
+      sourceName: file.name,
+    };
+  }
+
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -428,13 +450,12 @@ async function fileToLocationPhoto(file: File): Promise<LocationPhoto> {
     bitmap.close();
     throw new Error("Could not process that photo.");
   }
-
   context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
   return {
     id: createPointId(),
-    url: canvas.toDataURL("image/jpeg", 0.72),
+    url: canvas.toDataURL("image/jpeg", compressedPhotoQuality),
     alt: form.name || file.name,
     width,
     height,
@@ -484,7 +505,7 @@ async function handlePhotoChange() {
   try {
     const validFiles = parsePhotoFiles(files);
     const photos = await Promise.all(validFiles.map(fileToLocationPhoto));
-    form.photos = [...(form.photos ?? []), ...photos].slice(0, maxPhotoCount);
+    form.photos = [...(form.photos ?? []), ...photos];
     photos.forEach(addPoiFromPhoto);
   } catch (errorValue) {
     setPhotoFieldError(getZodErrorMessage(errorValue));
@@ -705,20 +726,72 @@ onBeforeUnmount(() => {
       class="flex flex-col gap-5 rounded-md border border-slate-200 bg-white p-5 shadow-sm"
       @submit="submitLocation"
     >
-      <div class="grid gap-4 sm:grid-cols-2">
-        <UFormField label="Name" name="name" required>
-          <UInput v-model="form.name" icon="i-lucide-map-pin" required />
-        </UFormField>
-        <UFormField label="City" name="city" required>
-          <UInput v-model="form.city" icon="i-lucide-building-2" required />
-        </UFormField>
-        <UFormField label="Province" name="province">
-          <UInput v-model="form.province" icon="i-lucide-map" />
-        </UFormField>
-        <UFormField label="Country" name="country">
-          <UInput v-model="form.country" icon="i-lucide-globe-2" />
-        </UFormField>
-      </div>
+      <UFormField
+        description="Photos with location data can automatically create a POI on the map."
+        label="Photos"
+        name="photos"
+      >
+        <div class="flex flex-col gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <UFileUpload
+              v-model="photoFiles"
+              v-slot="{ open }"
+              accept="image/jpeg,image/png,image/webp"
+              :dropzone="false"
+              multiple
+              :preview="false"
+              reset
+              @change="handlePhotoChange"
+            >
+              <UButton
+                color="neutral"
+                icon="i-lucide-image-plus"
+                label="Select photos"
+                type="button"
+                variant="subtle"
+                @click="open()"
+              />
+            </UFileUpload>
+            <span class="text-sm text-slate-500">
+              {{ form.photos?.length ?? 0 }} selected
+            </span>
+          </div>
+
+          <div v-if="form.photos?.length" class="grid gap-3 sm:grid-cols-3">
+            <div
+              v-for="(photo, index) in form.photos"
+              :key="`${photo.url.slice(0, 40)}-${index}`"
+              class="relative overflow-hidden rounded-md border border-slate-200"
+            >
+              <img
+                :alt="photo.alt || 'Selected location photo'"
+                :src="photo.url"
+                class="aspect-[4/3] w-full object-cover"
+              />
+              <div
+                class="border-t border-slate-200 bg-white p-2 text-xs text-slate-600"
+              >
+                <p v-if="photo.capturedAt">
+                  Taken {{ formatPhotoDate(photo.capturedAt) }}
+                </p>
+                <p v-else>Photo date unavailable</p>
+                <p v-if="photo.latitude && photo.longitude">
+                  POI created from photo location
+                </p>
+              </div>
+              <UButton
+                class="absolute top-2 right-2"
+                color="neutral"
+                icon="i-lucide-x"
+                size="xs"
+                type="button"
+                variant="solid"
+                @click="removePhoto(index)"
+              />
+            </div>
+          </div>
+        </div>
+      </UFormField>
 
       <UFormField label="Location points" name="latitude" required>
         <div class="flex flex-col gap-3">
@@ -863,77 +936,29 @@ onBeforeUnmount(() => {
         </div>
       </UFormField>
 
-      <UFormField label="Description" name="description">
-        <UTextarea
-          v-model="form.description"
-          autoresize
-          class="w-full"
-          :rows="5"
-        />
-      </UFormField>
+      <div class="grid gap-4">
+        <UFormField label="Name" name="name" required>
+          <UInput v-model="form.name" icon="i-lucide-map-pin" required />
+        </UFormField>
 
-      <UFormField label="Photos" name="photos">
-        <div class="flex flex-col gap-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <UFileUpload
-              v-model="photoFiles"
-              v-slot="{ open }"
-              accept="image/jpeg,image/png,image/webp"
-              :dropzone="false"
-              multiple
-              :preview="false"
-              reset
-              @change="handlePhotoChange"
-            >
-              <UButton
-                color="neutral"
-                icon="i-lucide-image-plus"
-                label="Select photos"
-                type="button"
-                variant="subtle"
-                @click="open()"
-              />
-            </UFileUpload>
-            <span class="text-sm text-slate-500">
-              {{ form.photos?.length ?? 0 }}/4 selected
-            </span>
-          </div>
+        <UFormField label="Description" name="description">
+          <UTextarea
+            v-model="form.description"
+            autoresize
+            class="w-full"
+            :rows="5"
+          />
+        </UFormField>
 
-          <div v-if="form.photos?.length" class="grid gap-3 sm:grid-cols-3">
-            <div
-              v-for="(photo, index) in form.photos"
-              :key="`${photo.url.slice(0, 40)}-${index}`"
-              class="relative overflow-hidden rounded-md border border-slate-200"
-            >
-              <img
-                :alt="photo.alt || 'Selected location photo'"
-                :src="photo.url"
-                class="aspect-[4/3] w-full object-cover"
-              />
-              <div
-                class="border-t border-slate-200 bg-white p-2 text-xs text-slate-600"
-              >
-                <p v-if="photo.capturedAt">
-                  Taken {{ formatPhotoDate(photo.capturedAt) }}
-                </p>
-                <p v-else>Photo date unavailable</p>
-                <p v-if="photo.latitude && photo.longitude">
-                  POI created from photo location
-                </p>
-              </div>
-              <UButton
-                class="absolute top-2 right-2"
-                color="neutral"
-                icon="i-lucide-x"
-                size="xs"
-                type="button"
-                variant="solid"
-                @click="removePhoto(index)"
-              />
-            </div>
-          </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <UFormField label="City" name="city" required>
+            <UInput v-model="form.city" icon="i-lucide-building-2" required />
+          </UFormField>
+          <UFormField label="Country" name="country">
+            <UInput v-model="form.country" icon="i-lucide-globe-2" />
+          </UFormField>
         </div>
-      </UFormField>
+      </div>
 
       <div class="grid gap-5 sm:grid-cols-2">
         <UFormField label="Type" name="type">
