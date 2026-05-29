@@ -603,31 +603,42 @@ export async function reviewContribution(options: {
     return toContribution(savedContribution);
   }
 
-  const result = await contributions.findOneAndUpdate(
+  const reviewedContribution = {
+    ...contribution,
+    status,
+    payload,
+    locationId: approvedLocation?.locationId ?? contribution.locationId,
+    locationSlug:
+      approvedLocation?.locationSlug ?? contribution.locationSlug ?? null,
+    locationName: approvedLocation?.locationName ?? payload.name,
+    reviewer: getUserSummary(options.reviewer),
+    reviewNote: cleanLongText(options.note, 1000) || null,
+    reviewedAt: now,
+    updatedAt: now,
+  };
+  const result = await contributions.updateOne(
     { _id },
     {
       $set: {
-        status,
-        payload,
-        locationId: approvedLocation?.locationId ?? contribution.locationId,
-        locationSlug:
-          approvedLocation?.locationSlug ?? contribution.locationSlug ?? null,
-        locationName: approvedLocation?.locationName ?? payload.name,
-        reviewer: getUserSummary(options.reviewer),
-        reviewNote: cleanLongText(options.note, 1000) || null,
-        reviewedAt: now,
-        updatedAt: now,
+        status: reviewedContribution.status,
+        payload: reviewedContribution.payload,
+        locationId: reviewedContribution.locationId,
+        locationSlug: reviewedContribution.locationSlug,
+        locationName: reviewedContribution.locationName,
+        reviewer: reviewedContribution.reviewer,
+        reviewNote: reviewedContribution.reviewNote,
+        reviewedAt: reviewedContribution.reviewedAt,
+        updatedAt: reviewedContribution.updatedAt,
       },
     },
-    { returnDocument: "after" },
   );
 
-  if (!result) {
+  if (result.matchedCount === 0) {
     throw createError({
       statusCode: 404,
       statusMessage: "Contribution not found.",
     });
   }
 
-  return toContribution(result);
+  return toContribution(reviewedContribution);
 }

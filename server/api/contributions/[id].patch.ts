@@ -24,15 +24,27 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  return {
-    contribution: await reviewContribution({
-      db: await getDb(),
-      id,
-      reviewer,
-      action,
-      note: body?.note,
-      payload:
-        action === "approve" || action === "save" ? body?.payload : undefined,
-    }),
-  };
+  const contribution = await reviewContribution({
+    db: await getDb(),
+    id,
+    reviewer,
+    action,
+    note: body?.note,
+    payload:
+      action === "approve" || action === "save" ? body?.payload : undefined,
+  });
+
+  if (action !== "save") {
+    return {
+      contribution: {
+        id: contribution.id,
+        status: contribution.status,
+        locationId: contribution.locationId,
+        locationSlug: contribution.locationSlug,
+        locationName: contribution.locationName,
+      },
+    };
+  }
+
+  return { contribution };
 });
