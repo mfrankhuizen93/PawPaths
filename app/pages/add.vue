@@ -942,11 +942,11 @@ onBeforeUnmount(() => {
         </UFormField>
 
         <UFormField label="Description" name="description">
-          <UTextarea
+          <UEditor
             v-model="form.description"
-            autoresize
-            class="w-full"
-            :rows="5"
+            class="min-h-32 w-full"
+            content-type="markdown"
+            placeholder="Write a Markdown description..."
           />
         </UFormField>
 
