@@ -665,13 +665,16 @@ async function reviewContribution(
   reviewingContributionAction.value = action;
 
   try {
+    const shouldSendPayload =
+      action === "save" ||
+      (action === "approve" && isEditingContribution(contribution));
     const response = await $fetch<{ contribution: LocationContribution }>(
       `/api/contributions/${contribution.id}`,
       {
         method: "PATCH",
         body: {
           action,
-          ...(action === "approve" || action === "save"
+          ...(shouldSendPayload
             ? { payload: getContributionPayload(contribution) }
             : {}),
         },
