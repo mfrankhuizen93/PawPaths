@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "test": "node --test --import jiti/register tests/**/*.test.mjs",
     "prettier": "npx prettier . --write",
     "scrape": "node scripts/scrape-doggydating.js",
     "db:test": "node scripts/test-mongodb.js",

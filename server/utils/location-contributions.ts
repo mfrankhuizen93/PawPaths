@@ -42,6 +42,7 @@ type LocationDocument = EditableLocationFields & {
   _id?: ObjectId;
   slug: string;
   status: string;
+  sourceContributionId?: ObjectId | null;
   location?: {
     type: "Point";
     coordinates: [number, number];
@@ -78,6 +79,7 @@ const COORDINATE_KINDS = new Set<LocationCoordinateKind>([
 const COORDINATE_KIND_LABELS = new Map(
   locationCoordinateKindOptions.map((option) => [option.value, option.label]),
 );
+const contributionIndexPromises = new WeakMap<Db, Promise<void>>();
 
 function cleanText(value: unknown, maxLength = 200) {
   if (typeof value !== "string") return "";
@@ -319,18 +321,39 @@ function toContribution(document: ContributionDocument): LocationContribution {
 }
 
 export async function getContributionsCollection(db: Db) {
+  await ensureContributionIndexes(db);
+
   const contributions = db.collection<ContributionDocument>("contributions");
 
   return contributions;
 }
 
 export async function ensureContributionIndexes(db: Db) {
+  const existingPromise = contributionIndexPromises.get(db);
+
+  if (existingPromise) {
+    await existingPromise;
+    return;
+  }
+
+  const indexPromise = createContributionIndexes(db);
+  contributionIndexPromises.set(db, indexPromise);
+
+  await indexPromise;
+}
+
+async function createContributionIndexes(db: Db) {
   const contributions = db.collection<ContributionDocument>("contributions");
+  const locations = db.collection<LocationDocument>("locations");
 
   await Promise.all([
     contributions.createIndex({ status: 1, createdAt: -1 }),
     contributions.createIndex({ locationId: 1, status: 1 }),
     contributions.createIndex({ "submitter.id": 1, createdAt: -1 }),
+    locations.createIndex(
+      { sourceContributionId: 1 },
+      { unique: true, sparse: true },
+    ),
   ]);
 }
 
@@ -382,7 +405,8 @@ async function getAvailableSlug(
   locations: Collection<LocationDocument>,
   payload: EditableLocationFields,
 ) {
-  const baseSlug = getLocationSlug(payload) || getLocationSlug(payload.name);
+  const baseSlug =
+    getLocationSlug(payload) || getLocationSlug(payload.name) || "location";
   let slug = baseSlug;
   let suffix = 2;
 
@@ -394,18 +418,47 @@ async function getAvailableSlug(
   return slug;
 }
 
-async function approveContribution(db: Db, contribution: ContributionDocument) {
+type ApprovedLocationSummary = {
+  locationId: ObjectId | null;
+  locationSlug: string | null;
+  locationName: string | null;
+};
+
+async function approveContribution(
+  db: Db,
+  contribution: ContributionDocument,
+): Promise<ApprovedLocationSummary> {
   const locations = db.collection<LocationDocument>("locations");
   const now = new Date();
   const location = buildGeoPoint(contribution.payload);
 
   if (contribution.kind === "new-location") {
-    const slug = await getAvailableSlug(locations, contribution.payload);
+    if (!contribution._id) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: "Contribution is missing its id.",
+      });
+    }
 
-    await locations.insertOne({
+    const existingLocation = await locations.findOne(
+      { sourceContributionId: contribution._id },
+      { projection: { _id: 1, slug: 1, name: 1 } },
+    );
+
+    if (existingLocation) {
+      return {
+        locationId: existingLocation._id ?? null,
+        locationSlug: existingLocation.slug ?? null,
+        locationName: existingLocation.name ?? contribution.payload.name,
+      };
+    }
+
+    const slug = await getAvailableSlug(locations, contribution.payload);
+    const result = await locations.insertOne({
       ...contribution.payload,
       slug,
       status: "published",
+      sourceContributionId: contribution._id,
       location,
       source: "community",
       photos: contribution.payload.photos ?? [],
@@ -415,7 +468,11 @@ async function approveContribution(db: Db, contribution: ContributionDocument) {
       updatedAt: now,
     });
 
-    return;
+    return {
+      locationId: result.insertedId,
+      locationSlug: slug,
+      locationName: contribution.payload.name,
+    };
   }
 
   if (!contribution.locationId) {
@@ -442,6 +499,12 @@ async function approveContribution(db: Db, contribution: ContributionDocument) {
       statusMessage: "Location not found.",
     });
   }
+
+  return {
+    locationId: contribution.locationId,
+    locationSlug: contribution.locationSlug ?? null,
+    locationName: contribution.payload.name,
+  };
 }
 
 export async function listPendingContributions(db: Db) {
@@ -500,9 +563,10 @@ export async function reviewContribution(options: {
     payload,
   };
 
-  if (options.action === "approve") {
-    await approveContribution(options.db, contributionForReview);
-  }
+  const approvedLocation =
+    options.action === "approve"
+      ? await approveContribution(options.db, contributionForReview)
+      : null;
 
   const now = new Date();
   const status = options.action === "approve" ? "approved" : "rejected";
@@ -545,7 +609,10 @@ export async function reviewContribution(options: {
       $set: {
         status,
         payload,
-        locationName: payload.name,
+        locationId: approvedLocation?.locationId ?? contribution.locationId,
+        locationSlug:
+          approvedLocation?.locationSlug ?? contribution.locationSlug ?? null,
+        locationName: approvedLocation?.locationName ?? payload.name,
         reviewer: getUserSummary(options.reviewer),
         reviewNote: cleanLongText(options.note, 1000) || null,
         reviewedAt: now,

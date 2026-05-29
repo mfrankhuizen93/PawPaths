@@ -79,18 +79,30 @@ export function useAuth() {
   );
 
   async function refreshSession() {
+    const profileFetchOptions = import.meta.server
+      ? { headers: useRequestHeaders(["cookie"]) }
+      : undefined;
+
     try {
-      const response = await $fetch<{ user: AuthUser }>("/api/auth/profile");
+      const response = await $fetch<{ user: AuthUser }>(
+        "/api/auth/profile",
+        profileFetchOptions,
+      );
       user.value = response.user;
       isLoaded.value = true;
 
       return user.value;
     } catch {
-      // Fall back to Better Auth so auth errors still surface consistently.
+      if (import.meta.server) {
+        user.value = null;
+        isLoaded.value = true;
+
+        return user.value;
+      }
     }
 
     const result =
-      (await getRequestAuthClient().getSession()) as BetterAuthResult<BetterAuthSession | null>;
+      (await authClient.getSession()) as BetterAuthResult<BetterAuthSession | null>;
     const session = assertAuthResult(result);
     user.value = session?.user ? toAuthUser(session.user) : null;
     isLoaded.value = true;
