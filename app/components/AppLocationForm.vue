@@ -137,6 +137,7 @@ const descriptionEditorToolbarItems = [
     {
       icon: "i-lucide-remove-formatting",
       kind: "clearFormatting",
+      class: secondaryToolbarButtonClass,
       tooltip: { text: "Clear formatting" },
     },
   ],
@@ -940,7 +941,7 @@ onBeforeUnmount(() => {
         >
           <template #default="{ editor }">
             <div
-              class="max-w-full overflow-x-auto border-b border-slate-200 px-2 py-1 [-webkit-overflow-scrolling:touch]"
+              class="w-full max-w-full min-w-0 overflow-x-auto border-b border-slate-200 px-2 py-1 [-webkit-overflow-scrolling:touch]"
             >
               <UEditorToolbar
                 :editor="editor"
