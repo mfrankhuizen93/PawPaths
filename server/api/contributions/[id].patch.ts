@@ -3,6 +3,30 @@ import { requireRole } from "../../utils/auth.js";
 import { reviewContribution } from "../../utils/location-contributions.js";
 import { getDb } from "../../utils/mongodb.js";
 
+const REVIEW_TIMEOUT_MS = 10_000;
+
+async function withStepTimeout<T>(step: string, task: () => Promise<T>) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      task(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(
+            createError({
+              statusCode: 504,
+              statusMessage: `Review timed out while ${step}.`,
+            }),
+          );
+        }, REVIEW_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
 
@@ -13,8 +37,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const reviewer = await requireRole(event, ["maintainer", "admin"]);
-  const body = await readBody(event);
+  const reviewer = await withStepTimeout("checking your session", () =>
+    requireRole(event, ["maintainer", "admin"]),
+  );
+  const body = await withStepTimeout("reading the review request", () =>
+    readBody(event),
+  );
   const action = body?.action;
 
   if (action !== "approve" && action !== "reject" && action !== "save") {
@@ -24,15 +52,20 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const contribution = await reviewContribution({
-    db: await getDb(),
-    id,
-    reviewer,
-    action,
-    note: body?.note,
-    payload:
-      action === "approve" || action === "save" ? body?.payload : undefined,
-  });
+  const db = await withStepTimeout("connecting to the database", () => getDb());
+  const contribution = await withStepTimeout(
+    `${action === "approve" ? "approving" : action === "reject" ? "rejecting" : "saving"} the contribution`,
+    () =>
+      reviewContribution({
+        db,
+        id,
+        reviewer,
+        action,
+        note: body?.note,
+        payload:
+          action === "approve" || action === "save" ? body?.payload : undefined,
+      }),
+  );
 
   if (action !== "save") {
     return {
