@@ -46,8 +46,9 @@ const contributionEdits = reactive<Record<string, EditableLocationFields>>({});
 const contributionEditModes = reactive<Record<string, boolean>>({});
 const contributionsError = ref("");
 const isLoadingContributions = ref(false);
-const reviewingContribution = ref("");
-const reviewingContributionAction = ref<"approve" | "reject" | "save" | "">("");
+const contributionReviewActions = reactive<
+  Record<string, "approve" | "reject" | "save" | undefined>
+>({});
 const previewingContribution = ref("");
 const savingRoleFor = ref("");
 const profileError = ref("");
@@ -194,6 +195,15 @@ function getContributionMapMarkers(payload: EditableLocationFields) {
 
 function isEditingContribution(contribution: LocationContribution) {
   return contributionEditModes[contribution.id] === true;
+}
+
+function isReviewingContribution(
+  contribution: LocationContribution,
+  action?: "approve" | "reject" | "save",
+) {
+  const activeAction = contributionReviewActions[contribution.id];
+
+  return action ? activeAction === action : Boolean(activeAction);
 }
 
 function toggleContributionPreview(contribution: LocationContribution) {
@@ -397,11 +407,10 @@ async function reviewContribution(
   contribution: LocationContribution,
   action: "approve" | "reject" | "save",
 ) {
-  if (reviewingContribution.value) return;
+  if (isReviewingContribution(contribution)) return;
 
   contributionsError.value = "";
-  reviewingContribution.value = contribution.id;
-  reviewingContributionAction.value = action;
+  contributionReviewActions[contribution.id] = action;
 
   try {
     const shouldSendPayload =
@@ -447,8 +456,7 @@ async function reviewContribution(
   } catch (error) {
     contributionsError.value = getErrorMessage(error);
   } finally {
-    reviewingContribution.value = "";
-    reviewingContributionAction.value = "";
+    delete contributionReviewActions[contribution.id];
   }
 }
 
@@ -943,10 +951,7 @@ onMounted(() => {
               class="flex flex-wrap gap-2"
             >
               <UButton
-                :loading="
-                  reviewingContribution === contribution.id &&
-                  reviewingContributionAction === 'approve'
-                "
+                :loading="isReviewingContribution(contribution, 'approve')"
                 color="success"
                 icon="i-lucide-check"
                 label="Save and approve"
@@ -955,10 +960,7 @@ onMounted(() => {
                 @click="reviewContribution(contribution, 'approve')"
               />
               <UButton
-                :loading="
-                  reviewingContribution === contribution.id &&
-                  reviewingContributionAction === 'save'
-                "
+                :loading="isReviewingContribution(contribution, 'save')"
                 color="neutral"
                 icon="i-lucide-save"
                 label="Save"
@@ -967,7 +969,7 @@ onMounted(() => {
                 @click="reviewContribution(contribution, 'save')"
               />
               <UButton
-                :disabled="reviewingContribution === contribution.id"
+                :disabled="isReviewingContribution(contribution)"
                 color="neutral"
                 icon="i-lucide-x"
                 label="Cancel"
@@ -979,10 +981,7 @@ onMounted(() => {
 
             <div v-else class="flex flex-wrap gap-2">
               <UButton
-                :loading="
-                  reviewingContribution === contribution.id &&
-                  reviewingContributionAction === 'approve'
-                "
+                :loading="isReviewingContribution(contribution, 'approve')"
                 color="success"
                 icon="i-lucide-check"
                 label="Approve"
@@ -991,7 +990,7 @@ onMounted(() => {
                 @click="reviewContribution(contribution, 'approve')"
               />
               <UButton
-                :disabled="reviewingContribution === contribution.id"
+                :disabled="isReviewingContribution(contribution)"
                 color="neutral"
                 icon="i-lucide-pencil"
                 label="Edit"
@@ -1000,7 +999,7 @@ onMounted(() => {
                 @click="editContribution(contribution)"
               />
               <UButton
-                :disabled="reviewingContribution === contribution.id"
+                :loading="isReviewingContribution(contribution, 'reject')"
                 color="error"
                 icon="i-lucide-x"
                 label="Reject"
