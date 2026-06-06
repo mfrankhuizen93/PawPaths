@@ -1,5 +1,6 @@
 import { createError, defineEventHandler, getRouterParam, readBody } from "h3";
 import { requireRole } from "../../utils/auth.js";
+import { readAuthorizedReviewRequest } from "../../utils/contribution-review-request.js";
 import { reviewContribution } from "../../utils/location-contributions.js";
 import { getDb } from "../../utils/mongodb.js";
 
@@ -37,12 +38,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const body = await withStepTimeout("reading the review request", () =>
-    readBody(event),
-  );
-  const reviewer = await withStepTimeout("checking your session", () =>
-    requireRole(event, ["maintainer", "admin"]),
-  );
+  const { body, reviewer } = await readAuthorizedReviewRequest({
+    readRequest: () =>
+      withStepTimeout("reading the review request", () => readBody(event)),
+    authorize: () =>
+      withStepTimeout("checking your session", () =>
+        requireRole(event, ["maintainer", "admin"]),
+      ),
+  });
   const action = body?.action;
 
   if (action !== "approve" && action !== "reject" && action !== "save") {
