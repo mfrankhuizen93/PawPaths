@@ -30,9 +30,12 @@ export function getAdminNavigationItems(options: {
     label: "Submissions",
     icon: "i-lucide-inbox",
     to: "/admin/submissions",
-    badge:
+    chip:
       options.pendingContributions && options.pendingContributions > 0
-        ? options.pendingContributions
+        ? {
+            text: options.pendingContributions,
+            color: "error",
+          }
         : undefined,
   } satisfies NavigationMenuItem;
 
