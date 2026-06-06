@@ -37,11 +37,11 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const reviewer = await withStepTimeout("checking your session", () =>
-    requireRole(event, ["maintainer", "admin"]),
-  );
   const body = await withStepTimeout("reading the review request", () =>
     readBody(event),
+  );
+  const reviewer = await withStepTimeout("checking your session", () =>
+    requireRole(event, ["maintainer", "admin"]),
   );
   const action = body?.action;
 
