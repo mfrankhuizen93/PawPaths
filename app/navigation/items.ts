@@ -7,12 +7,9 @@ export const footerNavigationItems = [
     to: "/",
   },
   {
-    label: "Saved",
-    icon: "i-lucide-heart",
-  },
-  {
     label: "Add",
     icon: "i-lucide-circle-plus",
+    to: "/add",
   },
   {
     label: "Profile",

@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { GeoJSONSource, Map, MapLayerMouseEvent } from "maplibre-gl";
+import type { GeocodeResult } from "#shared/types/geo";
 import type {
   LocationFilters,
   LocationListItem,
@@ -209,6 +210,11 @@ function zoomToCoordinates(coordinates: [number, number]) {
     duration: 800,
     essential: true,
   });
+}
+
+function searchAddress(result: GeocodeResult) {
+  zoomToCoordinates([result.longitude, result.latitude]);
+  queueVisibleSearch();
 }
 
 function getLocationCoordinates(location?: LocationListItem | null) {
@@ -621,10 +627,17 @@ onBeforeUnmount(() => {
   <div class="bg-surface-muted relative h-full">
     <div ref="mapContainer" class="h-full min-h-96 w-full" />
 
+    <div v-if="variant === 'search'" class="absolute top-4 left-4 z-10 w-64">
+      <AppAddressSearch
+        placeholder="Search address or place"
+        @selected="searchAddress"
+      />
+    </div>
+
     <UAlert
       v-if="locationError"
       :title="locationError"
-      class="absolute top-4 left-4 z-10 max-w-sm shadow-sm"
+      class="absolute top-24 left-4 z-10 max-w-sm shadow-sm"
       color="neutral"
       description="Allow location access in your browser, then try again."
       icon="i-lucide-crosshair"

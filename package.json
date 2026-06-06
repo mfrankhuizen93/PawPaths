@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "test": "node --test --import jiti/register tests/**/*.test.mjs",
     "prettier": "npx prettier . --write",
     "scrape": "node scripts/scrape-doggydating.js",
     "db:test": "node scripts/test-mongodb.js",
@@ -33,9 +34,11 @@
     "p-limit": "^7.3.0",
     "tailwindcss": "^4.3.0",
     "vue": "^3.5.34",
-    "vue-router": "^5.0.6"
+    "vue-router": "^5.0.6",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.110",
     "@nuxt/ui": "^4.7.1",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0"

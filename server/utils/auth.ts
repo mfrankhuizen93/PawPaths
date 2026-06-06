@@ -4,7 +4,13 @@ import { admin } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { createError, type H3Event, toWebRequest } from "h3";
-import { type AuthUser, type UserRole, userRoles } from "#shared/types/auth";
+import {
+  type AuthUser,
+  type NavigationAppPreference,
+  navigationAppPreferences,
+  type UserRole,
+  userRoles,
+} from "#shared/types/auth";
 import { getMongoConfig } from "./mongodb.js";
 import { sendAuthEmail } from "./email.js";
 
@@ -20,6 +26,7 @@ type BetterAuthUserDocument = {
   name: string;
   image?: string | null;
   role?: UserRole | string | null;
+  navigationAppPreference?: NavigationAppPreference | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -58,9 +65,35 @@ function getOrigin(value: string) {
   }
 }
 
-function getFallbackAuthUrl() {
+function getOriginFromHost(host: string | undefined) {
+  if (!host) return null;
+
+  return getOrigin(host.includes("://") ? host : `https://${host}`);
+}
+
+function getVercelDeploymentOrigins() {
+  return [
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+  ]
+    .map(getOriginFromHost)
+    .filter((origin): origin is string => Boolean(origin));
+}
+
+function getAuthBaseUrl() {
+  if (process.env.VERCEL_ENV === "preview") {
+    const previewOrigin = getOriginFromHost(process.env.VERCEL_URL);
+
+    if (previewOrigin) {
+      return previewOrigin;
+    }
+  }
+
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+
+  const vercelOrigin = getOriginFromHost(process.env.VERCEL_URL);
+  if (vercelOrigin) return vercelOrigin;
 
   return "http://localhost:3000";
 }
@@ -69,7 +102,8 @@ function getTrustedOrigins() {
   return Array.from(
     new Set([
       ...getEnvList("BETTER_AUTH_TRUSTED_ORIGINS"),
-      getOrigin(getFallbackAuthUrl()),
+      ...getVercelDeploymentOrigins(),
+      getOrigin(getAuthBaseUrl()),
       "https://pawpaths.nl",
       "https://www.pawpaths.nl",
       "http://localhost:3000",
@@ -167,6 +201,18 @@ function toMongoId(id: string) {
   return ObjectId.isValid(id) ? new ObjectId(id) : id;
 }
 
+function getUserIdQuery(id: string) {
+  return {
+    $or: [{ _id: toMongoId(id) }, { id }],
+  };
+}
+
+function toNavigationAppPreference(value: unknown): NavigationAppPreference {
+  return navigationAppPreferences.includes(value as NavigationAppPreference)
+    ? (value as NavigationAppPreference)
+    : "device";
+}
+
 function toAuthUser(user: BetterAuthUserDocument): AuthUser {
   const role = userRoles.includes(user.role as UserRole)
     ? (user.role as UserRole)
@@ -179,9 +225,37 @@ function toAuthUser(user: BetterAuthUserDocument): AuthUser {
     name: user.name,
     image: user.image ?? null,
     role,
+    navigationAppPreference: toNavigationAppPreference(
+      user.navigationAppPreference,
+    ),
     createdAt: toDateString(user.createdAt),
     updatedAt: toDateString(user.updatedAt),
   };
+}
+
+function getDevAuthUser() {
+  if (process.env.NODE_ENV === "production") return null;
+
+  const role = process.env.DEV_AUTH_ROLE as UserRole | undefined;
+
+  if (!role || !userRoles.includes(role)) return null;
+
+  const now = new Date().toISOString();
+  const email = process.env.DEV_AUTH_EMAIL || `dev-${role}@pawpaths.local`;
+
+  return {
+    id: `dev-${role}`,
+    email,
+    emailVerified: true,
+    name: process.env.DEV_AUTH_NAME || `Dev ${role}`,
+    image: null,
+    role,
+    navigationAppPreference: toNavigationAppPreference(
+      process.env.DEV_AUTH_NAVIGATION_APP,
+    ),
+    createdAt: now,
+    updatedAt: now,
+  } satisfies AuthUser;
 }
 
 async function getBetterAuthUserCollection(db: Db = authDb) {
@@ -191,7 +265,7 @@ async function getBetterAuthUserCollection(db: Db = authDb) {
 
 export const auth = betterAuth({
   appName: "PawPaths",
-  baseURL: getFallbackAuthUrl(),
+  baseURL: getAuthBaseUrl(),
   trustedOrigins: getTrustedOrigins(),
   secret: process.env.BETTER_AUTH_SECRET,
   advanced: {
@@ -264,6 +338,10 @@ export const auth = betterAuth({
 });
 
 export async function getCurrentUser(event: H3Event) {
+  const devUser = getDevAuthUser();
+
+  if (devUser) return devUser;
+
   const session = await auth.api.getSession({
     headers: toWebRequest(event).headers,
   });
@@ -338,8 +416,50 @@ export async function updateUserRole(
   const result = await (
     await getBetterAuthUserCollection()
   ).findOneAndUpdate(
-    { _id: toMongoId(userId) },
+    getUserIdQuery(userId),
     { $set: { role: role as UserRole, updatedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+
+  if (!result) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "User not found.",
+    });
+  }
+
+  return toAuthUser(result);
+}
+
+export async function updateCurrentUserProfile(
+  event: H3Event,
+  payload: {
+    navigationAppPreference?: unknown;
+  },
+) {
+  const currentUser = await requireCurrentUser(event);
+  const navigationAppPreference = toNavigationAppPreference(
+    payload.navigationAppPreference,
+  );
+
+  if (currentUser.id.startsWith("dev-")) {
+    return {
+      ...currentUser,
+      navigationAppPreference,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const result = await (
+    await getBetterAuthUserCollection()
+  ).findOneAndUpdate(
+    getUserIdQuery(currentUser.id),
+    {
+      $set: {
+        navigationAppPreference,
+        updatedAt: new Date(),
+      },
+    },
     { returnDocument: "after" },
   );
 
