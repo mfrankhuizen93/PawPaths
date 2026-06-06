@@ -29,7 +29,7 @@ export function getAdminNavigationItems(options: {
   const submissionsItem = {
     label: "Submissions",
     icon: "i-lucide-inbox",
-    to: "/admin#submissions",
+    to: "/admin/submissions",
     badge:
       options.pendingContributions && options.pendingContributions > 0
         ? options.pendingContributions
@@ -49,7 +49,7 @@ export function getAdminNavigationItems(options: {
               {
                 label: "Users",
                 icon: "i-lucide-users",
-                to: "/admin#users",
+                to: "/admin/users",
               },
             ]
           : []),
