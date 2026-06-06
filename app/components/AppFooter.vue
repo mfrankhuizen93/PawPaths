@@ -1,5 +1,31 @@
 <script lang="ts" setup>
-import { footerNavigationItems } from "~/navigation/items";
+import {
+  footerNavigationItems,
+  getAdminNavigationItems,
+} from "~/navigation/items";
+
+const { isAdmin, isMaintainer } = useAuth();
+const { count: pendingContributions, refresh } = usePendingContributions();
+
+const navigationItems = computed(() => [
+  ...footerNavigationItems,
+  ...(isMaintainer.value
+    ? [
+        getAdminNavigationItems({
+          isAdmin: isAdmin.value,
+          pendingContributions: pendingContributions.value,
+        }).submissionsItem,
+      ]
+    : []),
+]);
+
+watch(
+  isMaintainer,
+  (canReview) => {
+    if (canReview && pendingContributions.value === null) void refresh();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -13,7 +39,7 @@ import { footerNavigationItems } from "~/navigation/items";
   >
     <USeparator />
     <UNavigationMenu
-      :items="footerNavigationItems"
+      :items="navigationItems"
       :ui="{
         root: 'justify-center [&>div]:w-full',
         item: 'w-full py-0',
