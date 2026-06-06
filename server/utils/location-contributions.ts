@@ -350,7 +350,10 @@ async function createContributionIndexes(db: Db) {
     contributions.createIndex({ "submitter.id": 1, createdAt: -1 }),
     locations.createIndex(
       { sourceContributionId: 1 },
-      { unique: true, sparse: true },
+      {
+        unique: true,
+        partialFilterExpression: { sourceContributionId: { $type: "objectId" } },
+      },
     ),
   ]);
 }

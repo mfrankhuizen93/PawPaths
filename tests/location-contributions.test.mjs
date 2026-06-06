@@ -26,7 +26,8 @@ Module._resolveFilename = function resolveNuxtAliases(
 
 const { default: locationContributions } =
   await import("../server/utils/location-contributions.ts");
-const { reviewContribution } = locationContributions;
+const { ensureContributionIndexes, reviewContribution } =
+  locationContributions;
 
 const admin = {
   id: "admin-user",
@@ -72,7 +73,9 @@ function matches(document, filter) {
 function createCollection(documents = []) {
   return {
     documents,
+    indexes: [],
     async createIndex() {
+      this.indexes.push([...arguments]);
       return "ok";
     },
     async findOne(filter) {
@@ -181,6 +184,28 @@ test("approving a new location creates one published location and completes the 
   assert.equal(result.status, "approved");
   assert.equal(result.locationSlug, location.slug);
   assert.equal(result.locationId, location._id.toString());
+});
+
+test("contribution indexes only require real contribution source ids to be unique", async () => {
+  const db = createDb();
+
+  await ensureContributionIndexes(db);
+
+  assert.deepEqual(
+    db.collections.locations.indexes.find(
+      ([keys]) => keys.sourceContributionId === 1,
+    ),
+    [
+      { sourceContributionId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: {
+          sourceContributionId: { $type: "objectId" },
+        },
+      },
+    ],
+  );
+  assert.equal(db.collections.contributions.indexes.length, 3);
 });
 
 test("retrying approval after a previous location insert reuses the existing location", async () => {

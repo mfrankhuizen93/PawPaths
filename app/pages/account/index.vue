@@ -48,6 +48,7 @@ const contributionsError = ref("");
 const isLoadingContributions = ref(false);
 const reviewingContribution = ref("");
 const reviewingContributionAction = ref<"approve" | "reject" | "save" | "">("");
+const previewingContribution = ref("");
 const savingRoleFor = ref("");
 const profileError = ref("");
 const profileMessage = ref("");
@@ -195,7 +196,13 @@ function isEditingContribution(contribution: LocationContribution) {
   return contributionEditModes[contribution.id] === true;
 }
 
+function toggleContributionPreview(contribution: LocationContribution) {
+  previewingContribution.value =
+    previewingContribution.value === contribution.id ? "" : contribution.id;
+}
+
 function editContribution(contribution: LocationContribution) {
+  previewingContribution.value = "";
   contributionEdits[contribution.id] = cloneLocationFields(
     contribution.payload,
   );
@@ -432,6 +439,9 @@ async function reviewContribution(
     contributions.value = contributions.value.filter(
       (item) => item.id !== contribution.id,
     );
+    if (previewingContribution.value === contribution.id) {
+      previewingContribution.value = "";
+    }
     delete contributionEdits[contribution.id];
     delete contributionEditModes[contribution.id];
   } catch (error) {
@@ -1028,13 +1038,40 @@ onMounted(() => {
               </p>
             </div>
             <div class="sm:col-span-2">
-              <p class="mb-2 font-semibold text-slate-950">Location points</p>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <p class="font-semibold text-slate-950">Location points</p>
+                <UButton
+                  color="neutral"
+                  icon="i-lucide-map"
+                  :label="
+                    previewingContribution === contribution.id
+                      ? 'Hide map'
+                      : 'Show map'
+                  "
+                  size="xs"
+                  type="button"
+                  variant="ghost"
+                  @click="toggleContributionPreview(contribution)"
+                />
+              </div>
               <AppLocationPointPicker
+                v-if="previewingContribution === contribution.id"
                 :latitude="contribution.payload.latitude"
                 :longitude="contribution.payload.longitude"
                 :markers="getContributionMapMarkers(contribution.payload)"
                 readonly
               />
+              <p v-else class="text-slate-600">
+                {{
+                  (contribution.payload.coordinatePoints?.length ?? 0) + 1
+                }}
+                mapped
+                {{
+                  (contribution.payload.coordinatePoints?.length ?? 0) + 1 === 1
+                    ? "point"
+                    : "points"
+                }}
+              </p>
             </div>
             <p
               v-if="contribution.payload.description"
