@@ -1,6 +1,10 @@
 <script lang="ts" setup>
 import type { AuthUser, UserRole } from "#shared/types/auth";
 
+definePageMeta({
+  middleware: "admin",
+});
+
 type UsersResponse = {
   users: AuthUser[];
 };

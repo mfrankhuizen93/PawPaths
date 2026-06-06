@@ -4,6 +4,10 @@ import type {
   LocationContribution,
 } from "#shared/types/locations";
 
+definePageMeta({
+  middleware: "maintainer",
+});
+
 type ContributionsResponse = {
   contributions: LocationContribution[];
 };
