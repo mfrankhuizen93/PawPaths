@@ -507,9 +507,13 @@ watch(selectedLocation, (location) => {
   <div class="flex h-full min-h-0 flex-col gap-6">
     <div
       v-if="pending && locations.length === 0"
-      class="rounded-md border border-slate-200 bg-white p-4 text-slate-600"
+      class="border-default flex min-h-72 flex-1 flex-col gap-4 rounded-lg border p-4"
     >
-      Loading locations...
+      <div class="flex items-center justify-between gap-4">
+        <USkeleton class="h-10 w-48" />
+        <USkeleton class="h-10 w-24" />
+      </div>
+      <USkeleton class="min-h-56 w-full flex-1" />
     </div>
 
     <div
@@ -547,6 +551,7 @@ watch(selectedLocation, (location) => {
       v-model:open="isLocationDrawerOpen"
       :snap-points="[0.6, 1.0]"
       :close-threshold="0.2"
+      direction="bottom"
     >
       <template #header>
         <div v-if="selectedLocation" class="flex flex-col gap-4">
@@ -718,9 +723,10 @@ watch(selectedLocation, (location) => {
                       />
                     </UFormField>
                     <UFormField label="Review">
-                      <textarea
+                      <UTextarea
                         v-model="reviewForm.text"
-                        class="focus:border-brand-500 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none"
+                        autoresize
+                        class="w-full"
                         required
                       />
                     </UFormField>

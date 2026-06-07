@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import type { EditableLocationFields } from "#shared/types/locations";
 import { locationDescriptionTemplate } from "#shared/utils/location-description";
+import AppPageHeader from "~/components/common/AppPageHeader.vue";
 
 const { isAdmin, isSignedIn } = useAuth();
 
@@ -78,15 +79,11 @@ async function submitLocation() {
 
 <template>
   <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6">
-    <section class="flex flex-col gap-2">
-      <p class="text-brand-600 text-sm font-semibold">Community</p>
-      <h1 class="font-title text-3xl font-extrabold text-slate-950">
-        Add a location
-      </h1>
-      <p class="max-w-2xl text-sm leading-6 text-slate-600">
-        New places are reviewed by maintainers before they appear on the map.
-      </p>
-    </section>
+    <AppPageHeader
+      description="New places are reviewed by maintainers before they appear on the map."
+      eyebrow="Community"
+      title="Add a location"
+    />
 
     <UAlert
       v-if="!isSignedIn"

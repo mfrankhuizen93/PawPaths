@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { NavigationAppPreference, UserRole } from "#shared/types/auth";
+import AppPageHeader from "~/components/common/AppPageHeader.vue";
 
 const route = useRoute();
 const {
@@ -256,12 +257,7 @@ onMounted(() => {
 
 <template>
   <div class="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6">
-    <section class="flex flex-col gap-2">
-      <p class="text-brand-600 text-sm font-semibold">Account</p>
-      <h1 class="font-title text-3xl font-extrabold text-slate-950">
-        PawPaths profile
-      </h1>
-    </section>
+    <AppPageHeader eyebrow="Account" title="PawPaths profile" />
 
     <section
       v-if="!isSignedIn"

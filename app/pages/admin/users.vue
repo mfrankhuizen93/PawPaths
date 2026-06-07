@@ -1,5 +1,8 @@
 <script lang="ts" setup>
 import type { AuthUser, UserRole } from "#shared/types/auth";
+import AppPageHeader from "~/components/common/AppPageHeader.vue";
+import UserRoleDrawer from "~/components/users/UserRoleDrawer.vue";
+import UserRolesTable from "~/components/users/UserRolesTable.vue";
 
 definePageMeta({
   middleware: "admin",
@@ -14,6 +17,13 @@ const usersError = ref("");
 const users = ref<AuthUser[]>([]);
 const isLoadingUsers = ref(false);
 const savingRoleFor = ref("");
+const selectedUser = ref<AuthUser | null>(null);
+const isUserDrawerOpen = computed({
+  get: () => Boolean(selectedUser.value),
+  set: (open) => {
+    if (!open) selectedUser.value = null;
+  },
+});
 
 const roleOptions = [
   { label: "User", value: "user" },
@@ -36,16 +46,6 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
 
   return "Something went wrong. Please try again.";
-}
-
-function getInitials(name: string | undefined, email: string | undefined) {
-  const label = name?.trim() || email?.trim() || "?";
-
-  return label
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 }
 
 async function loadUsers() {
@@ -81,11 +81,18 @@ async function updateRole(targetUser: AuthUser, role: UserRole) {
     if (index >= 0) users.value[index] = response.user;
 
     if (user.value?.id === response.user.id) user.value = response.user;
+    if (selectedUser.value?.id === response.user.id) {
+      selectedUser.value = response.user;
+    }
   } catch (error) {
     usersError.value = getErrorMessage(error);
   } finally {
     savingRoleFor.value = "";
   }
+}
+
+function openUser(account: AuthUser) {
+  selectedUser.value = account;
 }
 
 watch(
@@ -99,13 +106,23 @@ watch(
 
 <template>
   <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 sm:px-6">
-    <section class="flex flex-col gap-2">
-      <p class="text-brand-600 text-sm font-semibold">Administration</p>
-      <h1 class="font-title text-3xl font-extrabold text-slate-950">Users</h1>
-      <p class="max-w-2xl text-sm leading-6 text-slate-600">
-        Promote trusted reviewers or change account roles.
-      </p>
-    </section>
+    <AppPageHeader
+      :badge="isAdmin ? users.length : undefined"
+      description="Promote trusted reviewers or change account roles."
+      eyebrow="Administration"
+      title="Users"
+    >
+      <template v-if="isAdmin" #actions>
+        <UButton
+          :loading="isLoadingUsers"
+          aria-label="Refresh users"
+          icon="i-lucide-refresh-cw"
+          label="Refresh"
+          variant="subtle"
+          @click="loadUsers"
+        />
+      </template>
+    </AppPageHeader>
 
     <UAlert
       v-if="!isSignedIn"
@@ -128,24 +145,6 @@ watch(
     />
 
     <section v-else class="flex flex-col gap-4">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <h2 class="font-title text-2xl font-extrabold text-slate-950">
-            User accounts
-          </h2>
-          <p class="text-sm text-slate-600">
-            Assign the appropriate access level to each account.
-          </p>
-        </div>
-        <UButton
-          :loading="isLoadingUsers"
-          aria-label="Refresh users"
-          icon="i-lucide-refresh-cw"
-          variant="subtle"
-          @click="loadUsers"
-        />
-      </div>
-
       <UAlert
         v-if="usersError"
         :title="usersError"
@@ -154,37 +153,19 @@ watch(
         variant="soft"
       />
 
-      <UCard :ui="{ body: 'divide-y divide-slate-100 p-0 sm:p-0' }">
-        <div
-          v-for="account in users"
-          :key="account.id"
-          class="grid gap-4 p-4 sm:grid-cols-[1fr_12rem] sm:items-center"
-        >
-          <div class="flex min-w-0 items-center gap-3">
-            <UAvatar
-              :alt="account.name"
-              :src="account.image || undefined"
-              :text="getInitials(account.name, account.email)"
-            />
-            <div class="min-w-0">
-              <p class="truncate font-semibold text-slate-950">
-                {{ account.name }}
-              </p>
-              <p class="truncate text-sm text-slate-600">
-                {{ account.email }}
-              </p>
-            </div>
-          </div>
-
-          <USelect
-            :disabled="savingRoleFor === account.id"
-            :items="roleOptions"
-            :loading="savingRoleFor === account.id"
-            :model-value="account.role"
-            @update:model-value="updateRole(account, $event as UserRole)"
-          />
-        </div>
-      </UCard>
+      <UserRolesTable
+        :loading="isLoadingUsers"
+        :users="users"
+        @select-user="openUser"
+      />
     </section>
+
+    <UserRoleDrawer
+      v-model:open="isUserDrawerOpen"
+      :role-options="roleOptions"
+      :saving="savingRoleFor === selectedUser?.id"
+      :user="selectedUser"
+      @update-role="updateRole"
+    />
   </div>
 </template>
