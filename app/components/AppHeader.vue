@@ -1,5 +1,8 @@
 <script lang="ts" setup>
-import { headerNavigationItems } from "~/navigation/items";
+import {
+  getAdminNavigationItems,
+  headerNavigationItems,
+} from "~/navigation/items";
 import { useExploreQuery } from "~/composables/states";
 
 defineProps({
@@ -12,7 +15,28 @@ defineProps({
 defineEmits(["search"]);
 
 const activeFilters = useExploreQuery();
-const { user, isSignedIn } = useAuth();
+const { isAdmin, isMaintainer } = useAuth();
+const { count: pendingContributions, refresh } = usePendingContributions();
+
+const drawerNavigationItems = computed(() => [
+  ...headerNavigationItems,
+  ...(isMaintainer.value
+    ? [
+        getAdminNavigationItems({
+          isAdmin: isAdmin.value,
+          pendingContributions: pendingContributions.value,
+        }).adminGroup,
+      ]
+    : []),
+]);
+
+watch(
+  isMaintainer,
+  (canReview) => {
+    if (canReview && pendingContributions.value === null) void refresh();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -51,7 +75,7 @@ const { user, isSignedIn } = useAuth();
 
     <template #body>
       <UNavigationMenu
-        :items="headerNavigationItems"
+        :items="drawerNavigationItems"
         class="w-full"
         orientation="vertical"
       />

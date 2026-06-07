@@ -1,0 +1,11 @@
+{
+  "source": "staatsbosbeheer",
+  "scrapedAt": "2026-06-06T21:43:51.326Z",
+  "areaFilter": null,
+  "maxPages": 60,
+  "includeExisting": false,
+  "routeRows": 673,
+  "locationCandidates": 498,
+  "skippedDuplicates": 7,
+  "duplicateRadiusMeters": 350
+}
