@@ -55,8 +55,10 @@ function requestClose() {
       direction="bottom"
       :title="title"
       :ui="{
+        content: 'rounded-t-[1.75rem]',
         container: 'mx-auto w-full max-w-5xl',
         body: 'max-h-[70vh] overflow-y-auto',
+        handle: 'mt-3 h-1.5 w-10 rounded-full',
       }"
     >
       <template v-if="$slots.header" #header>

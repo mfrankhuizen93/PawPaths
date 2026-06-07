@@ -141,6 +141,16 @@ function syncLocations() {
   source.setData(getFeatureCollection());
 }
 
+function syncSelectedLocation() {
+  if (!map.value?.getLayer("pawpaths-location-selection")) return;
+
+  map.value.setFilter("pawpaths-location-selection", [
+    "all",
+    ["!", ["has", "point_count"]],
+    ["==", ["get", "id"], props.location?.id ?? ""],
+  ]);
+}
+
 function getUserLocationFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: "FeatureCollection",
@@ -210,6 +220,14 @@ function zoomToCoordinates(coordinates: [number, number]) {
     duration: 800,
     essential: true,
   });
+}
+
+function zoomIn() {
+  map.value?.zoomIn({ duration: 300 });
+}
+
+function zoomOut() {
+  map.value?.zoomOut({ duration: 300 });
 }
 
 function searchAddress(result: GeocodeResult) {
@@ -405,8 +423,8 @@ function addLocationLayers() {
     filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-color": "#ffffff",
-      "circle-radius": 10,
-      "circle-opacity": 0.86,
+      "circle-radius": 13,
+      "circle-opacity": 0.94,
     },
   });
 
@@ -429,10 +447,27 @@ function addLocationLayers() {
         "#6BBF73",
         "#E2F5E5",
       ],
-      "circle-radius": 6,
-      "circle-stroke-color": "#1a1a1a",
-      "circle-stroke-opacity": 0.18,
-      "circle-stroke-width": 1,
+      "circle-radius": 9,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-opacity": 1,
+      "circle-stroke-width": 2,
+    },
+  });
+
+  map.value.addLayer({
+    id: "pawpaths-location-selection",
+    type: "circle",
+    source: "pawpaths-locations",
+    filter: [
+      "all",
+      ["!", ["has", "point_count"]],
+      ["==", ["get", "id"], props.location?.id ?? ""],
+    ],
+    paint: {
+      "circle-color": "rgba(255, 255, 255, 0)",
+      "circle-radius": 16,
+      "circle-stroke-color": "#4d7c5e",
+      "circle-stroke-width": 3,
     },
   });
 
@@ -443,7 +478,7 @@ function addLocationLayers() {
     const clusterId = feature?.properties?.cluster_id;
     const source = getLocationsSource();
 
-    if (!map.value || clusterId === undefined || !source) return;
+    if (!map.value || !feature || clusterId === undefined || !source) return;
 
     const zoom = await source.getClusterExpansionZoom(clusterId);
     map.value.easeTo({
@@ -547,7 +582,6 @@ onMounted(async () => {
     attributionControl: false,
   });
 
-  map.value.addControl(new maplibregl.NavigationControl(), "top-right");
   map.value.addControl(new maplibregl.AttributionControl({ compact: true }));
 
   map.value.on("load", () => {
@@ -581,6 +615,8 @@ watch(
   () => {
     const coordinates = getLocationCoordinates(props.location);
 
+    syncSelectedLocation();
+
     if (isReady.value && coordinates) {
       zoomToCoordinates(coordinates);
     }
@@ -600,68 +636,117 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="false" class="flex items-stretch gap-2">
-    <UBadge
-      :aria-hidden="!isSearching"
-      :class="isSearching ? 'opacity-100' : 'opacity-0'"
-      color="primary"
-      variant="soft"
-    >
-      Searching
-    </UBadge>
-    <UBadge color="neutral" variant="soft">
-      {{ locationCountLabel }}
-    </UBadge>
-    <UButton
-      :disabled="!isReady"
-      :loading="isLocating"
-      color="neutral"
-      icon="i-lucide-crosshair"
-      size="sm"
-      variant="outline"
-      @click="zoomToMyLocation"
-    >
-      Me
-    </UButton>
-  </div>
-  <div class="bg-surface-muted relative h-full">
+  <div class="bg-muted relative h-full overflow-hidden">
     <div ref="mapContainer" class="h-full min-h-96 w-full" />
 
-    <div v-if="variant === 'search'" class="absolute top-4 left-4 z-10 w-64">
-      <AppAddressSearch
-        placeholder="Search address or place"
-        @selected="searchAddress"
+    <div
+      v-if="variant === 'search'"
+      class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))]"
+    >
+      <div
+        class="pointer-events-auto flex min-w-0 flex-1 items-center gap-3 sm:max-w-md"
+      >
+        <div
+          class="border-default/60 bg-default/88 min-w-0 flex-1 rounded-2xl border p-2 shadow-lg backdrop-blur-xl"
+        >
+          <AppAddressSearch
+            placeholder="Search PawPaths"
+            @selected="searchAddress"
+          />
+        </div>
+      </div>
+
+      <div class="pointer-events-auto flex shrink-0 items-center gap-2">
+        <slot name="actions" />
+      </div>
+    </div>
+
+    <div
+      v-if="variant === 'search'"
+      class="absolute right-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 sm:right-5 sm:bottom-5"
+    >
+      <div
+        class="border-default/60 bg-default/88 flex flex-col overflow-hidden rounded-2xl border shadow-lg backdrop-blur-xl"
+      >
+        <UButton
+          aria-label="Zoom in"
+          :disabled="!isReady"
+          color="neutral"
+          icon="i-lucide-plus"
+          size="lg"
+          square
+          variant="ghost"
+          @click="zoomIn"
+        />
+        <USeparator />
+        <UButton
+          aria-label="Zoom out"
+          :disabled="!isReady"
+          color="neutral"
+          icon="i-lucide-minus"
+          size="lg"
+          square
+          variant="ghost"
+          @click="zoomOut"
+        />
+      </div>
+
+      <UButton
+        aria-label="Go to my location"
+        :disabled="!isReady"
+        :loading="isLocating"
+        class="border-default/60 bg-default/88 rounded-2xl border shadow-lg backdrop-blur-xl"
+        color="neutral"
+        icon="i-lucide-navigation"
+        size="lg"
+        square
+        variant="ghost"
+        @click="zoomToMyLocation"
       />
     </div>
 
     <UAlert
       v-if="locationError"
       :title="locationError"
-      class="absolute top-24 left-4 z-10 max-w-sm shadow-sm"
+      class="absolute top-24 left-3 z-10 max-w-sm shadow-lg sm:top-28 sm:left-5"
       color="neutral"
       description="Allow location access in your browser, then try again."
-      icon="i-lucide-crosshair"
+      icon="i-lucide-navigation"
       variant="soft"
     />
 
     <div
       v-if="mappedLocations.length === 0"
-      class="pointer-events-none absolute inset-0 grid place-items-center"
+      class="pointer-events-none absolute inset-0 grid place-items-center p-6"
     >
-      <UAlert
+      <AppEmptyState
         :description="
           searchError
             ? 'Try moving the map or checking the location API.'
             : 'The current results do not include coordinates yet.'
         "
+        icon="i-lucide-map-pin-off"
         :title="
           searchError ? 'Could not search this area' : 'No mapped locations'
         "
-        class="max-w-sm bg-white shadow-sm"
-        color="neutral"
-        variant="soft"
+        class="bg-default/90 pointer-events-auto max-w-sm rounded-2xl shadow-lg backdrop-blur-xl"
       />
     </div>
+
+    <div
+      v-if="variant === 'search'"
+      class="bg-default/88 text-muted absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-10 hidden rounded-full px-3 py-2 text-xs font-medium shadow-sm backdrop-blur-xl sm:left-5 sm:block"
+    >
+      <span v-if="isSearching">Searching this area...</span>
+      <span v-else>{{ locationCountLabel }}</span>
+    </div>
   </div>
-  <!--  </UCard>-->
 </template>
+
+<style scoped>
+:deep(.maplibregl-ctrl-attrib) {
+  border-radius: 0.75rem 0 0;
+  background: color-mix(in srgb, var(--ui-bg) 88%, transparent);
+  backdrop-filter: blur(16px);
+}
+</style>

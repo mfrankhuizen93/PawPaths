@@ -14,6 +14,7 @@ const route = useRoute();
 const router = useRouter();
 const { isAdmin, isSignedIn } = useAuth();
 const authDrawer = useAuthDrawer();
+const addLocationDrawerOpen = useAddLocationDrawer();
 
 const typeOptions: Record<string, { icon: string; label: string }> = {
   park: {
@@ -86,6 +87,7 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
   },
 };
 const activeFilters = useExploreQuery();
+const filterDrawerOpen = ref(false);
 
 const isSubmittingChange = ref(false);
 const isSubmittingReview = ref(false);
@@ -191,6 +193,27 @@ const selectedLocationMeta = computed(() =>
     .filter(Boolean)
     .join(", "),
 );
+const activeFilterCount = computed(
+  () =>
+    Object.values(activeFilters.value).filter((value) =>
+      Array.isArray(value)
+        ? value.length > 0
+        : value !== undefined && value !== "",
+    ).length,
+);
+const selectedLocationDirectionsUrl = computed(() => {
+  const location = selectedLocation.value;
+
+  if (
+    !location ||
+    !Number.isFinite(location.latitude) ||
+    !Number.isFinite(location.longitude)
+  ) {
+    return undefined;
+  }
+
+  return `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`;
+});
 
 watch(
   data,
@@ -204,6 +227,22 @@ watch(
 function applyMapResults(response: LocationsResponse) {
   locations.value = response.items;
   total.value = response.total;
+}
+
+function openAddLocation() {
+  if (isSignedIn.value) {
+    addLocationDrawerOpen.value = true;
+  } else {
+    authDrawer.show("add");
+  }
+}
+
+function openProfile() {
+  if (isSignedIn.value) {
+    void navigateTo("/account");
+  } else {
+    authDrawer.show("profile");
+  }
 }
 
 function getErrorMessage(errorValue: unknown) {
@@ -424,34 +463,45 @@ watch(selectedLocation, (location) => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-6">
+  <div class="relative h-full min-h-0">
     <div
       v-if="pending && locations.length === 0"
-      class="border-default flex min-h-72 flex-1 flex-col gap-4 rounded-lg border p-4"
+      class="bg-muted relative h-full overflow-hidden"
     >
-      <div class="flex items-center justify-between gap-4">
-        <USkeleton class="h-10 w-48" />
-        <USkeleton class="h-10 w-24" />
-      </div>
-      <USkeleton class="min-h-56 w-full flex-1" />
-    </div>
-
-    <div
-      v-if="error || selectedLocationError"
-      class="rounded-md border border-red-200 bg-red-50 p-4 text-red-800"
-    >
-      {{ selectedLocationError || error }}
-      <button
-        v-if="error"
-        class="ml-2 font-semibold underline"
-        type="button"
-        @click="refresh()"
+      <USkeleton class="size-full rounded-none" />
+      <div
+        class="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5"
       >
-        Retry
-      </button>
+        <USkeleton class="h-14 min-w-0 flex-1 rounded-2xl sm:max-w-md" />
+        <div class="flex gap-2">
+          <USkeleton class="size-12 rounded-2xl" />
+          <USkeleton class="size-12 rounded-2xl" />
+        </div>
+      </div>
     </div>
 
-    <div v-if="!error" class="min-h-0 flex-1">
+    <UAlert
+      v-if="error || selectedLocationError"
+      :actions="
+        error
+          ? [
+              {
+                label: 'Retry',
+                color: 'error',
+                variant: 'subtle',
+                onClick: () => refresh(),
+              },
+            ]
+          : []
+      "
+      class="absolute top-24 left-3 z-20 max-w-sm shadow-lg sm:top-28 sm:left-5"
+      color="error"
+      icon="i-lucide-circle-alert"
+      :title="selectedLocationError || String(error)"
+      variant="soft"
+    />
+
+    <div v-if="!error && !(pending && locations.length === 0)" class="h-full">
       <ClientOnly>
         <LazyAppLocation
           :filters="activeFilters"
@@ -462,7 +512,77 @@ watch(selectedLocation, (location) => {
           variant="search"
           @location-selected="selectLocation"
           @locations-loaded="applyMapResults"
-        />
+        >
+          <template #actions>
+            <UDrawer
+              v-model:open="filterDrawerOpen"
+              description="Choose the places and features shown on the map."
+              direction="bottom"
+              title="Filters"
+              :ui="{
+                container: 'mx-auto w-full max-w-3xl',
+                body: 'max-h-[70vh] overflow-y-auto',
+              }"
+            >
+              <UButton
+                aria-label="Filter locations"
+                class="border-default/60 bg-default/88 rounded-2xl border shadow-lg backdrop-blur-xl"
+                color="neutral"
+                icon="i-lucide-sliders-horizontal"
+                size="lg"
+                square
+                variant="ghost"
+              >
+                <template v-if="activeFilterCount" #trailing>
+                  <span
+                    class="bg-primary text-inverted absolute -top-1 -right-1 grid size-5 place-items-center rounded-full text-[10px] font-bold"
+                  >
+                    {{ activeFilterCount }}
+                  </span>
+                </template>
+              </UButton>
+
+              <template #body>
+                <AppLocationFilters
+                  v-model="activeFilters"
+                  :result-count="locations.length"
+                  :total="total"
+                />
+              </template>
+            </UDrawer>
+
+            <UButton
+              aria-label="Add location"
+              class="border-default/60 bg-default/88 hidden rounded-2xl border shadow-lg backdrop-blur-xl sm:inline-flex"
+              color="neutral"
+              icon="i-lucide-plus"
+              label="Add"
+              size="lg"
+              variant="ghost"
+              @click="openAddLocation"
+            />
+            <UButton
+              aria-label="Add location"
+              class="border-default/60 bg-default/88 rounded-2xl border shadow-lg backdrop-blur-xl sm:hidden"
+              color="neutral"
+              icon="i-lucide-plus"
+              size="lg"
+              square
+              variant="ghost"
+              @click="openAddLocation"
+            />
+            <UButton
+              aria-label="Open profile"
+              class="border-default/60 bg-default/88 rounded-2xl border shadow-lg backdrop-blur-xl"
+              color="neutral"
+              icon="i-lucide-circle-user-round"
+              size="lg"
+              square
+              variant="ghost"
+              @click="openProfile"
+            />
+          </template>
+        </LazyAppLocation>
       </ClientOnly>
     </div>
 
@@ -478,14 +598,14 @@ watch(selectedLocation, (location) => {
             <div class="min-w-0 flex-1">
               <p
                 v-if="selectedLocation?.type?.[0]"
-                class="text-brand-600 text-sm font-semibold"
+                class="text-primary text-sm font-semibold"
               >
                 {{ getTypeMeta(selectedLocation.type[0])?.label }}
               </p>
-              <h2 class="font-title text-2xl font-extrabold text-slate-950">
+              <h2 class="font-title text-highlighted text-2xl font-extrabold">
                 {{ selectedLocation?.name }}
               </h2>
-              <p v-if="selectedLocationMeta" class="text-sm text-slate-600">
+              <p v-if="selectedLocationMeta" class="text-muted text-sm">
                 {{ selectedLocationMeta }}
               </p>
             </div>
@@ -498,6 +618,25 @@ watch(selectedLocation, (location) => {
                 variant="ghost"
               />
             </UDropdownMenu>
+          </div>
+
+          <div class="flex gap-3 overflow-x-auto pb-1">
+            <UButton
+              v-if="selectedLocationDirectionsUrl"
+              :to="selectedLocationDirectionsUrl"
+              color="primary"
+              icon="i-lucide-navigation"
+              label="Directions"
+              target="_blank"
+              variant="soft"
+            />
+            <UButton
+              color="neutral"
+              icon="i-lucide-pencil"
+              label="Suggest edit"
+              variant="soft"
+              @click="isSignedIn ? beginEditing() : authDrawer.show('profile')"
+            />
           </div>
 
           <div
@@ -626,7 +765,10 @@ watch(selectedLocation, (location) => {
         </AppLocationForm>
       </template>
 
-      <template v-if="selectedLocation" #actions="{ close }">
+      <template
+        v-if="selectedLocation && locationMode === 'edit'"
+        #actions="{ close }"
+      >
         <AppDrawerActions>
           <UButton
             color="neutral"
@@ -636,7 +778,6 @@ watch(selectedLocation, (location) => {
             @click="close"
           />
           <UButton
-            v-if="locationMode === 'edit'"
             form="location-detail-form"
             icon="i-lucide-save"
             label="Save"
