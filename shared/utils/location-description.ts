@@ -14,6 +14,7 @@ export const locationDescriptionTemplate = `**What makes this location unique?**
 …
 
 **What local tips would you share?**
+Think parking, quieter times, facilities, footwear, or nearby dog-friendly stops.
 …`;
 
 export const locationDescriptionSectionLabels = [
