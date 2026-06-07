@@ -12,7 +12,7 @@ type ContributionsResponse = {
   contributions: LocationContribution[];
 };
 
-const { isMaintainer, isSignedIn } = useAuth();
+const { isAdmin, isMaintainer, isSignedIn } = useAuth();
 const { count: pendingContributionCount } = usePendingContributions();
 
 const contributions = ref<LocationContribution[]>([]);
@@ -470,6 +470,7 @@ watch(
               <AppLocationForm
                 v-else
                 v-model="contributionEdits[contribution.id]"
+                :can-generate-description="isAdmin"
                 point-help="Adjust the general point on the map before approving."
                 :show-submit="false"
                 @submit="reviewContribution(contribution, 'save')"

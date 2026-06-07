@@ -1,7 +1,8 @@
 <script lang="ts" setup>
 import type { EditableLocationFields } from "#shared/types/locations";
+import { locationDescriptionTemplate } from "#shared/utils/location-description";
 
-const { isSignedIn } = useAuth();
+const { isAdmin, isSignedIn } = useAuth();
 
 const isSubmitting = ref(false);
 const message = ref("");
@@ -17,7 +18,7 @@ const form = reactive<EditableLocationFields>({
   type: [],
   characteristics: [],
   coordinatePoints: [],
-  description: "",
+  description: locationDescriptionTemplate,
   relatedUrls: [],
   photos: [],
 });
@@ -49,7 +50,7 @@ function resetForm() {
   form.type = [];
   form.characteristics = [];
   form.coordinatePoints = [];
-  form.description = "";
+  form.description = locationDescriptionTemplate;
   form.relatedUrls = [];
   form.photos = [];
   formResetKey.value += 1;
@@ -111,6 +112,7 @@ async function submitLocation() {
       :error="error"
       :message="message"
       :reset-key="formResetKey"
+      :can-generate-description="isAdmin"
       :submitting="isSubmitting"
       submit-label="Submit for review"
       @submit="submitLocation"

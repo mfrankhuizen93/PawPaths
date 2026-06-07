@@ -6,11 +6,13 @@ import type {
   LocationPhoto,
 } from "#shared/types/locations";
 import { locationCoordinateKindOptions } from "#shared/types/locations";
+import { isLocationDescriptionTemplate } from "#shared/utils/location-description";
 import { z } from "zod";
 
 const props = withDefaults(
   defineProps<{
     error?: string;
+    canGenerateDescription?: boolean;
     message?: string;
     pointHelp?: string;
     resetKey?: string | number | null;
@@ -20,6 +22,7 @@ const props = withDefaults(
   }>(),
   {
     error: "",
+    canGenerateDescription: false,
     message: "",
     pointHelp: "Choose a point below, then click the map to place it.",
     resetKey: null,
@@ -168,6 +171,8 @@ const photoFiles = ref<File[]>([]);
 const activePointId = ref("general");
 const isReverseGeocoding = ref(false);
 const geocodeError = ref("");
+const descriptionGenerationError = ref("");
+const isGeneratingDescription = ref(false);
 const locationForm = ref<{
   clear: (name?: string | RegExp) => void;
   setErrors: (
@@ -731,10 +736,34 @@ function submitForm() {
   emit("submit");
 }
 
+async function generateDescription() {
+  if (!props.canGenerateDescription || isGeneratingDescription.value) return;
+
+  descriptionGenerationError.value = "";
+  isGeneratingDescription.value = true;
+
+  try {
+    const response = await $fetch<{ description: string }>(
+      "/api/location-description",
+      {
+        method: "POST",
+        body: form.value,
+      },
+    );
+
+    form.value.description = response.description;
+  } catch (errorValue) {
+    descriptionGenerationError.value = getErrorMessage(errorValue);
+  } finally {
+    isGeneratingDescription.value = false;
+  }
+}
+
 function resetLocalState() {
   activePointId.value = "general";
   photoFiles.value = [];
   clearPhotoFieldError();
+  descriptionGenerationError.value = "";
 }
 
 watch(
@@ -928,7 +957,32 @@ onBeforeUnmount(() => {
         <UInput v-model="form.name" icon="i-lucide-map-pin" required />
       </UFormField>
 
-      <UFormField label="Description" name="description">
+      <UFormField
+        description="Use the standard headings and keep the information practical and specific."
+        label="Description"
+        name="description"
+      >
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p class="text-xs text-slate-500">
+            The published description is shown as Markdown.
+          </p>
+          <UButton
+            v-if="canGenerateDescription"
+            color="primary"
+            icon="i-lucide-sparkles"
+            :label="
+              isLocationDescriptionTemplate(form.description) ||
+              !form.description?.trim()
+                ? 'Generate description'
+                : 'Regenerate description'
+            "
+            :loading="isGeneratingDescription"
+            size="sm"
+            type="button"
+            variant="subtle"
+            @click="generateDescription"
+          />
+        </div>
         <UEditor
           v-model="form.description"
           class="min-h-32 w-full overflow-hidden rounded-md border border-slate-200 bg-white"
@@ -951,6 +1005,14 @@ onBeforeUnmount(() => {
             </div>
           </template>
         </UEditor>
+        <UAlert
+          v-if="descriptionGenerationError"
+          class="mt-2"
+          :title="descriptionGenerationError"
+          color="error"
+          icon="i-lucide-circle-alert"
+          variant="soft"
+        />
       </UFormField>
 
       <div class="grid gap-4 sm:grid-cols-2">
