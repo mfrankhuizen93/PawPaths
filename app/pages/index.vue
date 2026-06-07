@@ -523,12 +523,6 @@ watch(selectedLocation, (location) => {
               {{ getWarningMeta(warning).label }}
             </UBadge>
           </div>
-
-          <AppPhotoLanes
-            v-if="selectedLocation?.photos?.length"
-            :location-name="selectedLocation.name"
-            :photos="selectedLocation?.photos"
-          />
         </div>
       </template>
       <template #default>

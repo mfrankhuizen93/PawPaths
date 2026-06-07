@@ -10,6 +10,7 @@ import { isLocationDescriptionTemplate } from "#shared/utils/location-descriptio
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import { z } from "zod";
 import AppTabs from "~/components/common/AppTabs.vue";
+import AppPhotoLanes from "~/components/AppPhotoLanes.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -1030,14 +1031,29 @@ onBeforeUnmount(() => {
       </template>
 
       <template #photos>
+        <div v-if="readonly" class="pt-4">
+          <AppPhotoLanes
+            v-if="form.photos?.length"
+            :location-name="form.name"
+            :photos="form.photos"
+          />
+          <AppEmptyState
+            v-else
+            description="No photos have been added for this location."
+            icon="i-lucide-images"
+            title="No photos"
+          />
+        </div>
+
         <UFormField
+          v-else
           class="pt-4"
           description="Photos with location data can automatically create a POI on the map."
           label="Photos"
           name="photos"
         >
           <div class="flex flex-col gap-3">
-            <div v-if="!readonly" class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <UFileUpload
                 v-model="photoFiles"
                 v-slot="{ open }"
@@ -1085,7 +1101,6 @@ onBeforeUnmount(() => {
                   </p>
                 </div>
                 <UButton
-                  v-if="!readonly"
                   class="absolute top-2 right-2"
                   color="neutral"
                   icon="i-lucide-x"
