@@ -27,22 +27,22 @@ const { default: locationDescription } =
   await import("../server/utils/location-description.ts");
 const { generateLocationDescription } = locationDescription;
 
-const markdown = `## What makes this location unique?
+const markdown = `**What makes this location unique?**
 A quiet woodland loop.
 
-## Off-leash rules
+**Off-leash rules**
 Dogs may be off leash in the marked area.
 
-## Terrain & environment
+**Terrain & environment**
 Mostly unpaved forest paths.
 
-## Water access
+**Water access**
 Details have not been provided yet.
 
-## Safety considerations
+**Safety considerations**
 Watch for cyclists.
 
-## Local tips
+**Local tips**
 Visit early for easier parking.`;
 
 test("generates the required Markdown structure and includes existing notes", async () => {
@@ -88,7 +88,7 @@ test("rejects generated descriptions that omit a required section", async () => 
           return new Response(
             JSON.stringify({
               output_text: JSON.stringify({
-                markdown: "## What makes this location unique?\nA park.",
+                markdown: "**What makes this location unique?**\nA park.",
               }),
             }),
             { status: 200 },
