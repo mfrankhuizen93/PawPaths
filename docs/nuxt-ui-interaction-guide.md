@@ -393,3 +393,35 @@ PawPaths should feel like a consistent Nuxt UI app with a shared drawer-first
 detail pattern. Users browse overview screens, click an item, and inspect or
 manage it in a bottom drawer. The same interaction model should work across the
 map, community submissions, user roles, and future admin pages.
+
+## Branch Naming Convention
+
+Use a purpose prefix for every new branch:
+
+- `feature/` for new features or functionality
+- `bugfix/` for bug fixes
+- `hotfix/` for urgent production patches
+- `design/` for user interface or user experience updates
+- `refactor/` for code-structure improvements without behavior changes
+- `test/` for automated test additions or improvements
+- `doc/` for documentation changes
+
+Keep the remainder of the branch name short and descriptive:
+
+- Separate words with hyphens.
+- Describe the primary task or issue.
+- Avoid vague terms such as `update`, `changes`, or `stuff`.
+
+Examples:
+
+```text
+feature/saved-locations
+bugfix/map-marker-selection
+design/admin-drawers
+refactor/location-query
+test/contribution-review
+doc/branch-conventions
+```
+
+The existing `ux/nuxt-ui-drawer-first` branch predates this convention and may
+keep its current name. Apply the convention to branches created after it.

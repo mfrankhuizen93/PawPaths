@@ -15,5 +15,15 @@ Before changing a page or component:
 8. Use one `AppPageHeader` on every page except the fullscreen root map.
 9. Keep counts and page-level actions in that header; do not repeat headings.
 
+## Branch Names
+
+New branches must use one of these purpose prefixes:
+
+`feature/`, `bugfix/`, `hotfix/`, `design/`, `refactor/`, `test/`, or `doc/`.
+
+Keep names short and descriptive, use hyphens between words, and avoid vague
+terms such as `update`, `changes`, or `stuff`. The existing
+`ux/nuxt-ui-drawer-first` branch is exempt because it predates this convention.
+
 The full guide is normative. If it conflicts with an existing implementation,
 improve the implementation toward the guide without unrelated rewrites.
