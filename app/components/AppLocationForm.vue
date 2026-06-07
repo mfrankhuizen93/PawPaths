@@ -73,26 +73,6 @@ const secondaryToolbarButtonClass = "hidden sm:inline-flex";
 const descriptionEditorToolbarItems = [
   [
     {
-      icon: "i-lucide-heading-1",
-      kind: "heading",
-      level: 1,
-      tooltip: { text: "Heading 1" },
-    },
-    {
-      icon: "i-lucide-heading-2",
-      kind: "heading",
-      level: 2,
-      tooltip: { text: "Heading 2" },
-    },
-    {
-      icon: "i-lucide-heading-3",
-      kind: "heading",
-      level: 3,
-      tooltip: { text: "Heading 3" },
-    },
-  ],
-  [
-    {
       icon: "i-lucide-bold",
       kind: "mark",
       mark: "bold",
@@ -129,8 +109,6 @@ const descriptionEditorToolbarItems = [
       kind: "orderedList",
       tooltip: { text: "Numbered list" },
     },
-  ],
-  [
     {
       icon: "i-lucide-link",
       kind: "link",
@@ -958,7 +936,7 @@ onBeforeUnmount(() => {
       </UFormField>
 
       <UFormField
-        description="Use the standard headings and keep the information practical and specific."
+        description="Answer the prompts with practical, specific information."
         label="Description"
         name="description"
       >
@@ -985,7 +963,7 @@ onBeforeUnmount(() => {
         </div>
         <UEditor
           v-model="form.description"
-          class="min-h-32 w-full overflow-hidden rounded-md border border-slate-200 bg-white"
+          class="min-h-32 w-full min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white"
           content-type="markdown"
           placeholder="Write a Markdown description..."
           :ui="{
@@ -995,12 +973,12 @@ onBeforeUnmount(() => {
         >
           <template #default="{ editor }">
             <div
-              class="w-full max-w-full min-w-0 overflow-x-auto border-b border-slate-200 px-2 py-1 [-webkit-overflow-scrolling:touch]"
+              class="w-full min-w-0 overflow-hidden border-b border-slate-200 px-2 py-1"
             >
               <UEditorToolbar
                 :editor="editor"
                 :items="descriptionEditorToolbarItems"
-                class="min-w-max"
+                class="w-full flex-wrap gap-y-1"
               />
             </div>
           </template>
