@@ -1,28 +1,28 @@
-export const locationDescriptionTemplate = `## What makes this location unique?
-Describe the main reason someone would choose this location over another.
+export const locationDescriptionTemplate = `**What makes this location unique?**
+…
 
-## Off-leash rules
-Explain where and when dogs may be off leash, including any seasonal rules or restrictions.
+**What are the off-leash rules?**
+…
 
-## Terrain & environment
-Describe the paths, landscape, route length, accessibility, and what the walk feels like.
+**What is the terrain and environment like?**
+…
 
-## Water access
-Explain whether dogs can safely reach or swim in water.
+**Is there water access?**
+…
 
-## Safety considerations
-Mention roads, livestock, wildlife, cyclists, water quality, fencing, or other risks.
+**What should visitors know about safety?**
+…
 
-## Local tips
-Share practical advice about parking, busy times, facilities, footwear, or nearby dog-friendly stops.`;
+**What local tips would you share?**
+…`;
 
-export const locationDescriptionHeadings = [
-  "## What makes this location unique?",
-  "## Off-leash rules",
-  "## Terrain & environment",
-  "## Water access",
-  "## Safety considerations",
-  "## Local tips",
+export const locationDescriptionSectionLabels = [
+  "**What makes this location unique?**",
+  "**Off-leash rules**",
+  "**Terrain & environment**",
+  "**Water access**",
+  "**Safety considerations**",
+  "**Local tips**",
 ] as const;
 
 export function isLocationDescriptionTemplate(value: unknown) {

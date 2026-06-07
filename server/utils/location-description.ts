@@ -2,7 +2,7 @@ import { createError } from "h3";
 import type { EditableLocationFields } from "#shared/types/locations";
 import {
   isLocationDescriptionTemplate,
-  locationDescriptionHeadings,
+  locationDescriptionSectionLabels,
 } from "#shared/utils/location-description";
 
 const MAX_DESCRIPTION_LENGTH = 6_000;
@@ -50,16 +50,16 @@ function validateDescription(markdown: unknown) {
     throw new Error("OpenAI returned HTML instead of Markdown.");
   }
 
-  let previousHeadingIndex = -1;
+  let previousLabelIndex = -1;
 
-  for (const heading of locationDescriptionHeadings) {
-    const headingIndex = description.indexOf(heading);
+  for (const label of locationDescriptionSectionLabels) {
+    const labelIndex = description.indexOf(label);
 
-    if (headingIndex <= previousHeadingIndex) {
+    if (labelIndex <= previousLabelIndex) {
       throw new Error("OpenAI returned an invalid description structure.");
     }
 
-    previousHeadingIndex = headingIndex;
+    previousLabelIndex = labelIndex;
   }
 
   return description;
@@ -131,8 +131,8 @@ export async function generateLocationDescription(
           content: [
             "You write concise location descriptions for dog owners.",
             "Write only in natural English and use Markdown.",
-            "Use exactly the six required level-two headings, in the supplied order.",
-            "Under each heading, write one short paragraph or a compact bullet list.",
+            "Use exactly the six required bold section labels, in the supplied order.",
+            "Under each label, write one short paragraph or a compact bullet list.",
             "Prioritize practical facts and what makes the location worth choosing.",
             "Take the existing description into account, but reorganize and improve it.",
             "Do not invent facts or infer rules from the location type.",
@@ -146,7 +146,7 @@ export async function generateLocationDescription(
             buildInput(location),
             null,
             2,
-          )}\n\nRequired headings:\n${locationDescriptionHeadings.join("\n")}`,
+          )}\n\nRequired bold section labels:\n${locationDescriptionSectionLabels.join("\n")}`,
         },
       ],
       text: {

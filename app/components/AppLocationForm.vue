@@ -958,7 +958,7 @@ onBeforeUnmount(() => {
       </UFormField>
 
       <UFormField
-        description="Use the standard headings and keep the information practical and specific."
+        description="Answer the prompts with practical, specific information."
         label="Description"
         name="description"
       >
