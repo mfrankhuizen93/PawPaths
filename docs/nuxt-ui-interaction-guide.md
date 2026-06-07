@@ -72,11 +72,20 @@ components/drawer/AppDrawerActions.vue
 Domain drawers should compose these shared components. Examples include
 `LocationDrawer`, `CommunitySubmissionDrawer`, and `UserRoleDrawer`.
 
+Do not add explicit Close buttons to drawers. `UDrawer` already supports its
+native handle, swipe gesture, overlay interaction, and keyboard dismissal.
+Reserve drawer actions for meaningful domain operations such as Save, Approve,
+or Reject.
+
 ## Root Map Page
 
 The root page shows the map. Clicking a marker sets `selectedLocation`, opens a
 bottom `LocationDrawer`, and renders location content in tabs. A marker click
 must not navigate to a detail page.
+
+The Add location action belongs in the map header beside Filters. It opens a
+bottom drawer containing the shared tabbed location form. Do not include Add in
+the mobile footer navigation.
 
 Recommended structure:
 
@@ -115,8 +124,9 @@ Recommended tabs:
 - Validation
 - History
 
-The location preview should reuse location content components. Approval,
-rejection, and editing actions belong in the Validation tab or drawer actions.
+Review submissions directly in the same tabbed `AppLocationForm` used for
+adding locations. Do not require a separate Edit action or duplicate readonly
+preview markup. Approval, saving, and rejection remain meaningful form actions.
 
 ## User Roles
 
@@ -136,6 +146,10 @@ Role-changing actions belong inside the drawer.
 Use `UTabs` when drawer content naturally belongs to distinct categories. Tabs
 should prevent drawers from becoming long, chaotic pages. Do not use tabs for
 tiny amounts of content; two short sections can use headings instead.
+
+Tab lists must be horizontally scrollable on small screens. Use short labels
+that remain readable without truncation, such as Info, Map, Photos, Reviews,
+Edit, Profile, Access, and Activity. Prefer the shared `AppTabs` wrapper.
 
 ## Loading States
 
@@ -188,6 +202,11 @@ available width.
 
 All input text must be at least 16px (`text-base`) to prevent iPhone Safari from
 zooming focused controls.
+
+Use the same tabbed `AppLocationForm` for adding, suggesting edits, and
+reviewing submissions. Its primary tabs are Details, Map, Photos, and Features.
+Do not expose implementation details such as Markdown formatting in user-facing
+helper text. PawPaths location forms do not include a Province field.
 
 Create and reuse app-level wrappers:
 
@@ -386,6 +405,10 @@ When implementing PawPaths UI:
 16. Use one `AppPageHeader` on every page except the fullscreen root map.
 17. Keep page counts and page-level actions in that header.
 18. Do not repeat the page title or description above the content.
+19. Do not add Close buttons to drawers.
+20. Make drawer tabs horizontally scrollable with short labels.
+21. Reuse the same tabbed location form for add, edit, and review flows.
+22. Keep Add location beside Filters on the map, not in footer navigation.
 
 ## Main Principle
 
@@ -422,6 +445,3 @@ refactor/location-query
 test/contribution-review
 doc/branch-conventions
 ```
-
-The existing `ux/nuxt-ui-drawer-first` branch predates this convention and may
-keep its current name. Apply the convention to branches created after it.

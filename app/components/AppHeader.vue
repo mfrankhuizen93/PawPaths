@@ -15,6 +15,7 @@ defineProps({
 defineEmits(["search"]);
 
 const activeFilters = useExploreQuery();
+const addLocationDrawerOpen = useAddLocationDrawer();
 const { isAdmin, isMaintainer } = useAuth();
 const { count: pendingContributions, refresh } = usePendingContributions();
 
@@ -49,6 +50,14 @@ watch(
     </template>
 
     <template #right>
+      <UButton
+        v-if="isExplore"
+        icon="i-lucide-circle-plus"
+        label="Add"
+        variant="subtle"
+        @click="addLocationDrawerOpen = true"
+      />
+
       <UDrawer
         v-if="isExplore"
         description="Refine your search by location, type, and more."

@@ -7,11 +7,6 @@ export const footerNavigationItems = [
     to: "/",
   },
   {
-    label: "Add",
-    icon: "i-lucide-circle-plus",
-    to: "/add",
-  },
-  {
     label: "Profile",
     icon: "i-lucide-circle-user-round",
     to: "/account",

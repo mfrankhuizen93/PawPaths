@@ -20,7 +20,6 @@ const { count: pendingContributionCount } = usePendingContributions();
 
 const contributions = ref<LocationContribution[]>([]);
 const contributionEdits = reactive<Record<string, EditableLocationFields>>({});
-const contributionEditModes = reactive<Record<string, boolean>>({});
 const contributionsError = ref("");
 const isLoadingContributions = ref(false);
 const reviewingContribution = ref("");
@@ -89,15 +88,10 @@ function syncContributionEdits() {
     contributionEdits[contribution.id] ??= cloneLocationFields(
       contribution.payload,
     );
-    contributionEditModes[contribution.id] ??= false;
   }
 
   for (const id of Object.keys(contributionEdits)) {
     if (!activeIds.has(id)) delete contributionEdits[id];
-  }
-
-  for (const id of Object.keys(contributionEditModes)) {
-    if (!activeIds.has(id)) delete contributionEditModes[id];
   }
 }
 
@@ -110,30 +104,6 @@ function getContributionEdit(contribution: LocationContribution) {
     contribution.payload,
   );
   return contributionEdits[contribution.id]!;
-}
-
-function isEditingContribution(contribution: LocationContribution) {
-  return Boolean(
-    contribution.id && contributionEditModes[contribution.id] === true,
-  );
-}
-
-function editContribution(contribution: LocationContribution) {
-  if (!contribution.id) return;
-
-  contributionEdits[contribution.id] = cloneLocationFields(
-    contribution.payload,
-  );
-  contributionEditModes[contribution.id] = true;
-}
-
-function cancelContributionEdit(contribution: LocationContribution) {
-  if (!contribution.id) return;
-
-  contributionEdits[contribution.id] = cloneLocationFields(
-    contribution.payload,
-  );
-  contributionEditModes[contribution.id] = false;
 }
 
 function getContributionPayload(contribution: LocationContribution) {
@@ -186,16 +156,13 @@ async function reviewContribution(
   reviewingContributionAction.value = action;
 
   try {
-    const shouldSendPayload =
-      action === "save" ||
-      (action === "approve" && isEditingContribution(contribution));
     const response = await $fetch<{ contribution: LocationContribution }>(
       `/api/contributions/${contributionId}`,
       {
         method: "PATCH",
         body: {
           action,
-          ...(shouldSendPayload
+          ...(action === "save" || action === "approve"
             ? { payload: getContributionPayload(contribution) }
             : {}),
         },
@@ -212,7 +179,6 @@ async function reviewContribution(
       contributionEdits[contributionId] = cloneLocationFields(
         response.contribution.payload,
       );
-      contributionEditModes[contributionId] = false;
       selectedSubmission.value = response.contribution;
       return;
     }
@@ -227,7 +193,6 @@ async function reviewContribution(
     }
 
     delete contributionEdits[contributionId];
-    delete contributionEditModes[contributionId];
   } catch (error) {
     contributionsError.value = getErrorMessage(error);
   } finally {
@@ -306,15 +271,10 @@ watch(
         v-model:open="isSubmissionDrawerOpen"
         :can-generate-description="isAdmin"
         :edit="selectedSubmissionEdit"
-        :editing="
-          selectedSubmission ? isEditingContribution(selectedSubmission) : false
-        "
         :reviewing="reviewingContribution === selectedSubmission?.id"
         :reviewing-action="reviewingContributionAction"
         :submission="selectedSubmission"
         @approve="reviewContribution($event, 'approve')"
-        @cancel-edit="cancelContributionEdit"
-        @edit-submission="editContribution"
         @reject="reviewContribution($event, 'reject')"
         @save="reviewContribution($event, 'save')"
         @update:edit="updateSelectedEdit"

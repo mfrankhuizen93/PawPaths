@@ -9,6 +9,8 @@ import type {
 import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
 import AppPhotoModal from "~/components/AppPhotoModal.vue";
+import AppTabs from "~/components/common/AppTabs.vue";
+import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import type { NavigationAppPreference } from "#shared/types/auth";
 
@@ -118,7 +120,7 @@ const reviewForm = reactive({
 
 const items = ref<TabsItem[]>([
   {
-    label: "Overview",
+    label: "Info",
     slot: "overview",
   },
   {
@@ -138,7 +140,7 @@ const items = ref<TabsItem[]>([
     slot: "reviews",
   },
   {
-    label: "Suggest edit",
+    label: "Edit",
     slot: "suggest-edit",
   },
 ]);
@@ -600,7 +602,7 @@ watch(selectedLocation, (location) => {
       </template>
       <template #body>
         <div v-if="activeSnapPoint > 0.6">
-          <UTabs :items="items" class="w-full" color="neutral" variant="link">
+          <AppTabs :items="items">
             <template #overview>
               <UEditor
                 v-model="selectedLocation.description"
@@ -826,10 +828,12 @@ watch(selectedLocation, (location) => {
                 {{ url.label }}
               </UButton>
             </template>
-          </UTabs>
+          </AppTabs>
         </div>
       </template>
     </UDrawer>
+
+    <LocationAddDrawer />
   </div>
 </template>
 

@@ -7,7 +7,9 @@ import type {
 } from "#shared/types/locations";
 import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { isLocationDescriptionTemplate } from "#shared/utils/location-description";
+import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import { z } from "zod";
+import AppTabs from "~/components/common/AppTabs.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -69,6 +71,12 @@ const characteristicItems = characteristicOptions.map((option) => ({
   label: option,
   value: option,
 }));
+const formTabs: TabsItem[] = [
+  { label: "Details", slot: "details", icon: "i-lucide-file-text" },
+  { label: "Map", slot: "map", icon: "i-lucide-map" },
+  { label: "Photos", slot: "photos", icon: "i-lucide-images" },
+  { label: "Features", slot: "features", icon: "i-lucide-list-checks" },
+];
 const secondaryToolbarButtonClass = "hidden sm:inline-flex";
 const descriptionEditorToolbarItems = [
   [
@@ -784,241 +792,255 @@ onBeforeUnmount(() => {
     class="flex flex-col gap-5 rounded-md border border-slate-200 bg-white p-5 shadow-sm"
     @submit="submitForm"
   >
-    <UFormField
-      description="Photos with location data can automatically create a POI on the map."
-      label="Photos"
-      name="photos"
-    >
-      <div class="flex flex-col gap-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <UFileUpload
-            v-model="photoFiles"
-            v-slot="{ open }"
-            accept="image/jpeg,image/png,image/webp"
-            :dropzone="false"
-            multiple
-            :preview="false"
-            reset
-            @change="handlePhotoChange"
+    <AppTabs :items="formTabs">
+      <template #details>
+        <div class="grid gap-4 pt-4">
+          <UFormField label="Name" name="name" required>
+            <UInput v-model="form.name" icon="i-lucide-map-pin" required />
+          </UFormField>
+
+          <UFormField
+            description="Answer the prompts with practical, specific information."
+            label="Description"
+            name="description"
           >
-            <UButton
-              color="neutral"
-              icon="i-lucide-image-plus"
-              label="Select photos"
-              type="button"
-              variant="subtle"
-              @click="open()"
-            />
-          </UFileUpload>
-          <span class="text-sm text-slate-500">
-            {{ form.photos?.length ?? 0 }} selected
-          </span>
-        </div>
-
-        <div v-if="form.photos?.length" class="grid gap-3 sm:grid-cols-3">
-          <div
-            v-for="(photo, index) in form.photos"
-            :key="`${photo.url.slice(0, 40)}-${index}`"
-            class="relative overflow-hidden rounded-md border border-slate-200"
-          >
-            <img
-              :alt="photo.alt || 'Selected location photo'"
-              :src="photo.url"
-              class="aspect-[4/3] w-full object-cover"
-            />
-            <div
-              class="border-t border-slate-200 bg-white p-2 text-xs text-slate-600"
-            >
-              <p v-if="photo.capturedAt">
-                Taken {{ formatPhotoDate(photo.capturedAt) }}
-              </p>
-              <p v-else>Photo date unavailable</p>
-              <p v-if="photo.latitude && photo.longitude">
-                POI created from photo location
-              </p>
-            </div>
-            <UButton
-              class="absolute top-2 right-2"
-              color="neutral"
-              icon="i-lucide-x"
-              size="xs"
-              type="button"
-              variant="solid"
-              @click="removePhoto(index)"
-            />
-          </div>
-        </div>
-      </div>
-    </UFormField>
-
-    <UFormField label="Location points" name="latitude" required>
-      <div class="flex flex-col gap-3">
-        <AppLocationPointPicker
-          v-model:latitude="activeLatitude"
-          v-model:longitude="activeLongitude"
-          :markers="mapMarkers"
-        />
-        <UAlert
-          color="neutral"
-          :description="pointHelp"
-          icon="i-lucide-map-pin"
-          title="Set location points"
-          variant="soft"
-        />
-        <UAlert
-          v-if="geocodeError"
-          :title="geocodeError"
-          color="warning"
-          icon="i-lucide-map-pinned"
-          variant="soft"
-        />
-        <div class="flex flex-wrap gap-2">
-          <UButton
-            color="neutral"
-            icon="i-lucide-car"
-            label="Add parking"
-            type="button"
-            variant="outline"
-            @click="addCoordinatePoint('parking')"
-          />
-          <UButton
-            color="neutral"
-            icon="i-lucide-door-open"
-            label="Add entrance"
-            type="button"
-            variant="outline"
-            @click="addCoordinatePoint('entrance')"
-          />
-          <UButton
-            color="neutral"
-            icon="i-lucide-map-pinned"
-            label="Add POI"
-            type="button"
-            variant="outline"
-            @click="addCoordinatePoint('poi')"
-          />
-          <UButton
-            color="neutral"
-            icon="i-lucide-plus"
-            label="Add other point"
-            type="button"
-            variant="outline"
-            @click="addCoordinatePoint('other')"
-          />
-        </div>
-        <MapMarkerCard
-          v-model="generalLocationMarker"
-          :is-active="activePointId === 'general'"
-          @click="activePointId = 'general'"
-        />
-
-        <template
-          v-for="(point, pointIndex) in form.coordinatePoints"
-          :key="point.id + '-' + pointIndex"
-        >
-          <MapMarkerCard
-            v-if="form?.coordinatePoints?.[pointIndex]"
-            v-model="form.coordinatePoints[pointIndex]"
-            :is-active="activePointId === point.id"
-            @click="activePointId = point.id ?? 'general'"
-            @remove="removeCoordinatePoint"
-          />
-        </template>
-        <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
-          Filling city, province, and country from the general location...
-        </p>
-      </div>
-    </UFormField>
-
-    <div class="grid gap-4">
-      <UFormField label="Name" name="name" required>
-        <UInput v-model="form.name" icon="i-lucide-map-pin" required />
-      </UFormField>
-
-      <UFormField
-        description="Answer the prompts with practical, specific information."
-        label="Description"
-        name="description"
-      >
-        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p class="text-xs text-slate-500">
-            The published description is shown as Markdown.
-          </p>
-          <UButton
-            v-if="canGenerateDescription"
-            color="primary"
-            icon="i-lucide-sparkles"
-            :label="
-              isLocationDescriptionTemplate(form.description) ||
-              !form.description?.trim()
-                ? 'Generate description'
-                : 'Regenerate description'
-            "
-            :loading="isGeneratingDescription"
-            size="sm"
-            type="button"
-            variant="subtle"
-            @click="generateDescription"
-          />
-        </div>
-        <UEditor
-          v-model="form.description"
-          class="min-h-32 w-full min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white"
-          content-type="markdown"
-          placeholder="Write a Markdown description..."
-          :ui="{
-            content: 'min-h-32',
-            base: 'min-h-32 px-3 py-2 text-sm leading-5 font-sans text-slate-950 sm:px-3 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
-          }"
-        >
-          <template #default="{ editor }">
-            <div
-              class="w-full min-w-0 overflow-hidden border-b border-slate-200 px-2 py-1"
-            >
-              <UEditorToolbar
-                :editor="editor"
-                :items="descriptionEditorToolbarItems"
-                class="w-full flex-wrap gap-y-1"
+            <div class="mb-2 flex justify-end">
+              <UButton
+                v-if="canGenerateDescription"
+                color="primary"
+                icon="i-lucide-sparkles"
+                :label="
+                  isLocationDescriptionTemplate(form.description) ||
+                  !form.description?.trim()
+                    ? 'Generate description'
+                    : 'Regenerate description'
+                "
+                :loading="isGeneratingDescription"
+                size="sm"
+                type="button"
+                variant="subtle"
+                @click="generateDescription"
               />
             </div>
-          </template>
-        </UEditor>
-        <UAlert
-          v-if="descriptionGenerationError"
-          class="mt-2"
-          :title="descriptionGenerationError"
-          color="error"
-          icon="i-lucide-circle-alert"
-          variant="soft"
-        />
-      </UFormField>
+            <UEditor
+              v-model="form.description"
+              class="min-h-32 w-full min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white"
+              content-type="markdown"
+              placeholder="Describe this location..."
+              :ui="{
+                content: 'min-h-32',
+                base: 'min-h-32 px-3 py-2 text-base leading-5 font-sans text-slate-950 sm:px-3 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
+              }"
+            >
+              <template #default="{ editor }">
+                <div
+                  class="w-full min-w-0 overflow-hidden border-b border-slate-200 px-2 py-1"
+                >
+                  <UEditorToolbar
+                    :editor="editor"
+                    :items="descriptionEditorToolbarItems"
+                    class="w-full flex-wrap gap-y-1"
+                  />
+                </div>
+              </template>
+            </UEditor>
+            <UAlert
+              v-if="descriptionGenerationError"
+              class="mt-2"
+              :title="descriptionGenerationError"
+              color="error"
+              icon="i-lucide-circle-alert"
+              variant="soft"
+            />
+          </UFormField>
 
-      <div class="grid gap-4 sm:grid-cols-2">
-        <UFormField label="City" name="city" required>
-          <UInput v-model="form.city" icon="i-lucide-building-2" required />
-        </UFormField>
-        <UFormField label="Province" name="province">
-          <UInput v-model="form.province" icon="i-lucide-map" />
-        </UFormField>
-        <UFormField label="Country" name="country" required>
-          <UInput v-model="form.country" icon="i-lucide-globe-2" required />
-        </UFormField>
-      </div>
-    </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <UFormField label="City" name="city" required>
+              <UInput v-model="form.city" icon="i-lucide-building-2" required />
+            </UFormField>
+            <UFormField label="Country" name="country" required>
+              <UInput v-model="form.country" icon="i-lucide-globe-2" required />
+            </UFormField>
+          </div>
+        </div>
+      </template>
 
-    <div class="grid gap-5 sm:grid-cols-2">
-      <UFormField label="Type" name="type">
-        <UCheckboxGroup v-model="form.type" :items="typeItems" name="type" />
-      </UFormField>
+      <template #map>
+        <UFormField
+          class="pt-4"
+          label="Location points"
+          name="latitude"
+          required
+        >
+          <div class="flex flex-col gap-3">
+            <AppLocationPointPicker
+              v-model:latitude="activeLatitude"
+              v-model:longitude="activeLongitude"
+              :markers="mapMarkers"
+            />
+            <UAlert
+              color="neutral"
+              :description="pointHelp"
+              icon="i-lucide-map-pin"
+              title="Set location points"
+              variant="soft"
+            />
+            <UAlert
+              v-if="geocodeError"
+              :title="geocodeError"
+              color="warning"
+              icon="i-lucide-map-pinned"
+              variant="soft"
+            />
+            <div class="flex flex-wrap gap-2">
+              <UButton
+                color="neutral"
+                icon="i-lucide-car"
+                label="Add parking"
+                type="button"
+                variant="outline"
+                @click="addCoordinatePoint('parking')"
+              />
+              <UButton
+                color="neutral"
+                icon="i-lucide-door-open"
+                label="Add entrance"
+                type="button"
+                variant="outline"
+                @click="addCoordinatePoint('entrance')"
+              />
+              <UButton
+                color="neutral"
+                icon="i-lucide-map-pinned"
+                label="Add POI"
+                type="button"
+                variant="outline"
+                @click="addCoordinatePoint('poi')"
+              />
+              <UButton
+                color="neutral"
+                icon="i-lucide-plus"
+                label="Add other point"
+                type="button"
+                variant="outline"
+                @click="addCoordinatePoint('other')"
+              />
+            </div>
+            <MapMarkerCard
+              v-model="generalLocationMarker"
+              :is-active="activePointId === 'general'"
+              @click="activePointId = 'general'"
+            />
 
-      <UFormField label="Characteristics" name="characteristics">
-        <UCheckboxGroup
-          v-model="form.characteristics"
-          :items="characteristicItems"
-          name="characteristics"
-        />
-      </UFormField>
-    </div>
+            <template
+              v-for="(point, pointIndex) in form.coordinatePoints"
+              :key="point.id + '-' + pointIndex"
+            >
+              <MapMarkerCard
+                v-if="form?.coordinatePoints?.[pointIndex]"
+                v-model="form.coordinatePoints[pointIndex]"
+                :is-active="activePointId === point.id"
+                @click="activePointId = point.id ?? 'general'"
+                @remove="removeCoordinatePoint"
+              />
+            </template>
+            <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
+              Filling city and country from the general location...
+            </p>
+          </div>
+        </UFormField>
+      </template>
+
+      <template #photos>
+        <UFormField
+          class="pt-4"
+          description="Photos with location data can automatically create a POI on the map."
+          label="Photos"
+          name="photos"
+        >
+          <div class="flex flex-col gap-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <UFileUpload
+                v-model="photoFiles"
+                v-slot="{ open }"
+                accept="image/jpeg,image/png,image/webp"
+                :dropzone="false"
+                multiple
+                :preview="false"
+                reset
+                @change="handlePhotoChange"
+              >
+                <UButton
+                  color="neutral"
+                  icon="i-lucide-image-plus"
+                  label="Select photos"
+                  type="button"
+                  variant="subtle"
+                  @click="open()"
+                />
+              </UFileUpload>
+              <span class="text-sm text-slate-500">
+                {{ form.photos?.length ?? 0 }} selected
+              </span>
+            </div>
+
+            <div v-if="form.photos?.length" class="grid gap-3 sm:grid-cols-3">
+              <div
+                v-for="(photo, index) in form.photos"
+                :key="`${photo.url.slice(0, 40)}-${index}`"
+                class="relative overflow-hidden rounded-md border border-slate-200"
+              >
+                <img
+                  :alt="photo.alt || 'Selected location photo'"
+                  :src="photo.url"
+                  class="aspect-[4/3] w-full object-cover"
+                />
+                <div
+                  class="border-t border-slate-200 bg-white p-2 text-xs text-slate-600"
+                >
+                  <p v-if="photo.capturedAt">
+                    Taken {{ formatPhotoDate(photo.capturedAt) }}
+                  </p>
+                  <p v-else>Photo date unavailable</p>
+                  <p v-if="photo.latitude && photo.longitude">
+                    POI created from photo location
+                  </p>
+                </div>
+                <UButton
+                  class="absolute top-2 right-2"
+                  color="neutral"
+                  icon="i-lucide-x"
+                  size="xs"
+                  type="button"
+                  variant="solid"
+                  @click="removePhoto(index)"
+                />
+              </div>
+            </div>
+          </div>
+        </UFormField>
+      </template>
+
+      <template #features>
+        <div class="grid gap-5 pt-4 sm:grid-cols-2">
+          <UFormField label="Type" name="type">
+            <UCheckboxGroup
+              v-model="form.type"
+              :items="typeItems"
+              name="type"
+            />
+          </UFormField>
+
+          <UFormField label="Characteristics" name="characteristics">
+            <UCheckboxGroup
+              v-model="form.characteristics"
+              :items="characteristicItems"
+              name="characteristics"
+            />
+          </UFormField>
+        </div>
+      </template>
+    </AppTabs>
 
     <UAlert
       v-if="props.error"

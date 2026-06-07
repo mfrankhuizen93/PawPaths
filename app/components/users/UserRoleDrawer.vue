@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import type { AuthUser, UserRole } from "#shared/types/auth";
+import AppTabs from "~/components/common/AppTabs.vue";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
-import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import AppDrawerHeader from "~/components/drawer/AppDrawerHeader.vue";
 import UserRoleDrawerSkeleton from "~/components/users/UserRoleDrawerSkeleton.vue";
 
@@ -20,7 +20,7 @@ const emit = defineEmits<{
 
 const tabs: TabsItem[] = [
   { label: "Profile", slot: "profile", icon: "i-lucide-user" },
-  { label: "Permissions", slot: "permissions", icon: "i-lucide-shield" },
+  { label: "Access", slot: "permissions", icon: "i-lucide-shield" },
   { label: "Activity", slot: "activity", icon: "i-lucide-history" },
 ];
 
@@ -75,7 +75,7 @@ function getInitials(name: string | undefined, email: string | undefined) {
 
     <UserRoleDrawerSkeleton v-if="!user" />
 
-    <UTabs v-else :items="tabs" class="w-full" color="neutral" variant="link">
+    <AppTabs v-else :items="tabs">
       <template #profile>
         <dl
           class="border-default grid gap-4 rounded-lg border p-4 sm:grid-cols-2"
@@ -152,17 +152,6 @@ function getInitials(name: string | undefined, email: string | undefined) {
           </div>
         </dl>
       </template>
-    </UTabs>
-
-    <template v-if="user" #actions>
-      <AppDrawerActions>
-        <UButton
-          color="neutral"
-          label="Close"
-          variant="outline"
-          @click="$emit('update:open', false)"
-        />
-      </AppDrawerActions>
-    </template>
+    </AppTabs>
   </AppDrawer>
 </template>
