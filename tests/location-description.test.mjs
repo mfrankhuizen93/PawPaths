@@ -36,14 +36,8 @@ Dogs may be off leash in the marked area.
 **Terrain & environment**
 Mostly unpaved forest paths.
 
-**Water access**
-Details have not been provided yet.
-
-**Safety considerations**
-Watch for cyclists.
-
 **Local tips**
-Visit early for easier parking.`;
+Visit early for easier parking and watch for cyclists.`;
 
 test("generates the required Markdown structure and includes existing notes", async () => {
   let requestBody;
