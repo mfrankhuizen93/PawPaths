@@ -1,22 +1,18 @@
 <script lang="ts" setup>
 import type { NavigationAppPreference, UserRole } from "#shared/types/auth";
+import AppAuthForm from "~/components/auth/AppAuthForm.vue";
 import AppPageHeader from "~/components/common/AppPageHeader.vue";
 
 const route = useRoute();
 const {
   user,
   isSignedIn,
-  login,
   logout,
-  register,
-  requestPasswordReset,
   refreshSession,
   sendVerificationEmail,
   updateProfile,
 } = useAuth();
 
-const mode = ref<"login" | "register" | "forgot">("login");
-const isSubmitting = ref(false);
 const isResendingVerification = ref(false);
 const isSavingProfile = ref(false);
 const authError = ref("");
@@ -27,14 +23,6 @@ const selectedProfileImage = ref<string | null>(null);
 const imageError = ref("");
 const profileForm = reactive({
   name: "",
-  image: null as string | null,
-  navigationAppPreference: "device" as NavigationAppPreference,
-});
-
-const authForm = reactive({
-  name: "",
-  email: "",
-  password: "",
   image: null as string | null,
   navigationAppPreference: "device" as NavigationAppPreference,
 });
@@ -141,8 +129,6 @@ async function handleProfileImageChange(event: Event) {
 
     if (isSignedIn.value) {
       profileForm.image = selectedProfileImage.value;
-    } else {
-      authForm.image = selectedProfileImage.value;
     }
   } catch (error) {
     imageError.value = getErrorMessage(error);
@@ -154,35 +140,6 @@ function clearSelectedImage() {
 
   if (isSignedIn.value) {
     profileForm.image = null;
-  } else {
-    authForm.image = null;
-  }
-}
-
-async function submitAuth() {
-  authError.value = "";
-  authMessage.value = "";
-  isSubmitting.value = true;
-
-  try {
-    if (mode.value === "forgot") {
-      await requestPasswordReset(authForm.email);
-
-      authMessage.value =
-        "If an account exists for that email, a reset link has been sent.";
-    } else if (mode.value === "register") {
-      await register({ ...authForm });
-      authMessage.value = "Account created. Please verify your email address.";
-    } else {
-      await login({
-        email: authForm.email,
-        password: authForm.password,
-      });
-    }
-  } catch (error) {
-    authError.value = getErrorMessage(error);
-  } finally {
-    isSubmitting.value = false;
   }
 }
 
@@ -235,14 +192,6 @@ watch(
   { immediate: true },
 );
 
-watch(mode, () => {
-  imageError.value = "";
-
-  if (!isSignedIn.value) {
-    selectedProfileImage.value = authForm.image;
-  }
-});
-
 onMounted(() => {
   if (route.query.verified === "true") {
     authMessage.value = "Your email has been verified.";
@@ -261,173 +210,17 @@ onMounted(() => {
 
     <section
       v-if="!isSignedIn"
-      class="grid gap-6 rounded-md border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-[0.9fr_1.1fr]"
+      class="rounded-md border border-slate-200 bg-white p-5 shadow-sm"
     >
-      <div class="flex flex-col gap-3">
-        <div class="flex gap-2">
-          <UButton
-            :variant="mode === 'login' ? 'solid' : 'subtle'"
-            icon="i-lucide-log-in"
-            label="Sign in"
-            @click="mode = 'login'"
-          />
-          <UButton
-            :variant="mode === 'register' ? 'solid' : 'subtle'"
-            icon="i-lucide-user-plus"
-            label="Create account"
-            @click="mode = 'register'"
-          />
-        </div>
-        <p class="text-sm leading-6 text-slate-600">
-          Signed-in users can submit improvements and photos. Maintainers can
-          review community changes, and administrators can manage roles.
-        </p>
-      </div>
-
-      <form class="flex flex-col gap-4" @submit.prevent="submitAuth">
-        <p v-if="mode === 'forgot'" class="text-sm leading-6 text-slate-600">
-          Enter your email and we will send a password reset link.
-        </p>
-
-        <UFormField v-if="mode === 'register'" label="Name">
-          <UInput
-            v-model="authForm.name"
-            autocomplete="name"
-            icon="i-lucide-user"
-            placeholder="Your name"
-          />
-        </UFormField>
-
-        <UFormField v-if="mode === 'register'" label="Profile picture">
-          <div class="flex items-center gap-4">
-            <div
-              class="bg-brand-100 text-brand-700 flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full text-lg font-extrabold"
-            >
-              <img
-                v-if="authForm.image"
-                :src="authForm.image"
-                alt=""
-                class="size-full object-cover"
-              />
-              <span v-else>{{
-                getInitials(authForm.name, authForm.email)
-              }}</span>
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <UButton
-                as="label"
-                color="neutral"
-                icon="i-lucide-image-plus"
-                label="Choose image"
-                variant="subtle"
-              >
-                <input
-                  accept="image/jpeg,image/png,image/webp"
-                  class="sr-only"
-                  type="file"
-                  @change="handleProfileImageChange"
-                />
-              </UButton>
-              <UButton
-                v-if="authForm.image"
-                color="neutral"
-                icon="i-lucide-x"
-                label="Remove"
-                variant="ghost"
-                @click="clearSelectedImage"
-              />
-            </div>
-          </div>
-        </UFormField>
-
-        <UFormField v-if="mode === 'register'" label="Navigation app">
-          <USelect
-            v-model="authForm.navigationAppPreference"
-            :items="navigationAppOptions"
-            icon="i-lucide-navigation"
-          />
-        </UFormField>
-
-        <UFormField label="Email">
-          <UInput
-            v-model="authForm.email"
-            autocomplete="email"
-            icon="i-lucide-mail"
-            placeholder="you@example.com"
-            required
-            type="email"
-          />
-        </UFormField>
-
-        <UFormField v-if="mode !== 'forgot'" label="Password">
-          <UInput
-            v-model="authForm.password"
-            :autocomplete="
-              mode === 'register' ? 'new-password' : 'current-password'
-            "
-            icon="i-lucide-lock"
-            placeholder="At least 10 characters"
-            required
-            type="password"
-          />
-        </UFormField>
-
-        <UAlert
-          v-if="authError"
-          :title="authError"
-          color="error"
-          icon="i-lucide-circle-alert"
-          variant="soft"
-        />
-
-        <UAlert
-          v-if="authMessage"
-          :title="authMessage"
-          color="success"
-          icon="i-lucide-circle-check"
-          variant="soft"
-        />
-
-        <UAlert
-          v-if="imageError"
-          :title="imageError"
-          color="error"
-          icon="i-lucide-image-off"
-          variant="soft"
-        />
-
-        <UButton
-          :label="
-            mode === 'forgot'
-              ? 'Send reset link'
-              : mode === 'register'
-                ? 'Create account'
-                : 'Sign in'
-          "
-          :loading="isSubmitting"
-          block
-          icon="i-lucide-arrow-right"
-          type="submit"
-        />
-
-        <UButton
-          v-if="mode === 'login'"
-          block
-          color="neutral"
-          label="Forgot password?"
-          variant="link"
-          @click="mode = 'forgot'"
-        />
-
-        <UButton
-          v-if="mode === 'forgot'"
-          block
-          color="neutral"
-          label="Back to sign in"
-          variant="link"
-          @click="mode = 'login'"
-        />
-      </form>
+      <UAlert
+        v-if="authError || authMessage"
+        class="mb-4"
+        :color="authError ? 'error' : 'success'"
+        :icon="authError ? 'i-lucide-circle-alert' : 'i-lucide-circle-check'"
+        :title="authError || authMessage"
+        variant="soft"
+      />
+      <AppAuthForm />
     </section>
 
     <section

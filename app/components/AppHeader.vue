@@ -16,11 +16,27 @@ defineEmits(["search"]);
 
 const activeFilters = useExploreQuery();
 const addLocationDrawerOpen = useAddLocationDrawer();
-const { isAdmin, isMaintainer } = useAuth();
+const authDrawer = useAuthDrawer();
+const { isAdmin, isMaintainer, isSignedIn } = useAuth();
 const { count: pendingContributions, refresh } = usePendingContributions();
 
+const navigationItems = computed(() =>
+  headerNavigationItems.map((item) =>
+    item.to === "/account" && !isSignedIn.value
+      ? {
+          ...item,
+          to: undefined,
+          onSelect(event: Event) {
+            event.preventDefault();
+            authDrawer.show("profile");
+          },
+        }
+      : item,
+  ),
+);
+
 const drawerNavigationItems = computed(() => [
-  ...headerNavigationItems,
+  ...navigationItems.value,
   ...(isMaintainer.value
     ? [
         getAdminNavigationItems({
@@ -30,6 +46,14 @@ const drawerNavigationItems = computed(() => [
       ]
     : []),
 ]);
+
+function openAddLocation() {
+  if (isSignedIn.value) {
+    addLocationDrawerOpen.value = true;
+  } else {
+    authDrawer.show("add");
+  }
+}
 
 watch(
   isMaintainer,
@@ -55,7 +79,7 @@ watch(
         icon="i-lucide-circle-plus"
         label="Add"
         variant="subtle"
-        @click="addLocationDrawerOpen = true"
+        @click="openAddLocation"
       />
 
       <UDrawer
@@ -75,7 +99,7 @@ watch(
     </template>
 
     <UNavigationMenu
-      :items="headerNavigationItems"
+      :items="navigationItems"
       :ui="{
         link: 'gap-1.5',
         linkLeadingIcon: 'size-4',

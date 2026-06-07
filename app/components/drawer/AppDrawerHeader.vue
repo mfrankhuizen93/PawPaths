@@ -21,5 +21,6 @@ defineProps<{
       </p>
       <slot />
     </div>
+    <slot name="actions" />
   </div>
 </template>

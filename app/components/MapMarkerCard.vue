@@ -14,6 +14,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  readonly: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["remove"]);
@@ -23,6 +27,14 @@ const isGeneralLocation = computed(() => marker.value.kind === "general");
 const pointKindOptions = locationCoordinateKindOptions.filter(
   (option) => option.value !== "general",
 );
+const editablePointKind = computed({
+  get: () => (marker.value.kind === "general" ? undefined : marker.value.kind),
+  set: (
+    kind: Exclude<LocationCoordinatePoint["kind"], "general"> | undefined,
+  ) => {
+    if (kind) marker.value.kind = kind;
+  },
+});
 </script>
 
 <template>
@@ -41,8 +53,8 @@ const pointKindOptions = locationCoordinateKindOptions.filter(
 
     <USelectMenu
       v-else
-      v-model="marker.kind"
-      :disabled="isGeneralLocation"
+      v-model="editablePointKind"
+      :disabled="isGeneralLocation || readonly"
       :items="pointKindOptions"
       class="w-full flex-1"
       placeholder="Kind"
@@ -51,7 +63,7 @@ const pointKindOptions = locationCoordinateKindOptions.filter(
 
     <UInput v-if="false" v-model="marker.label" placeholder="Label" />
     <UButton
-      v-if="isActive && !isGeneralLocation"
+      v-if="isActive && !isGeneralLocation && !readonly"
       @click="emit('remove', marker.id)"
       icon="i-lucide:trash"
       color="error"

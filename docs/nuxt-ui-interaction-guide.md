@@ -87,6 +87,10 @@ The Add location action belongs in the map header beside Filters. It opens a
 bottom drawer containing the shared tabbed location form. Do not include Add in
 the mobile footer navigation.
 
+If a signed-out user chooses Add, open the shared authentication drawer first.
+After successful authentication, close the authentication drawer and continue
+by opening the Add location drawer.
+
 Recommended structure:
 
 ```vue
@@ -105,9 +109,17 @@ Recommended structure:
 </template>
 ```
 
-The location drawer is the primary location detail view. Recommended tabs are
-Overview, Details, Notes, and Photos, with Reviews, Nearby, History, and Admin
-added only when useful. Put the most useful dog-owner information first.
+The location drawer is the primary location detail view. Create, edit, review,
+and view modes share the same location form and the same core tabs: Details,
+Map, Photos, and Links.
+
+View mode renders the shared form readonly and adds Reviews. Edit and community
+review modes make the form editable and add Features. Create mode keeps exactly
+the four core tabs; required type fields may live in Details instead of adding
+a second row or a fifth tab.
+
+Use one tab row per drawer. Never nest another `UTabs` inside a drawer tab.
+Put the most useful dog-owner information first.
 
 Reuse the drawer and its location content across map markers, location cards,
 saved locations, community validation, and admin review.
@@ -117,16 +129,10 @@ saved locations, community validation, and admin review.
 Show submitted locations or edits in a list, card, or table overview. Clicking
 an item opens a bottom drawer instead of navigating away.
 
-Recommended tabs:
-
-- Submission
-- Location Preview
-- Validation
-- History
-
 Review submissions directly in the same tabbed `AppLocationForm` used for
 adding locations. Do not require a separate Edit action or duplicate readonly
-preview markup. Approval, saving, and rejection remain meaningful form actions.
+preview markup. Use Details, Map, Photos, Links, and Features. Approval, saving,
+and rejection remain meaningful drawer-footer actions.
 
 ## User Roles
 
@@ -141,15 +147,38 @@ Recommended tabs:
 
 Role-changing actions belong inside the drawer.
 
+## Authentication Drawer
+
+Use one shared authentication form for sign in, account creation, and password
+reset requests. The same form may be rendered on the account page and inside a
+bottom `UDrawer`.
+
+When a signed-out user chooses Profile, open the authentication drawer instead
+of navigating away. After successful authentication, continue to the profile
+page. When authentication was opened by Add, continue to the Add location
+drawer instead.
+
+The authentication drawer must not include an explicit Close button.
+
 ## Tabs
 
 Use `UTabs` when drawer content naturally belongs to distinct categories. Tabs
 should prevent drawers from becoming long, chaotic pages. Do not use tabs for
 tiny amounts of content; two short sections can use headings instead.
 
-Tab lists must be horizontally scrollable on small screens. Use short labels
-that remain readable without truncation, such as Info, Map, Photos, Reviews,
-Edit, Profile, Access, and Activity. Prefer the shared `AppTabs` wrapper.
+Tab lists must scroll horizontally only on small screens. Prevent vertical
+scrolling and wrapping in the tab list. Use short labels that remain readable
+without truncation, such as Details, Map, Photos, Links, Reviews, Features,
+Profile, Access, and Activity. Prefer the shared `AppTabs` wrapper.
+
+Drawer forms keep their action row in the drawer footer. Show actions according
+to state, such as Submit and Cancel for creation, Save and Cancel for editing,
+or Accept, Reject, Save, and Cancel for review. A Save or Submit action applies
+to the entire shared form across every tab.
+
+When an editable drawer has unsaved changes, intercept native drawer dismissal
+and ask whether to keep editing or discard the changes. Do not silently lose
+changes.
 
 ## Loading States
 
@@ -203,8 +232,9 @@ available width.
 All input text must be at least 16px (`text-base`) to prevent iPhone Safari from
 zooming focused controls.
 
-Use the same tabbed `AppLocationForm` for adding, suggesting edits, and
-reviewing submissions. Its primary tabs are Details, Map, Photos, and Features.
+Use the same tabbed `AppLocationForm` for adding, suggesting edits, reviewing
+submissions, and viewing a location readonly. Its core tabs are Details, Map,
+Photos, and Links. View adds Reviews; edit and review add Features.
 Do not expose implementation details such as Markdown formatting in user-facing
 helper text. PawPaths location forms do not include a Province field.
 
@@ -409,6 +439,11 @@ When implementing PawPaths UI:
 20. Make drawer tabs horizontally scrollable with short labels.
 21. Reuse the same tabbed location form for add, edit, and review flows.
 22. Keep Add location beside Filters on the map, not in footer navigation.
+23. Open the shared auth drawer for signed-out Add and Profile actions.
+24. Preserve and continue the user's intended action after authentication.
+25. Use one horizontally scrollable tab row per drawer.
+26. Keep location actions in the drawer footer and save the complete form.
+27. Confirm before closing an editable drawer with unsaved changes.
 
 ## Main Principle
 

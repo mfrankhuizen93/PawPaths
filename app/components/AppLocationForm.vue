@@ -21,6 +21,10 @@ const props = withDefaults(
     submitLabel?: string;
     submitting?: boolean;
     showSubmit?: boolean;
+    readonly?: boolean;
+    showFeatures?: boolean;
+    showReviews?: boolean;
+    formId?: string;
   }>(),
   {
     error: "",
@@ -31,6 +35,10 @@ const props = withDefaults(
     submitLabel: "Submit for review",
     submitting: false,
     showSubmit: true,
+    readonly: false,
+    showFeatures: true,
+    showReviews: false,
+    formId: undefined,
   },
 );
 
@@ -71,12 +79,24 @@ const characteristicItems = characteristicOptions.map((option) => ({
   label: option,
   value: option,
 }));
-const formTabs: TabsItem[] = [
+const formTabs = computed<TabsItem[]>(() => [
   { label: "Details", slot: "details", icon: "i-lucide-file-text" },
   { label: "Map", slot: "map", icon: "i-lucide-map" },
   { label: "Photos", slot: "photos", icon: "i-lucide-images" },
-  { label: "Features", slot: "features", icon: "i-lucide-list-checks" },
-];
+  { label: "Links", slot: "links", icon: "i-lucide-link" },
+  ...(props.showFeatures
+    ? [
+        {
+          label: "Features",
+          slot: "features",
+          icon: "i-lucide-list-checks",
+        },
+      ]
+    : []),
+  ...(props.showReviews
+    ? [{ label: "Reviews", slot: "reviews", icon: "i-lucide-star" }]
+    : []),
+]);
 const secondaryToolbarButtonClass = "hidden sm:inline-flex";
 const descriptionEditorToolbarItems = [
   [
@@ -620,6 +640,19 @@ function removePhoto(index: number) {
   }
 }
 
+function addRelatedUrl() {
+  form.value.relatedUrls = [
+    ...(form.value.relatedUrls ?? []),
+    { label: "", url: "" },
+  ];
+}
+
+function removeRelatedUrl(index: number) {
+  form.value.relatedUrls = (form.value.relatedUrls ?? []).filter(
+    (_, urlIndex) => urlIndex !== index,
+  );
+}
+
 function formatPhotoDate(value: string | null | undefined) {
   if (!value) return "";
 
@@ -686,6 +719,7 @@ function removeCoordinatePoint(id: string | null | undefined) {
 
 async function reverseGeocodeGeneralLocation() {
   if (
+    props.readonly ||
     activePointId.value !== "general" ||
     !Number.isFinite(form.value.latitude) ||
     !Number.isFinite(form.value.longitude)
@@ -755,6 +789,8 @@ function resetLocalState() {
 watch(
   () => [form.value.latitude, form.value.longitude],
   ([latitude, longitude]) => {
+    if (props.readonly) return;
+
     if (reverseGeocodeTimer) {
       window.clearTimeout(reverseGeocodeTimer);
       reverseGeocodeTimer = null;
@@ -787,6 +823,7 @@ onBeforeUnmount(() => {
 <template>
   <UForm
     ref="locationForm"
+    :id="formId"
     :schema="locationSchema"
     :state="form"
     class="flex flex-col gap-5 rounded-md border border-slate-200 bg-white p-5 shadow-sm"
@@ -796,7 +833,12 @@ onBeforeUnmount(() => {
       <template #details>
         <div class="grid gap-4 pt-4">
           <UFormField label="Name" name="name" required>
-            <UInput v-model="form.name" icon="i-lucide-map-pin" required />
+            <UInput
+              v-model="form.name"
+              icon="i-lucide-map-pin"
+              :readonly="readonly"
+              required
+            />
           </UFormField>
 
           <UFormField
@@ -804,7 +846,7 @@ onBeforeUnmount(() => {
             label="Description"
             name="description"
           >
-            <div class="mb-2 flex justify-end">
+            <div v-if="!readonly" class="mb-2 flex justify-end">
               <UButton
                 v-if="canGenerateDescription"
                 color="primary"
@@ -824,6 +866,7 @@ onBeforeUnmount(() => {
             </div>
             <UEditor
               v-model="form.description"
+              :editable="!readonly"
               class="min-h-32 w-full min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white"
               content-type="markdown"
               placeholder="Describe this location..."
@@ -832,7 +875,7 @@ onBeforeUnmount(() => {
                 base: 'min-h-32 px-3 py-2 text-base leading-5 font-sans text-slate-950 sm:px-3 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
               }"
             >
-              <template #default="{ editor }">
+              <template v-if="!readonly" #default="{ editor }">
                 <div
                   class="w-full min-w-0 overflow-hidden border-b border-slate-200 px-2 py-1"
                 >
@@ -856,10 +899,41 @@ onBeforeUnmount(() => {
 
           <div class="grid gap-4 sm:grid-cols-2">
             <UFormField label="City" name="city" required>
-              <UInput v-model="form.city" icon="i-lucide-building-2" required />
+              <UInput
+                v-model="form.city"
+                icon="i-lucide-building-2"
+                :readonly="readonly"
+                required
+              />
             </UFormField>
             <UFormField label="Country" name="country" required>
-              <UInput v-model="form.country" icon="i-lucide-globe-2" required />
+              <UInput
+                v-model="form.country"
+                icon="i-lucide-globe-2"
+                :readonly="readonly"
+                required
+              />
+            </UFormField>
+          </div>
+
+          <div
+            v-if="!showFeatures && !readonly"
+            class="grid gap-5 sm:grid-cols-2"
+          >
+            <UFormField label="Type" name="type">
+              <UCheckboxGroup
+                v-model="form.type"
+                :items="typeItems"
+                name="type"
+              />
+            </UFormField>
+
+            <UFormField label="Characteristics" name="characteristics">
+              <UCheckboxGroup
+                v-model="form.characteristics"
+                :items="characteristicItems"
+                name="characteristics"
+              />
             </UFormField>
           </div>
         </div>
@@ -877,8 +951,10 @@ onBeforeUnmount(() => {
               v-model:latitude="activeLatitude"
               v-model:longitude="activeLongitude"
               :markers="mapMarkers"
+              :readonly="readonly"
             />
             <UAlert
+              v-if="!readonly"
               color="neutral"
               :description="pointHelp"
               icon="i-lucide-map-pin"
@@ -892,7 +968,7 @@ onBeforeUnmount(() => {
               icon="i-lucide-map-pinned"
               variant="soft"
             />
-            <div class="flex flex-wrap gap-2">
+            <div v-if="!readonly" class="flex flex-wrap gap-2">
               <UButton
                 color="neutral"
                 icon="i-lucide-car"
@@ -929,6 +1005,7 @@ onBeforeUnmount(() => {
             <MapMarkerCard
               v-model="generalLocationMarker"
               :is-active="activePointId === 'general'"
+              :readonly="readonly"
               @click="activePointId = 'general'"
             />
 
@@ -940,6 +1017,7 @@ onBeforeUnmount(() => {
                 v-if="form?.coordinatePoints?.[pointIndex]"
                 v-model="form.coordinatePoints[pointIndex]"
                 :is-active="activePointId === point.id"
+                :readonly="readonly"
                 @click="activePointId = point.id ?? 'general'"
                 @remove="removeCoordinatePoint"
               />
@@ -959,7 +1037,7 @@ onBeforeUnmount(() => {
           name="photos"
         >
           <div class="flex flex-col gap-3">
-            <div class="flex flex-wrap items-center gap-2">
+            <div v-if="!readonly" class="flex flex-wrap items-center gap-2">
               <UFileUpload
                 v-model="photoFiles"
                 v-slot="{ open }"
@@ -1007,6 +1085,7 @@ onBeforeUnmount(() => {
                   </p>
                 </div>
                 <UButton
+                  v-if="!readonly"
                   class="absolute top-2 right-2"
                   color="neutral"
                   icon="i-lucide-x"
@@ -1021,11 +1100,83 @@ onBeforeUnmount(() => {
         </UFormField>
       </template>
 
+      <template #links>
+        <div class="flex flex-col gap-4 pt-4">
+          <template v-if="readonly">
+            <UButton
+              v-for="(url, index) in form.relatedUrls"
+              :key="`${index}-${url.url}`"
+              class="self-start"
+              color="neutral"
+              icon="i-lucide-square-arrow-out-up-right"
+              :label="url.label || url.url"
+              target="_blank"
+              :to="url.url"
+              variant="outline"
+            />
+          </template>
+
+          <template v-else>
+            <div
+              v-for="(url, index) in form.relatedUrls"
+              :key="`${index}-${url.url}`"
+              class="grid gap-3 sm:grid-cols-[1fr_2fr_auto]"
+            >
+              <UFormField :name="`relatedUrls.${index}.label`" label="Label">
+                <UInput
+                  v-model="url.label"
+                  class="w-full"
+                  placeholder="Website"
+                />
+              </UFormField>
+              <UFormField :name="`relatedUrls.${index}.url`" label="URL">
+                <UInput
+                  v-model="url.url"
+                  class="w-full"
+                  icon="i-lucide-link"
+                  placeholder="https://"
+                  type="url"
+                />
+              </UFormField>
+              <div class="flex items-end">
+                <UButton
+                  aria-label="Remove link"
+                  color="error"
+                  icon="i-lucide-trash-2"
+                  type="button"
+                  variant="subtle"
+                  @click="removeRelatedUrl(index)"
+                />
+              </div>
+            </div>
+          </template>
+
+          <AppEmptyState
+            v-if="readonly && !form.relatedUrls?.length"
+            description="No related links have been added."
+            icon="i-lucide-link"
+            title="No links"
+          />
+
+          <UButton
+            v-if="!readonly"
+            class="self-start"
+            color="neutral"
+            icon="i-lucide-plus"
+            label="Add link"
+            type="button"
+            variant="subtle"
+            @click="addRelatedUrl"
+          />
+        </div>
+      </template>
+
       <template #features>
         <div class="grid gap-5 pt-4 sm:grid-cols-2">
           <UFormField label="Type" name="type">
             <UCheckboxGroup
               v-model="form.type"
+              :disabled="readonly"
               :items="typeItems"
               name="type"
             />
@@ -1034,11 +1185,16 @@ onBeforeUnmount(() => {
           <UFormField label="Characteristics" name="characteristics">
             <UCheckboxGroup
               v-model="form.characteristics"
+              :disabled="readonly"
               :items="characteristicItems"
               name="characteristics"
             />
           </UFormField>
         </div>
+      </template>
+
+      <template #reviews>
+        <slot name="reviews" />
       </template>
     </AppTabs>
 

@@ -18,6 +18,12 @@ Before changing a page or component:
 11. Keep drawer tabs short, readable, and horizontally scrollable on mobile.
 12. Reuse the tabbed `AppLocationForm` for adding, editing, and reviewing.
 13. Keep Add location beside Filters on the map and out of footer navigation.
+14. Open the shared auth drawer when signed-out users choose Add or Profile.
+15. After authentication, continue the action that opened the auth drawer.
+16. Use one horizontal tab row per drawer; never nest tabs inside drawer tabs.
+17. Reuse `AppLocationForm` for readonly viewing and editable create/edit/review flows.
+18. Keep form actions in the drawer footer and save all tabs together.
+19. Confirm before discarding unsaved drawer changes.
 
 ## Branch Names
 

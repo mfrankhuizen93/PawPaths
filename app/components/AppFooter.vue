@@ -4,11 +4,23 @@ import {
   getAdminNavigationItems,
 } from "~/navigation/items";
 
-const { isAdmin, isMaintainer } = useAuth();
+const authDrawer = useAuthDrawer();
+const { isAdmin, isMaintainer, isSignedIn } = useAuth();
 const { count: pendingContributions, refresh } = usePendingContributions();
 
 const navigationItems = computed(() => [
-  ...footerNavigationItems,
+  ...footerNavigationItems.map((item) =>
+    item.to === "/account" && !isSignedIn.value
+      ? {
+          ...item,
+          to: undefined,
+          onSelect(event: Event) {
+            event.preventDefault();
+            authDrawer.show("profile");
+          },
+        }
+      : item,
+  ),
   ...(isMaintainer.value
     ? [
         getAdminNavigationItems({

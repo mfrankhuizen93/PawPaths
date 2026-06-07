@@ -3,6 +3,11 @@ import type { EditableLocationFields } from "#shared/types/locations";
 import { locationDescriptionTemplate } from "#shared/utils/location-description";
 
 const { isAdmin, isSignedIn } = useAuth();
+const authDrawer = useAuthDrawer();
+const emit = defineEmits<{
+  "dirty-change": [dirty: boolean];
+  submitted: [];
+}>();
 
 const isSubmitting = ref(false);
 const message = ref("");
@@ -21,6 +26,7 @@ const form = reactive<EditableLocationFields>({
   relatedUrls: [],
   photos: [],
 });
+const initialForm = JSON.stringify(form);
 
 function getErrorMessage(errorValue: unknown) {
   if (
@@ -66,12 +72,19 @@ async function submitLocation() {
     });
     message.value = "Thanks. Your location is waiting for maintainer review.";
     resetForm();
+    emit("submitted");
   } catch (submitError) {
     error.value = getErrorMessage(submitError);
   } finally {
     isSubmitting.value = false;
   }
 }
+
+watch(
+  form,
+  (value) => emit("dirty-change", JSON.stringify(value) !== initialForm),
+  { deep: true, immediate: true },
+);
 </script>
 
 <template>
@@ -86,9 +99,9 @@ async function submitLocation() {
       <UButton
         class="mt-3"
         icon="i-lucide-circle-user-round"
-        label="Go to account"
-        to="/account"
+        label="Sign in"
         variant="subtle"
+        @click="authDrawer.show('add')"
       />
     </template>
   </UAlert>
@@ -100,6 +113,9 @@ async function submitLocation() {
     :error="error"
     :message="message"
     :reset-key="formResetKey"
+    form-id="location-add-form"
+    :show-features="false"
+    :show-submit="false"
     :submitting="isSubmitting"
     submit-label="Submit for review"
     @submit="submitLocation"

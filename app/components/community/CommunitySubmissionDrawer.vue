@@ -6,6 +6,7 @@ import type {
 import CommunitySubmissionDrawerSkeleton from "~/components/community/CommunitySubmissionDrawerSkeleton.vue";
 import CommunitySubmissionStatusBadge from "~/components/community/CommunitySubmissionStatusBadge.vue";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
+import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import AppDrawerHeader from "~/components/drawer/AppDrawerHeader.vue";
 
 const props = defineProps<{
@@ -31,6 +32,22 @@ const editablePayload = computed({
     if (edit) emit("update:edit", edit);
   },
 });
+const pendingSubmitAction = ref<"approve" | "save">("save");
+const isDirty = computed(
+  () =>
+    Boolean(props.edit && props.submission) &&
+    JSON.stringify(props.edit) !== JSON.stringify(props.submission?.payload),
+);
+
+function submitReviewAction() {
+  if (!props.submission) return;
+
+  if (pendingSubmitAction.value === "approve") {
+    emit("approve", props.submission);
+  } else {
+    emit("save", props.submission);
+  }
+}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -43,6 +60,7 @@ function formatDate(value: string) {
 <template>
   <AppDrawer
     :description="submission?.submitter.email"
+    :dirty="isDirty"
     :open="open"
     :title="submission?.payload.name"
     @update:open="$emit('update:open', $event)"
@@ -68,40 +86,51 @@ function formatDate(value: string) {
       v-else
       v-model="editablePayload"
       :can-generate-description="canGenerateDescription"
+      form-id="community-submission-form"
       point-help="Check and adjust the location points before approving."
       :show-submit="false"
-      @submit="$emit('save', submission)"
-    >
-      <template #actions>
-        <div class="flex flex-wrap gap-2">
-          <UButton
-            color="success"
-            icon="i-lucide-check"
-            label="Approve"
-            :loading="reviewing && reviewingAction === 'approve'"
-            type="button"
-            @click="$emit('approve', submission)"
-          />
-          <UButton
-            color="neutral"
-            icon="i-lucide-save"
-            label="Save"
-            :loading="reviewing && reviewingAction === 'save'"
-            type="button"
-            variant="subtle"
-            @click="$emit('save', submission)"
-          />
-          <UButton
-            color="error"
-            icon="i-lucide-x"
-            label="Reject"
-            :loading="reviewing && reviewingAction === 'reject'"
-            type="button"
-            variant="subtle"
-            @click="$emit('reject', submission)"
-          />
-        </div>
-      </template>
-    </AppLocationForm>
+      :show-features="true"
+      @submit="submitReviewAction"
+    />
+
+    <template v-if="submission" #actions="{ close }">
+      <AppDrawerActions>
+        <UButton
+          color="neutral"
+          label="Cancel"
+          type="button"
+          variant="ghost"
+          @click="close"
+        />
+        <UButton
+          color="error"
+          icon="i-lucide-x"
+          label="Reject"
+          :loading="reviewing && reviewingAction === 'reject'"
+          type="button"
+          variant="subtle"
+          @click="$emit('reject', submission)"
+        />
+        <UButton
+          color="neutral"
+          form="community-submission-form"
+          icon="i-lucide-save"
+          label="Save"
+          :loading="reviewing && reviewingAction === 'save'"
+          type="submit"
+          variant="subtle"
+          @click="pendingSubmitAction = 'save'"
+        />
+        <UButton
+          color="success"
+          form="community-submission-form"
+          icon="i-lucide-check"
+          label="Accept"
+          :loading="reviewing && reviewingAction === 'approve'"
+          type="submit"
+          @click="pendingSubmitAction = 'approve'"
+        />
+      </AppDrawerActions>
+    </template>
   </AppDrawer>
 </template>

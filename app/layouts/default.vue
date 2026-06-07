@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import AppHeader from "~/components/AppHeader.vue";
+import AppAuthDrawer from "~/components/auth/AppAuthDrawer.vue";
 </script>
 <template>
   <UApp class="min-h-dvh">
@@ -8,6 +9,7 @@ import AppHeader from "~/components/AppHeader.vue";
       <slot />
     </UMain>
     <AppFooter />
+    <AppAuthDrawer />
   </UApp>
 </template>
 

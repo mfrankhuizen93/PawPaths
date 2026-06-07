@@ -1,22 +1,19 @@
 <script lang="ts" setup>
 import type {
   EditableLocationFields,
-  LocationCoordinatePoint,
   LocationListItem,
   LocationReview,
   LocationsResponse,
 } from "#shared/types/locations";
-import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
-import AppPhotoModal from "~/components/AppPhotoModal.vue";
-import AppTabs from "~/components/common/AppTabs.vue";
+import AppDrawer from "~/components/drawer/AppDrawer.vue";
+import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
-import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
-import type { NavigationAppPreference } from "#shared/types/auth";
 
 const route = useRoute();
 const router = useRouter();
-const { user, isSignedIn } = useAuth();
+const { isAdmin, isSignedIn } = useAuth();
+const authDrawer = useAuthDrawer();
 
 const typeOptions: Record<string, { icon: string; label: string }> = {
   park: {
@@ -90,15 +87,16 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
 };
 const activeFilters = useExploreQuery();
 
-const activeSnapPoint = ref<number | null>(null);
-const showPhotoFullscreen = ref<boolean>(false);
-const selectedPhotoIndex = ref(0);
 const isSubmittingChange = ref(false);
 const isSubmittingReview = ref(false);
 const contributionMessage = ref("");
 const contributionError = ref("");
 const reviewMessage = ref("");
 const reviewError = ref("");
+const locationMode = ref<"view" | "edit">("view");
+const changeBaseline = ref("");
+const deleteDialogOpen = ref(false);
+const isDeletingLocation = ref(false);
 const changeForm = reactive<EditableLocationFields>({
   name: "",
   city: "",
@@ -117,33 +115,6 @@ const reviewForm = reactive({
   rating: 5,
   text: "",
 });
-
-const items = ref<TabsItem[]>([
-  {
-    label: "Info",
-    slot: "overview",
-  },
-  {
-    label: "Photos",
-    slot: "photos",
-  },
-  {
-    label: "Map",
-    slot: "map",
-  },
-  {
-    label: "Links",
-    slot: "links",
-  },
-  {
-    label: "Reviews",
-    slot: "reviews",
-  },
-  {
-    label: "Edit",
-    slot: "suggest-edit",
-  },
-]);
 
 const locationsQuery = computed(() => ({
   limit: 20,
@@ -166,59 +137,60 @@ const isLocationDrawerOpen = computed({
   set: (open) => {
     if (open) return;
 
-    selectedLocation.value = null;
-    selectedLocationError.value = "";
-    replaceLocationQuery(null);
+    closeLocationDrawer();
   },
 });
+const hasUnsavedLocationChanges = computed(
+  () =>
+    locationMode.value === "edit" &&
+    JSON.stringify(changeForm) !== changeBaseline.value,
+);
+const locationMenuItems = computed(() => [
+  [
+    {
+      label: "Edit",
+      icon: "i-lucide-pencil",
+      onSelect() {
+        if (!isSignedIn.value) {
+          authDrawer.show("profile");
+          return;
+        }
+
+        beginEditing();
+      },
+    },
+    {
+      label: "Delete",
+      icon: "i-lucide-trash-2",
+      color: "error" as const,
+      disabled: !isAdmin.value,
+      onSelect() {
+        deleteDialogOpen.value = true;
+      },
+    },
+  ],
+]);
+
+function closeLocationDrawer() {
+  locationMode.value = "view";
+  selectedLocation.value = null;
+  selectedLocationError.value = "";
+  replaceLocationQuery(null);
+}
+
+function beginEditing() {
+  syncChangeForm(selectedLocation.value);
+  changeBaseline.value = JSON.stringify(changeForm);
+  contributionError.value = "";
+  contributionMessage.value = "";
+  locationMode.value = "edit";
+}
 
 const selectedLocationMeta = computed(() =>
   [selectedLocation.value?.city, selectedLocation.value?.country]
     .filter(Boolean)
     .join(", "),
 );
-
-const selectedLocationPhoto = computed(
-  () => selectedLocation.value?.photos?.[0] ?? null,
-);
-const selectedLocationMapPoints = computed<LocationCoordinatePoint[]>(() => {
-  if (!selectedLocation.value) return [];
-
-  const points = [...(selectedLocation.value.coordinatePoints ?? [])].filter(
-    (point) =>
-      Number.isFinite(point.latitude) && Number.isFinite(point.longitude),
-  );
-  const hasGeneralPoint = points.some((point) => point.kind === "general");
-
-  if (
-    !hasGeneralPoint &&
-    Number.isFinite(selectedLocation.value.latitude) &&
-    Number.isFinite(selectedLocation.value.longitude)
-  ) {
-    points.unshift({
-      id: `${selectedLocation.value.id}-general`,
-      kind: "general",
-      label: "General location",
-      latitude: selectedLocation.value.latitude as number,
-      longitude: selectedLocation.value.longitude as number,
-    });
-  }
-
-  return points;
-});
-const selectedLocationMapCenter = computed(() => {
-  const generalPoint = selectedLocationMapPoints.value.find(
-    (point) => point.kind === "general",
-  );
-  const firstPoint = generalPoint ?? selectedLocationMapPoints.value[0];
-
-  return firstPoint
-    ? {
-        latitude: firstPoint.latitude,
-        longitude: firstPoint.longitude,
-      }
-    : null;
-});
 
 watch(
   data,
@@ -281,84 +253,6 @@ function getReviewDate(review: LocationReview) {
   return "";
 }
 
-function getPointKindLabel(kind: LocationCoordinatePoint["kind"]) {
-  return (
-    locationCoordinateKindOptions.find((option) => option.value === kind)
-      ?.label ?? "Point"
-  );
-}
-
-function getPointLabel(point: LocationCoordinatePoint) {
-  return point.label || getPointKindLabel(point.kind);
-}
-
-function getAppleMapsUrl(point: LocationCoordinatePoint) {
-  const label = encodeURIComponent(getPointLabel(point));
-
-  return `https://maps.apple.com/?daddr=${point.latitude},${point.longitude}&q=${label}`;
-}
-
-function getGoogleMapsUrl(point: LocationCoordinatePoint) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${point.latitude},${point.longitude}`;
-}
-
-function getWazeUrl(point: LocationCoordinatePoint) {
-  return `https://waze.com/ul?ll=${point.latitude},${point.longitude}&navigate=yes`;
-}
-
-function getDeviceNavigationPreference(): Exclude<
-  NavigationAppPreference,
-  "device"
-> {
-  if (!import.meta.client) return "google";
-
-  const platform = navigator.platform.toLowerCase();
-  const userAgent = navigator.userAgent.toLowerCase();
-
-  if (
-    platform.includes("mac") ||
-    platform.includes("iphone") ||
-    platform.includes("ipad") ||
-    userAgent.includes("iphone") ||
-    userAgent.includes("ipad")
-  ) {
-    return "apple";
-  }
-
-  return "google";
-}
-
-function getNavigationPreference() {
-  const preference = user.value?.navigationAppPreference ?? "device";
-
-  return preference === "device" ? getDeviceNavigationPreference() : preference;
-}
-
-function getNavigationLabel() {
-  const labels: Record<Exclude<NavigationAppPreference, "device">, string> = {
-    apple: "Apple Maps",
-    google: "Google Maps",
-    waze: "Waze",
-  };
-
-  return labels[getNavigationPreference()];
-}
-
-function getNavigationIcon() {
-  return getNavigationPreference() === "google"
-    ? "i-lucide-route"
-    : "i-lucide-navigation";
-}
-
-function getNavigationUrl(point: LocationCoordinatePoint) {
-  const preference = getNavigationPreference();
-
-  if (preference === "apple") return getAppleMapsUrl(point);
-  if (preference === "waze") return getWazeUrl(point);
-
-  return getGoogleMapsUrl(point);
-}
-
 async function submitChange() {
   if (!selectedLocation.value) return;
 
@@ -373,10 +267,32 @@ async function submitChange() {
     });
     contributionMessage.value =
       "Thanks. Your suggested change is waiting for maintainer review.";
+    changeBaseline.value = JSON.stringify(changeForm);
   } catch (errorValue) {
     contributionError.value = getErrorMessage(errorValue);
   } finally {
     isSubmittingChange.value = false;
+  }
+}
+
+async function deleteLocation() {
+  if (!selectedLocation.value || !isAdmin.value) return;
+
+  isDeletingLocation.value = true;
+
+  try {
+    await $fetch(`/api/locations/${selectedLocation.value.slug}`, {
+      method: "DELETE",
+    });
+    locations.value = locations.value.filter(
+      (location) => location.id !== selectedLocation.value?.id,
+    );
+    deleteDialogOpen.value = false;
+    closeLocationDrawer();
+  } catch (errorValue) {
+    selectedLocationError.value = getErrorMessage(errorValue);
+  } finally {
+    isDeletingLocation.value = false;
   }
 }
 
@@ -452,6 +368,7 @@ async function openLocationBySlug(slug: string) {
 }
 
 function selectLocation(location: LocationListItem) {
+  locationMode.value = "view";
   selectedLocation.value = location;
   selectedLocationError.value = "";
   syncChangeForm(location);
@@ -498,6 +415,7 @@ watch(
 
 watch(selectedLocation, (location) => {
   syncChangeForm(location);
+  changeBaseline.value = JSON.stringify(changeForm);
   contributionError.value = "";
   contributionMessage.value = "";
   reviewError.value = "";
@@ -548,25 +466,38 @@ watch(selectedLocation, (location) => {
       </ClientOnly>
     </div>
 
-    <UDrawer
-      v-model:active-snap-point="activeSnapPoint"
-      v-model:open="isLocationDrawerOpen"
-      :snap-points="[0.6, 1.0]"
-      :close-threshold="0.2"
-      direction="bottom"
+    <AppDrawer
+      :dirty="hasUnsavedLocationChanges"
+      :open="isLocationDrawerOpen"
+      :title="selectedLocation?.name"
+      @update:open="isLocationDrawerOpen = $event"
     >
       <template #header>
         <div v-if="selectedLocation" class="flex flex-col gap-4">
-          <div v-if="selectedLocation?.type?.[0] && selectedLocationMeta">
-            <p class="text-brand-600 text-sm font-semibold">
-              {{ getTypeMeta(selectedLocation.type[0])?.label }}
-            </p>
-            <h2 class="font-title text-2xl font-extrabold text-slate-950">
-              {{ selectedLocation?.name }}
-            </h2>
-            <p v-if="selectedLocationMeta" class="text-sm text-slate-600">
-              {{ selectedLocationMeta }}
-            </p>
+          <div class="flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <p
+                v-if="selectedLocation?.type?.[0]"
+                class="text-brand-600 text-sm font-semibold"
+              >
+                {{ getTypeMeta(selectedLocation.type[0])?.label }}
+              </p>
+              <h2 class="font-title text-2xl font-extrabold text-slate-950">
+                {{ selectedLocation?.name }}
+              </h2>
+              <p v-if="selectedLocationMeta" class="text-sm text-slate-600">
+                {{ selectedLocationMeta }}
+              </p>
+            </div>
+
+            <UDropdownMenu :items="locationMenuItems">
+              <UButton
+                aria-label="Location actions"
+                color="neutral"
+                icon="i-lucide-ellipsis-vertical"
+                variant="ghost"
+              />
+            </UDropdownMenu>
           </div>
 
           <div
@@ -594,244 +525,158 @@ watch(selectedLocation, (location) => {
           </div>
 
           <AppPhotoLanes
-            v-if="activeSnapPoint < 1 && selectedLocation?.photos?.length"
+            v-if="selectedLocation?.photos?.length"
             :location-name="selectedLocation.name"
             :photos="selectedLocation?.photos"
           />
         </div>
       </template>
-      <template #body>
-        <div v-if="activeSnapPoint > 0.6">
-          <AppTabs :items="items">
-            <template #overview>
-              <UEditor
-                v-model="selectedLocation.description"
-                :editable="false"
-                class="min-h-21 w-full"
-                content-type="markdown"
-              />
-            </template>
-            <template #photos>
-              <UScrollArea
-                v-slot="{ item, index }"
-                :items="selectedLocation?.photos"
-                :virtualize="{
-                  gap: 4,
-                  lanes: 2,
-                  estimateSize: 480,
-                }"
-                class="h-128 w-full"
-                orientation="vertical"
-              >
-                <NuxtImg
-                  :alt="item.alt"
-                  :height="item.height"
-                  :src="item.url"
-                  :width="item.width"
-                  class="size-full rounded-md object-cover"
-                  loading="lazy"
-                  @click="
-                    showPhotoFullscreen = true;
-                    selectedPhotoIndex = index;
-                  "
-                />
-              </UScrollArea>
-
-              <AppPhotoModal
-                v-if="selectedLocation"
-                v-model="showPhotoFullscreen"
-                :index="selectedPhotoIndex"
-                :location-name="selectedLocation.name"
-                :photos="selectedLocation?.photos"
-              />
-            </template>
-            <template #map>
-              <div class="flex flex-col gap-4">
-                <AppLocationPointPicker
-                  v-if="selectedLocationMapPoints.length > 0"
-                  :latitude="selectedLocationMapCenter?.latitude"
-                  :longitude="selectedLocationMapCenter?.longitude"
-                  :markers="selectedLocationMapPoints"
-                  readonly
-                />
-
-                <UAlert
-                  v-else
-                  color="neutral"
-                  icon="i-lucide-map-pin-off"
-                  title="No mapped points for this location yet."
-                  variant="soft"
-                />
-
-                <div
-                  v-if="selectedLocationMapPoints.length > 0"
-                  class="grid gap-3"
-                >
-                  <article
-                    v-for="point in selectedLocationMapPoints"
-                    :key="
-                      point.id ??
-                      `${point.kind}-${point.latitude}-${point.longitude}`
-                    "
-                    class="rounded-md border border-slate-200 bg-white p-4"
-                  >
-                    <div
-                      class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div class="min-w-0">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <p class="font-semibold text-slate-950">
-                            {{ getPointLabel(point) }}
-                          </p>
-                          <UBadge color="neutral" variant="soft">
-                            {{ getPointKindLabel(point.kind) }}
-                          </UBadge>
-                        </div>
-                        <p class="mt-1 text-sm text-slate-600">
-                          {{ point.latitude.toFixed(6) }},
-                          {{ point.longitude.toFixed(6) }}
-                        </p>
-                      </div>
-
-                      <div class="flex flex-wrap gap-2">
-                        <UButton
-                          :icon="getNavigationIcon()"
-                          :label="getNavigationLabel()"
-                          :to="getNavigationUrl(point)"
-                          color="neutral"
-                          target="_blank"
-                          variant="outline"
-                        />
-                      </div>
-                    </div>
-                  </article>
-                </div>
-              </div>
-            </template>
-            <template #reviews>
-              <div class="flex flex-col gap-5">
-                <form
-                  v-if="isSignedIn"
-                  class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4"
-                  @submit.prevent="submitReview"
-                >
-                  <div class="grid gap-3 sm:grid-cols-[8rem_1fr]">
-                    <UFormField label="Rating">
-                      <UInput
-                        v-model.number="reviewForm.rating"
-                        max="5"
-                        min="1"
-                        type="number"
-                      />
-                    </UFormField>
-                    <UFormField label="Review">
-                      <UTextarea
-                        v-model="reviewForm.text"
-                        autoresize
-                        class="w-full"
-                        required
-                      />
-                    </UFormField>
-                  </div>
-                  <UAlert
-                    v-if="reviewError"
-                    :title="reviewError"
-                    color="error"
-                    icon="i-lucide-circle-alert"
-                    variant="soft"
-                  />
-                  <UAlert
-                    v-if="reviewMessage"
-                    :title="reviewMessage"
-                    color="success"
-                    icon="i-lucide-circle-check"
-                    variant="soft"
-                  />
-                  <div>
-                    <UButton
-                      :loading="isSubmittingReview"
-                      icon="i-lucide-star"
-                      label="Add review"
-                      type="submit"
-                    />
-                  </div>
-                </form>
-
-                <UAlert
-                  v-else
-                  color="warning"
-                  icon="i-lucide-lock"
-                  title="Sign in to add a review."
-                  variant="soft"
-                />
-
-                <div class="flex flex-col gap-3">
-                  <article
-                    v-for="(review, index) in selectedLocation.reviews"
-                    :key="`${getReviewName(review)}-${index}`"
-                    class="rounded-md border border-slate-200 bg-white p-4"
-                  >
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="font-semibold text-slate-950">
-                        {{ getReviewName(review) }}
-                      </p>
-                      <UBadge
-                        v-if="review.rating"
-                        color="neutral"
-                        variant="soft"
-                      >
-                        {{ review.rating }}/5
-                      </UBadge>
-                      <span class="text-xs text-slate-500">
-                        {{ getReviewDate(review) }}
-                      </span>
-                    </div>
-                    <p
-                      class="mt-2 text-sm leading-6 whitespace-pre-line text-slate-700"
-                    >
-                      {{ review.text }}
-                    </p>
-                  </article>
-                </div>
-              </div>
-            </template>
-            <template #suggest-edit>
-              <AppLocationForm
+      <template #default>
+        <AppLocationForm
+          v-if="selectedLocation"
+          v-model="changeForm"
+          :error="contributionError"
+          form-id="location-detail-form"
+          :message="contributionMessage"
+          point-help="Adjust the location points that should be changed."
+          :readonly="locationMode === 'view'"
+          :reset-key="selectedLocation.id"
+          :show-features="locationMode === 'edit'"
+          :show-reviews="locationMode === 'view'"
+          :show-submit="false"
+          @submit="submitChange"
+        >
+          <template #reviews>
+            <div class="flex flex-col gap-5 pt-4">
+              <form
                 v-if="isSignedIn"
-                v-model="changeForm"
-                :error="contributionError"
-                :message="contributionMessage"
-                point-help="Adjust the location points that should be changed."
-                :reset-key="selectedLocation?.id"
-                :submitting="isSubmittingChange"
-                submit-label="Submit change"
-                @submit="submitChange"
-              />
+                class="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4"
+                @submit.prevent="submitReview"
+              >
+                <div class="grid gap-3 sm:grid-cols-[8rem_1fr]">
+                  <UFormField label="Rating">
+                    <UInput
+                      v-model.number="reviewForm.rating"
+                      max="5"
+                      min="1"
+                      type="number"
+                    />
+                  </UFormField>
+                  <UFormField label="Review">
+                    <UTextarea
+                      v-model="reviewForm.text"
+                      autoresize
+                      class="w-full"
+                      required
+                    />
+                  </UFormField>
+                </div>
+                <UAlert
+                  v-if="reviewError"
+                  :title="reviewError"
+                  color="error"
+                  icon="i-lucide-circle-alert"
+                  variant="soft"
+                />
+                <UAlert
+                  v-if="reviewMessage"
+                  :title="reviewMessage"
+                  color="success"
+                  icon="i-lucide-circle-check"
+                  variant="soft"
+                />
+                <div>
+                  <UButton
+                    :loading="isSubmittingReview"
+                    icon="i-lucide-star"
+                    label="Add review"
+                    type="submit"
+                  />
+                </div>
+              </form>
 
               <UAlert
                 v-else
                 color="warning"
                 icon="i-lucide-lock"
-                title="Sign in to suggest a change."
+                title="Sign in to add a review."
                 variant="soft"
               />
-            </template>
-            <template #links>
-              <UButton
-                v-for="url in selectedLocation.relatedUrls"
-                :to="url.url"
-                color="neutral"
-                icon="i-lucide-square-arrow-out-up-right"
-                target="_blank"
-                variant="outline"
-              >
-                {{ url.label }}
-              </UButton>
-            </template>
-          </AppTabs>
-        </div>
+
+              <div class="flex flex-col gap-3">
+                <article
+                  v-for="(review, index) in selectedLocation.reviews"
+                  :key="`${getReviewName(review)}-${index}`"
+                  class="rounded-md border border-slate-200 bg-white p-4"
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="font-semibold text-slate-950">
+                      {{ getReviewName(review) }}
+                    </p>
+                    <UBadge v-if="review.rating" color="neutral" variant="soft">
+                      {{ review.rating }}/5
+                    </UBadge>
+                    <span class="text-xs text-slate-500">
+                      {{ getReviewDate(review) }}
+                    </span>
+                  </div>
+                  <p
+                    class="mt-2 text-sm leading-6 whitespace-pre-line text-slate-700"
+                  >
+                    {{ review.text }}
+                  </p>
+                </article>
+              </div>
+            </div>
+          </template>
+        </AppLocationForm>
       </template>
-    </UDrawer>
+
+      <template v-if="selectedLocation" #actions="{ close }">
+        <AppDrawerActions>
+          <UButton
+            color="neutral"
+            label="Cancel"
+            type="button"
+            variant="subtle"
+            @click="close"
+          />
+          <UButton
+            v-if="locationMode === 'edit'"
+            form="location-detail-form"
+            icon="i-lucide-save"
+            label="Save"
+            :loading="isSubmittingChange"
+            type="submit"
+          />
+        </AppDrawerActions>
+      </template>
+    </AppDrawer>
+
+    <UModal
+      v-model:open="deleteDialogOpen"
+      :close="false"
+      description="This permanently removes the location from PawPaths."
+      title="Delete this location?"
+    >
+      <template #footer>
+        <AppDrawerActions>
+          <UButton
+            color="neutral"
+            label="Cancel"
+            variant="subtle"
+            @click="deleteDialogOpen = false"
+          />
+          <UButton
+            color="error"
+            icon="i-lucide-trash-2"
+            label="Delete"
+            :loading="isDeletingLocation"
+            @click="deleteLocation"
+          />
+        </AppDrawerActions>
+      </template>
+    </UModal>
 
     <LocationAddDrawer />
   </div>
