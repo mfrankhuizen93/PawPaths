@@ -131,7 +131,7 @@ export async function generateLocationDescription(
           content: [
             "You write concise location descriptions for dog owners.",
             "Write only in natural English and use Markdown.",
-            "Use exactly the six required bold section labels, in the supplied order.",
+            "Use exactly the four required bold section labels, in the supplied order.",
             "Under each label, write one short paragraph or a compact bullet list.",
             "Prioritize practical facts and what makes the location worth choosing.",
             "Take the existing description into account, but reorganize and improve it.",
