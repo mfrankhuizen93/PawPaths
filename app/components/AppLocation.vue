@@ -689,14 +689,15 @@ onBeforeUnmount(() => {
       class="absolute right-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 sm:right-5 sm:bottom-5"
     >
       <div
-        class="border-default/60 bg-default/88 flex flex-col overflow-hidden rounded-2xl border shadow-lg backdrop-blur-xl"
+        class="border-default/60 bg-default/88 flex flex-col overflow-hidden rounded-xl border shadow-lg backdrop-blur-xl"
       >
         <UButton
           aria-label="Zoom in"
+          class="size-10 justify-center p-0"
           :disabled="!isReady"
           color="neutral"
           icon="i-lucide-plus"
-          size="lg"
+          size="sm"
           square
           variant="ghost"
           @click="zoomIn"
@@ -704,10 +705,11 @@ onBeforeUnmount(() => {
         <USeparator />
         <UButton
           aria-label="Zoom out"
+          class="size-10 justify-center p-0"
           :disabled="!isReady"
           color="neutral"
           icon="i-lucide-minus"
-          size="lg"
+          size="sm"
           square
           variant="ghost"
           @click="zoomOut"
@@ -718,10 +720,10 @@ onBeforeUnmount(() => {
         aria-label="Go to my location"
         :disabled="!isReady"
         :loading="isLocating"
-        class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
+        class="border-default/60 bg-default/88 size-10 justify-center rounded-xl border p-0 shadow-lg backdrop-blur-xl"
         color="neutral"
         icon="i-lucide-navigation"
-        size="lg"
+        size="sm"
         square
         variant="ghost"
         @click="zoomToMyLocation"
