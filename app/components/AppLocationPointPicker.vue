@@ -296,17 +296,28 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative overflow-hidden rounded-md border border-slate-200">
+  <div
+    class="relative overflow-hidden rounded-md border border-slate-200"
+    @pointerdown.stop
+    @touchstart.stop
+  >
     <div
       ref="mapContainer"
       :class="readonly ? 'h-64 min-h-64' : 'h-80 min-h-80'"
       class="w-full"
     />
-    <div v-if="!readonly" class="absolute top-3 left-3 z-10 w-64">
-      <AppAddressSearch
-        placeholder="Search address or place"
-        @selected="searchAddress"
-      />
+    <div
+      v-if="!readonly"
+      class="absolute top-3 left-3 z-10 w-64 max-w-[calc(100%-1.5rem)]"
+    >
+      <div
+        class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"
+      >
+        <AppAddressSearch
+          placeholder="Search address or place"
+          @selected="searchAddress"
+        />
+      </div>
     </div>
   </div>
 </template>

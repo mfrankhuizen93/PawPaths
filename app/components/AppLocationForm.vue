@@ -32,7 +32,8 @@ const props = withDefaults(
     error: "",
     canGenerateDescription: false,
     message: "",
-    pointHelp: "Choose a point below, then click the map to place it.",
+    pointHelp:
+      "Click the map to set the general location. Add another point below, then click the map to place it.",
     resetKey: null,
     submitLabel: "Submit for review",
     submitting: false,
@@ -295,6 +296,16 @@ const mapMarkers = computed(() => [
   generalLocationMarker.value,
   ...(form.value.coordinatePoints ?? []),
 ]);
+const directionsUrl = computed(() => {
+  if (
+    !Number.isFinite(form.value.latitude) ||
+    !Number.isFinite(form.value.longitude)
+  ) {
+    return undefined;
+  }
+
+  return `https://www.google.com/maps/dir/?api=1&destination=${form.value.latitude},${form.value.longitude}`;
+});
 
 const activePoint = computed<LocationCoordinatePoint | null>(() => {
   if (activePointId.value === "general") return null;
@@ -848,28 +859,31 @@ onBeforeUnmount(() => {
           </UFormField>
 
           <UFormField
-            description="Answer the prompts with practical, specific information."
-            label="Description"
+            description="Write about access, leash rules, terrain, facilities, and useful tips for dog owners."
             name="description"
           >
-            <div v-if="!readonly" class="mb-2 flex justify-end">
-              <UButton
-                v-if="canGenerateDescription"
-                color="primary"
-                icon="i-lucide-sparkles"
-                :label="
-                  isLocationDescriptionTemplate(form.description) ||
-                  !form.description?.trim()
-                    ? 'Generate description'
-                    : 'Regenerate description'
-                "
-                :loading="isGeneratingDescription"
-                size="sm"
-                type="button"
-                variant="subtle"
-                @click="generateDescription"
-              />
-            </div>
+            <template #label>
+              <div class="flex w-full items-center justify-between gap-3">
+                <span>Description</span>
+                <UButton
+                  v-if="canGenerateDescription && !readonly"
+                  :aria-label="
+                    isLocationDescriptionTemplate(form.description) ||
+                    !form.description?.trim()
+                      ? 'Generate description'
+                      : 'Regenerate description'
+                  "
+                  color="primary"
+                  icon="i-lucide-sparkles"
+                  :loading="isGeneratingDescription"
+                  size="xs"
+                  square
+                  type="button"
+                  variant="subtle"
+                  @click.stop="generateDescription"
+                />
+              </div>
+            </template>
             <UEditor
               v-model="form.description"
               :editable="!readonly"
@@ -1008,13 +1022,6 @@ onBeforeUnmount(() => {
                 @click="addCoordinatePoint('other')"
               />
             </div>
-            <MapMarkerCard
-              v-model="generalLocationMarker"
-              :is-active="activePointId === 'general'"
-              :readonly="readonly"
-              @click="activePointId = 'general'"
-            />
-
             <template
               v-for="(point, pointIndex) in form.coordinatePoints"
               :key="point.id + '-' + pointIndex"
@@ -1122,6 +1129,17 @@ onBeforeUnmount(() => {
 
       <template #links>
         <div class="flex flex-col gap-4 pt-4">
+          <UButton
+            class="self-start"
+            color="primary"
+            :disabled="!directionsUrl"
+            icon="i-lucide-navigation"
+            label="Directions"
+            target="_blank"
+            :to="directionsUrl"
+            variant="soft"
+          />
+
           <template v-if="readonly">
             <UButton
               v-for="(url, index) in form.relatedUrls"
@@ -1172,7 +1190,7 @@ onBeforeUnmount(() => {
           </template>
 
           <AppEmptyState
-            v-if="readonly && !form.relatedUrls?.length"
+            v-if="readonly && !directionsUrl && !form.relatedUrls?.length"
             description="No related links have been added."
             icon="i-lucide-link"
             title="No links"

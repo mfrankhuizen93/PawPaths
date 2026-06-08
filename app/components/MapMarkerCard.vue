@@ -39,7 +39,7 @@ const editablePointKind = computed({
 
 <template>
   <div
-    class="flex justify-between gap-2 rounded border p-3"
+    class="grid gap-2 rounded border p-3 sm:grid-cols-[auto_minmax(10rem,1fr)_minmax(10rem,1fr)_auto]"
     :class="{ 'border-brand-500 bg-brand-50 border': isActive }"
   >
     <UButton color="neutral" icon="i-lucide-crosshair" variant="ghost" />
@@ -56,18 +56,23 @@ const editablePointKind = computed({
       v-model="editablePointKind"
       :disabled="isGeneralLocation || readonly"
       :items="pointKindOptions"
-      class="w-full flex-1"
+      class="w-full"
       placeholder="Kind"
       value-key="value"
     />
 
-    <UInput v-if="false" v-model="marker.label" placeholder="Label" />
+    <UInput
+      v-if="!isGeneralLocation"
+      v-model="marker.label"
+      :readonly="readonly"
+      placeholder="Label"
+    />
     <UButton
       v-if="isActive && !isGeneralLocation && !readonly"
-      @click="emit('remove', marker.id)"
       icon="i-lucide:trash"
       color="error"
       variant="ghost"
+      @click="emit('remove', marker.id)"
     />
   </div>
 </template>

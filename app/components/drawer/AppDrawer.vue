@@ -53,6 +53,7 @@ function requestClose() {
       v-model:open="drawerOpen"
       :description="description"
       direction="bottom"
+      handle-only
       :title="title"
       :ui="{
         content: 'rounded-t-[1.75rem]',

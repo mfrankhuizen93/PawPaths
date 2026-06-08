@@ -672,7 +672,7 @@ watch(selectedLocation, (location) => {
           :error="contributionError"
           form-id="location-detail-form"
           :message="contributionMessage"
-          point-help="Adjust the location points that should be changed."
+          point-help="Click the map to move the selected point. Add another point below, then place it on the map."
           :readonly="locationMode === 'view'"
           :reset-key="selectedLocation.id"
           :show-features="locationMode === 'edit'"
