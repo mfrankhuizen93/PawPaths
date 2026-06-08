@@ -11,6 +11,6 @@ import LocationAddForm from "~/components/location/LocationAddForm.vue";
       title="Add a location"
     />
 
-    <LocationAddForm />
+    <LocationAddForm :contained="false" />
   </div>
 </template>

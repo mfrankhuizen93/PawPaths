@@ -12,7 +12,7 @@ import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
 
 const route = useRoute();
 const router = useRouter();
-const { isAdmin, isSignedIn } = useAuth();
+const { isAdmin, isSignedIn, user } = useAuth();
 const authDrawer = useAuthDrawer();
 const addLocationDrawerOpen = useAddLocationDrawer();
 
@@ -213,6 +213,15 @@ const selectedLocationDirectionsUrl = computed(() => {
   }
 
   return `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`;
+});
+const profileInitials = computed(() => {
+  const label = user.value?.name?.trim() || user.value?.email?.trim() || "";
+
+  return label
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 });
 
 watch(
@@ -526,7 +535,7 @@ watch(selectedLocation, (location) => {
             >
               <UButton
                 aria-label="Filter locations"
-                class="border-default/60 bg-default/88 rounded-2xl border shadow-lg backdrop-blur-xl"
+                class="border-default/60 bg-default/88 size-12 rounded-2xl border shadow-lg backdrop-blur-xl"
                 color="neutral"
                 icon="i-lucide-sliders-horizontal"
                 size="lg"
@@ -553,17 +562,7 @@ watch(selectedLocation, (location) => {
 
             <UButton
               aria-label="Add location"
-              class="border-default/60 bg-default/88 hidden rounded-2xl border shadow-lg backdrop-blur-xl sm:inline-flex"
-              color="neutral"
-              icon="i-lucide-plus"
-              label="Add"
-              size="lg"
-              variant="ghost"
-              @click="openAddLocation"
-            />
-            <UButton
-              aria-label="Add location"
-              class="border-default/60 bg-default/88 rounded-2xl border shadow-lg backdrop-blur-xl sm:hidden"
+              class="border-default/60 bg-default/88 h-12 rounded-2xl border shadow-lg backdrop-blur-xl"
               color="neutral"
               icon="i-lucide-plus"
               size="lg"
@@ -573,14 +572,21 @@ watch(selectedLocation, (location) => {
             />
             <UButton
               aria-label="Open profile"
-              class="border-default/60 bg-default/88 rounded-2xl border shadow-lg backdrop-blur-xl"
+              class="border-default/60 bg-default/88 size-12 rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
               color="neutral"
-              icon="i-lucide-circle-user-round"
               size="lg"
               square
               variant="ghost"
               @click="openProfile"
-            />
+            >
+              <UAvatar
+                :alt="user?.name || 'Profile'"
+                :icon="isSignedIn ? undefined : 'i-lucide-user'"
+                size="lg"
+                :src="user?.image || undefined"
+                :text="profileInitials || undefined"
+              />
+            </UButton>
           </template>
         </LazyAppLocation>
       </ClientOnly>

@@ -26,6 +26,7 @@ const props = withDefaults(
     showFeatures?: boolean;
     showReviews?: boolean;
     formId?: string;
+    contained?: boolean;
   }>(),
   {
     error: "",
@@ -40,6 +41,7 @@ const props = withDefaults(
     showFeatures: true,
     showReviews: false,
     formId: undefined,
+    contained: true,
   },
 );
 
@@ -827,7 +829,10 @@ onBeforeUnmount(() => {
     :id="formId"
     :schema="locationSchema"
     :state="form"
-    class="flex flex-col gap-5 rounded-md border border-slate-200 bg-white p-5 shadow-sm"
+    :class="[
+      'flex flex-col gap-5',
+      contained && 'rounded-md border border-slate-200 bg-white p-5 shadow-sm',
+    ]"
     @submit="submitForm"
   >
     <AppTabs :items="formTabs">

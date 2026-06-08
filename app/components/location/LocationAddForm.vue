@@ -4,6 +4,14 @@ import { locationDescriptionTemplate } from "#shared/utils/location-description"
 
 const { isAdmin, isSignedIn } = useAuth();
 const authDrawer = useAuthDrawer();
+const props = withDefaults(
+  defineProps<{
+    contained?: boolean;
+  }>(),
+  {
+    contained: true,
+  },
+);
 const emit = defineEmits<{
   "dirty-change": [dirty: boolean];
   submitted: [];
@@ -110,6 +118,7 @@ watch(
     v-else
     v-model="form"
     :can-generate-description="isAdmin"
+    :contained="props.contained"
     :error="error"
     :message="message"
     :reset-key="formResetKey"

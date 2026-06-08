@@ -647,7 +647,7 @@ onBeforeUnmount(() => {
         class="pointer-events-auto flex min-w-0 flex-1 items-center gap-3 sm:max-w-md"
       >
         <div
-          class="border-default/60 bg-default/88 min-w-0 flex-1 rounded-2xl border p-2 shadow-lg backdrop-blur-xl"
+          class="border-default/60 bg-default/88 h-12 min-w-0 flex-1 rounded-2xl border shadow-lg backdrop-blur-xl"
         >
           <AppAddressSearch
             placeholder="Search PawPaths"

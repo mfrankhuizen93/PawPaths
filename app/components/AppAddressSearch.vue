@@ -100,6 +100,7 @@ onBeforeUnmount(() => {
       class="min-w-0 flex-1"
       icon="i-lucide-search"
       size="lg"
+      :ui="{ base: 'h-12' }"
       variant="none"
     />
 
