@@ -932,7 +932,7 @@ onBeforeUnmount(() => {
             class="grid gap-5 sm:grid-cols-2"
           >
             <UFormField label="Type" name="type">
-              <USelectMenu
+              <USelect
                 v-model="form.type"
                 class="w-full"
                 :items="typeItems"
@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
             </UFormField>
 
             <UFormField label="Characteristics" name="characteristics">
-              <USelectMenu
+              <USelect
                 v-model="form.characteristics"
                 class="w-full"
                 :items="characteristicItems"
