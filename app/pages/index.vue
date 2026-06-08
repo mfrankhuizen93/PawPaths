@@ -533,7 +533,13 @@ watch(selectedLocation, (location) => {
                 body: 'max-h-[70vh] overflow-y-auto',
               }"
             >
-              <div class="relative">
+              <UChip
+                color="primary"
+                :show="activeFilterCount > 0"
+                size="3xl"
+                :text="activeFilterCount"
+                :ui="{ base: 'h-5 min-w-5 px-1 text-[10px] font-bold' }"
+              >
                 <UButton
                   aria-label="Filter locations"
                   class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
@@ -543,13 +549,7 @@ watch(selectedLocation, (location) => {
                   square
                   variant="ghost"
                 />
-                <span
-                  v-if="activeFilterCount"
-                  class="bg-primary text-inverted pointer-events-none absolute -top-1 -right-1 grid size-5 place-items-center rounded-full text-[10px] font-bold"
-                >
-                  {{ activeFilterCount }}
-                </span>
-              </div>
+              </UChip>
 
               <template #body>
                 <AppLocationFilters
