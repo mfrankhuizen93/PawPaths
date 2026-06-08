@@ -932,18 +932,26 @@ onBeforeUnmount(() => {
             class="grid gap-5 sm:grid-cols-2"
           >
             <UFormField label="Type" name="type">
-              <UCheckboxGroup
+              <USelectMenu
                 v-model="form.type"
+                class="w-full"
                 :items="typeItems"
+                multiple
                 name="type"
+                placeholder="Select types"
+                value-key="value"
               />
             </UFormField>
 
             <UFormField label="Characteristics" name="characteristics">
-              <UCheckboxGroup
+              <USelectMenu
                 v-model="form.characteristics"
+                class="w-full"
                 :items="characteristicItems"
+                multiple
                 name="characteristics"
+                placeholder="Select characteristics"
+                value-key="value"
               />
             </UFormField>
           </div>

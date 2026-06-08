@@ -19,6 +19,7 @@ const dirty = ref(false);
     </template>
 
     <LocationAddForm
+      :contained="false"
       @dirty-change="dirty = $event"
       @submitted="dirty = false"
     />
