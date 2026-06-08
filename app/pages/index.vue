@@ -533,13 +533,7 @@ watch(selectedLocation, (location) => {
                 body: 'max-h-[70vh] overflow-y-auto',
               }"
             >
-              <UChip
-                color="primary"
-                :show="activeFilterCount > 0"
-                size="3xl"
-                :text="activeFilterCount"
-                :ui="{ base: 'h-5 min-w-5 px-1 text-[10px] font-bold' }"
-              >
+              <UChip color="error" :show="activeFilterCount > 0" size="lg">
                 <UButton
                   aria-label="Filter locations"
                   class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
