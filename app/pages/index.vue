@@ -533,23 +533,23 @@ watch(selectedLocation, (location) => {
                 body: 'max-h-[70vh] overflow-y-auto',
               }"
             >
-              <UButton
-                aria-label="Filter locations"
-                class="border-default/60 bg-default/88 size-12 rounded-2xl border shadow-lg backdrop-blur-xl"
-                color="neutral"
-                icon="i-lucide-sliders-horizontal"
-                size="lg"
-                square
-                variant="ghost"
-              >
-                <template v-if="activeFilterCount" #trailing>
-                  <span
-                    class="bg-primary text-inverted absolute -top-1 -right-1 grid size-5 place-items-center rounded-full text-[10px] font-bold"
-                  >
-                    {{ activeFilterCount }}
-                  </span>
-                </template>
-              </UButton>
+              <div class="relative">
+                <UButton
+                  aria-label="Filter locations"
+                  class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
+                  color="neutral"
+                  icon="i-lucide-sliders-horizontal"
+                  size="lg"
+                  square
+                  variant="ghost"
+                />
+                <span
+                  v-if="activeFilterCount"
+                  class="bg-primary text-inverted pointer-events-none absolute -top-1 -right-1 grid size-5 place-items-center rounded-full text-[10px] font-bold"
+                >
+                  {{ activeFilterCount }}
+                </span>
+              </div>
 
               <template #body>
                 <AppLocationFilters
@@ -562,7 +562,7 @@ watch(selectedLocation, (location) => {
 
             <UButton
               aria-label="Add location"
-              class="border-default/60 bg-default/88 h-12 rounded-2xl border shadow-lg backdrop-blur-xl"
+              class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
               color="neutral"
               icon="i-lucide-plus"
               size="lg"
@@ -572,7 +572,7 @@ watch(selectedLocation, (location) => {
             />
             <UButton
               aria-label="Open profile"
-              class="border-default/60 bg-default/88 size-12 rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
+              class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
               color="neutral"
               size="lg"
               square

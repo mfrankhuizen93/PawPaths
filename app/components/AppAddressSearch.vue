@@ -4,13 +4,18 @@ import type { GeocodeResult } from "#shared/types/geo";
 const props = withDefaults(
   defineProps<{
     placeholder?: string;
+    autofocus?: boolean;
+    collapsible?: boolean;
   }>(),
   {
     placeholder: "Search address or place",
+    autofocus: false,
+    collapsible: false,
   },
 );
 
 const emit = defineEmits<{
+  close: [];
   selected: [result: GeocodeResult];
 }>();
 
@@ -95,6 +100,7 @@ onBeforeUnmount(() => {
   <div class="relative flex flex-col">
     <UInput
       v-model="query"
+      :autofocus="props.autofocus"
       :loading="isSearching"
       :placeholder="props.placeholder"
       class="min-w-0 flex-1"
@@ -102,7 +108,19 @@ onBeforeUnmount(() => {
       size="lg"
       :ui="{ base: 'h-12' }"
       variant="none"
-    />
+    >
+      <template v-if="props.collapsible" #trailing>
+        <UButton
+          aria-label="Close search"
+          color="neutral"
+          icon="i-lucide-x"
+          size="sm"
+          square
+          variant="ghost"
+          @click="emit('close')"
+        />
+      </template>
+    </UInput>
 
     <div
       v-if="results.length"
