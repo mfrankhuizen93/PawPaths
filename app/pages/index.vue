@@ -461,14 +461,18 @@ watch(
   },
 );
 
-watch(selectedLocation, (location) => {
-  syncChangeForm(location);
-  changeBaseline.value = JSON.stringify(changeForm);
-  contributionError.value = "";
-  contributionMessage.value = "";
-  reviewError.value = "";
-  reviewMessage.value = "";
-});
+watch(
+  selectedLocation,
+  (location) => {
+    syncChangeForm(location);
+    changeBaseline.value = JSON.stringify(changeForm);
+    contributionError.value = "";
+    contributionMessage.value = "";
+    reviewError.value = "";
+    reviewMessage.value = "";
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
