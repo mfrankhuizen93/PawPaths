@@ -672,6 +672,7 @@ watch(
         <AppLocationForm
           v-if="selectedLocation"
           v-model="changeForm"
+          :can-generate-description="isAdmin"
           :contained="false"
           :error="contributionError"
           form-id="location-detail-form"
