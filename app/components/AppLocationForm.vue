@@ -102,7 +102,7 @@ const formTabs = computed<TabsItem[]>(() => [
     : []),
 ]);
 const secondaryToolbarButtonClass = "hidden sm:inline-flex";
-const descriptionEditorToolbarItems = [
+const baseDescriptionEditorToolbarItems = [
   [
     {
       icon: "i-lucide-bold",
@@ -183,6 +183,37 @@ const isReverseGeocoding = ref(false);
 const geocodeError = ref("");
 const descriptionGenerationError = ref("");
 const isGeneratingDescription = ref(false);
+const descriptionEditorToolbarItems = computed(() => [
+  ...baseDescriptionEditorToolbarItems,
+  ...(props.canGenerateDescription && !props.readonly
+    ? [
+        [
+          {
+            "aria-label":
+              isLocationDescriptionTemplate(form.value.description) ||
+              !form.value.description?.trim()
+                ? "Generate description"
+                : "Regenerate description",
+            color: "primary" as const,
+            icon: "i-lucide-sparkles",
+            loading: isGeneratingDescription.value,
+            tooltip: {
+              text:
+                isLocationDescriptionTemplate(form.value.description) ||
+                !form.value.description?.trim()
+                  ? "Generate description"
+                  : "Regenerate description",
+            },
+            variant: "subtle" as const,
+            onClick: (event: Event) => {
+              event.stopPropagation();
+              void generateDescription();
+            },
+          },
+        ],
+      ]
+    : []),
+]);
 const locationForm = ref<{
   clear: (name?: string | RegExp) => void;
   setErrors: (
@@ -859,31 +890,10 @@ onBeforeUnmount(() => {
           </UFormField>
 
           <UFormField
+            label="Description"
             description="Write about access, leash rules, terrain, facilities, and useful tips for dog owners."
             name="description"
           >
-            <template #label>
-              <div class="flex w-full items-center justify-between gap-3">
-                <span>Description</span>
-                <UButton
-                  v-if="canGenerateDescription && !readonly"
-                  :aria-label="
-                    isLocationDescriptionTemplate(form.description) ||
-                    !form.description?.trim()
-                      ? 'Generate description'
-                      : 'Regenerate description'
-                  "
-                  color="primary"
-                  icon="i-lucide-sparkles"
-                  :loading="isGeneratingDescription"
-                  size="xs"
-                  square
-                  type="button"
-                  variant="subtle"
-                  @click.stop="generateDescription"
-                />
-              </div>
-            </template>
             <UEditor
               v-model="form.description"
               :editable="!readonly"
@@ -916,25 +926,6 @@ onBeforeUnmount(() => {
               variant="soft"
             />
           </UFormField>
-
-          <div class="grid gap-4 sm:grid-cols-2">
-            <UFormField label="City" name="city" required>
-              <UInput
-                v-model="form.city"
-                icon="i-lucide-building-2"
-                :readonly="readonly"
-                required
-              />
-            </UFormField>
-            <UFormField label="Country" name="country" required>
-              <UInput
-                v-model="form.country"
-                icon="i-lucide-globe-2"
-                :readonly="readonly"
-                required
-              />
-            </UFormField>
-          </div>
 
           <div
             v-if="!showFeatures && !readonly"
@@ -1036,7 +1027,7 @@ onBeforeUnmount(() => {
               />
             </template>
             <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
-              Filling city and country from the general location...
+              Finding place details from the general location...
             </p>
           </div>
         </UFormField>
