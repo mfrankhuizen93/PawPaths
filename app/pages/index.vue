@@ -668,6 +668,7 @@ watch(selectedLocation, (location) => {
         <AppLocationForm
           v-if="selectedLocation"
           v-model="changeForm"
+          :contained="false"
           :error="contributionError"
           form-id="location-detail-form"
           :message="contributionMessage"
