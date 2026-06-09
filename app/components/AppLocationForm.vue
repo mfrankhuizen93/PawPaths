@@ -902,9 +902,16 @@ onBeforeUnmount(() => {
           <UFormField label="Name" name="name" required>
             <UInput
               v-model="form.name"
-              icon="i-lucide-map-pin"
               :readonly="readonly"
               required
+              :ui="
+                readonly
+                  ? {
+                      base: 'px-0 ring-0 bg-transparent focus-visible:ring-0',
+                    }
+                  : undefined
+              "
+              :variant="readonly ? 'none' : 'outline'"
             />
           </UFormField>
 
@@ -916,12 +923,20 @@ onBeforeUnmount(() => {
             <UEditor
               v-model="form.description"
               :editable="!readonly"
-              class="min-h-32 w-full min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white"
+              :class="[
+                'min-h-32 w-full min-w-0 overflow-hidden',
+                readonly
+                  ? 'bg-transparent'
+                  : 'rounded-md border border-slate-200 bg-white',
+              ]"
               content-type="markdown"
               placeholder="Describe this location..."
               :ui="{
                 content: 'min-h-32',
-                base: 'min-h-32 px-3 py-2 text-base leading-5 font-sans text-slate-950 sm:px-3 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
+                base: [
+                  'min-h-32 py-2 text-base leading-5 font-sans text-slate-950 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
+                  readonly ? 'px-0 sm:px-0' : 'px-3 sm:px-3',
+                ],
               }"
             >
               <template v-if="!readonly" #default="{ editor }">
