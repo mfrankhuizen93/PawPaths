@@ -53,6 +53,7 @@ function getInitials(name: string | undefined, email: string | undefined) {
   <AppDrawer
     :description="user?.email"
     :open="open"
+    stable-height
     :title="user?.name"
     @update:open="$emit('update:open', $event)"
   >

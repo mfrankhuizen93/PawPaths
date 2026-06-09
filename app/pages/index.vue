@@ -593,6 +593,7 @@ watch(
     <AppDrawer
       :dirty="hasUnsavedLocationChanges"
       :open="isLocationDrawerOpen"
+      stable-height
       :title="selectedLocation?.name"
       @update:open="isLocationDrawerOpen = $event"
     >

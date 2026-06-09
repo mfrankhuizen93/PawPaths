@@ -6,12 +6,14 @@ const props = withDefaults(
     description?: string;
     loading?: boolean;
     dirty?: boolean;
+    stableHeight?: boolean;
   }>(),
   {
     title: undefined,
     description: undefined,
     loading: false,
     dirty: false,
+    stableHeight: false,
   },
 );
 
@@ -56,9 +58,20 @@ function requestClose() {
       handle-only
       :title="title"
       :ui="{
-        content: 'rounded-t-[1.75rem]',
-        container: 'mx-auto w-full max-w-5xl',
-        body: 'max-h-[70vh] overflow-y-auto',
+        content: [
+          'rounded-t-[1.75rem]',
+          stableHeight && 'h-[min(88dvh,52rem)]',
+        ],
+        container: [
+          'mx-auto w-full max-w-5xl',
+          stableHeight && 'min-h-0 flex-1 overflow-hidden',
+        ],
+        header: stableHeight && 'shrink-0',
+        body: [
+          'overflow-y-auto',
+          stableHeight ? 'min-h-0 flex-1' : 'max-h-[70vh]',
+        ],
+        footer: stableHeight && 'shrink-0',
         handle: 'mt-3 h-1.5 w-10 rounded-full',
       }"
     >

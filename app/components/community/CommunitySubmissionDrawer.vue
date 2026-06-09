@@ -62,6 +62,7 @@ function formatDate(value: string) {
     :description="submission?.submitter.email"
     :dirty="isDirty"
     :open="open"
+    stable-height
     :title="submission?.payload.name"
     @update:open="$emit('update:open', $event)"
   >
