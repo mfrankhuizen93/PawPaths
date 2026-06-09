@@ -4,6 +4,7 @@ import AppAuthForm from "~/components/auth/AppAuthForm.vue";
 import AppPageHeader from "~/components/common/AppPageHeader.vue";
 
 const route = useRoute();
+const toast = useToast();
 const {
   user,
   isSignedIn,
@@ -18,7 +19,6 @@ const isSavingProfile = ref(false);
 const authError = ref("");
 const authMessage = ref("");
 const profileError = ref("");
-const profileMessage = ref("");
 const selectedProfileImage = ref<string | null>(null);
 const imageError = ref("");
 const profileForm = reactive({
@@ -145,7 +145,6 @@ function clearSelectedImage() {
 
 async function saveProfile() {
   profileError.value = "";
-  profileMessage.value = "";
   isSavingProfile.value = true;
 
   try {
@@ -154,7 +153,12 @@ async function saveProfile() {
       image: profileForm.image,
       navigationAppPreference: profileForm.navigationAppPreference,
     });
-    profileMessage.value = "Profile updated.";
+    toast.add({
+      title: "Profile saved",
+      description: "Your PawPaths profile is up to date.",
+      color: "success",
+      icon: "i-lucide-circle-check",
+    });
   } catch (error) {
     profileError.value = getErrorMessage(error);
   } finally {
@@ -205,13 +209,26 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6">
-    <AppPageHeader eyebrow="Account" title="PawPaths profile" />
-
-    <section
-      v-if="!isSignedIn"
-      class="rounded-md border border-slate-200 bg-white p-5 shadow-sm"
+  <div
+    class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8"
+  >
+    <AppPageHeader
+      description="Manage your identity, preferences, and account access."
+      eyebrow="Account"
+      title="Profile"
     >
+      <template v-if="isSignedIn" #actions>
+        <UButton
+          color="neutral"
+          icon="i-lucide-log-out"
+          label="Sign out"
+          variant="ghost"
+          @click="logout"
+        />
+      </template>
+    </AppPageHeader>
+
+    <UCard v-if="!isSignedIn" variant="soft">
       <UAlert
         v-if="authError || authMessage"
         class="mb-4"
@@ -221,56 +238,42 @@ onMounted(() => {
         variant="soft"
       />
       <AppAuthForm />
-    </section>
+    </UCard>
 
-    <section
-      v-else
-      class="flex flex-col gap-5 rounded-md border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div
-        class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+    <template v-else>
+      <UCard
+        variant="soft"
+        :ui="{ body: 'flex items-center gap-4 p-4 sm:p-5' }"
       >
-        <div class="flex min-w-0 items-center gap-4">
-          <div
-            class="bg-brand-100 text-brand-700 flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full text-lg font-extrabold"
-          >
-            <img
-              v-if="user?.image"
-              :src="user.image"
-              alt=""
-              class="size-full object-cover"
-            />
-            <span v-else>{{ getInitials(user?.name, user?.email) }}</span>
-          </div>
-          <div class="min-w-0">
-            <h2
-              class="font-title truncate text-2xl font-extrabold text-slate-950"
+        <UAvatar
+          :alt="user?.name || 'Profile'"
+          class="size-20 text-2xl"
+          :src="user?.image || undefined"
+          :text="getInitials(user?.name, user?.email)"
+        />
+        <div class="min-w-0 flex-1">
+          <h2 class="font-title text-highlighted truncate text-2xl font-bold">
+            {{ user?.name }}
+          </h2>
+          <p class="text-muted truncate text-sm">{{ user?.email }}</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <UBadge
+              :color="user?.emailVerified ? 'success' : 'warning'"
+              :icon="
+                user?.emailVerified
+                  ? 'i-lucide-badge-check'
+                  : 'i-lucide-circle-alert'
+              "
+              variant="soft"
             >
-              {{ user?.name }}
-            </h2>
-            <p class="truncate text-sm text-slate-600">{{ user?.email }}</p>
+              {{ user?.emailVerified ? "Verified" : "Email not verified" }}
+            </UBadge>
+            <UBadge color="neutral" variant="soft">
+              {{ user ? roleLabels[user.role] : "" }}
+            </UBadge>
           </div>
         </div>
-
-        <div class="flex items-center gap-3">
-          <UBadge
-            :color="user?.emailVerified ? 'success' : 'warning'"
-            variant="soft"
-          >
-            {{ user?.emailVerified ? "Verified" : "Unverified" }}
-          </UBadge>
-          <UBadge color="neutral" variant="soft">
-            {{ user ? roleLabels[user.role] : "" }}
-          </UBadge>
-          <UButton
-            color="neutral"
-            icon="i-lucide-log-out"
-            label="Sign out"
-            variant="subtle"
-            @click="logout"
-          />
-        </div>
-      </div>
+      </UCard>
 
       <UAlert
         v-if="authError"
@@ -288,103 +291,116 @@ onMounted(() => {
         variant="soft"
       />
 
-      <form
-        class="grid gap-4 md:grid-cols-[auto_1fr_auto]"
-        @submit.prevent="saveProfile"
-      >
-        <div
-          class="bg-brand-100 text-brand-700 flex size-20 items-center justify-center overflow-hidden rounded-full text-xl font-extrabold"
+      <form class="flex flex-col gap-5" @submit.prevent="saveProfile">
+        <UCard
+          description="Choose how your name and photo appear across PawPaths."
+          title="Personal details"
         >
-          <img
-            v-if="profileForm.image"
-            :src="profileForm.image"
-            alt=""
-            class="size-full object-cover"
-          />
-          <span v-else>{{ getInitials(profileForm.name, user?.email) }}</span>
-        </div>
-
-        <div class="grid gap-3 sm:grid-cols-2">
-          <UFormField label="Display name">
-            <UInput
-              v-model="profileForm.name"
-              autocomplete="name"
-              icon="i-lucide-user"
-              placeholder="Your name"
-            />
-          </UFormField>
-
-          <UFormField label="Profile picture">
-            <div class="flex flex-wrap gap-2">
-              <UButton
-                as="label"
-                color="neutral"
-                icon="i-lucide-image-plus"
-                label="Choose image"
-                variant="subtle"
-              >
-                <input
-                  accept="image/jpeg,image/png,image/webp"
-                  class="sr-only"
-                  type="file"
-                  @change="handleProfileImageChange"
-                />
-              </UButton>
-              <UButton
-                v-if="profileForm.image"
-                color="neutral"
-                icon="i-lucide-x"
-                label="Remove"
-                variant="ghost"
-                @click="clearSelectedImage"
+          <div class="flex flex-col gap-5">
+            <div class="flex items-center gap-4">
+              <UAvatar
+                :alt="profileForm.name || 'Profile picture'"
+                class="size-16 text-xl"
+                :src="profileForm.image || undefined"
+                :text="getInitials(profileForm.name, user?.email)"
               />
-            </div>
-          </UFormField>
 
-          <UFormField label="Navigation app">
+              <div class="flex flex-wrap gap-2">
+                <UButton
+                  as="label"
+                  color="neutral"
+                  icon="i-lucide-camera"
+                  label="Choose photo"
+                  variant="soft"
+                >
+                  <input
+                    accept="image/jpeg,image/png,image/webp"
+                    class="sr-only"
+                    type="file"
+                    @change="handleProfileImageChange"
+                  />
+                </UButton>
+                <UButton
+                  v-if="profileForm.image"
+                  color="neutral"
+                  icon="i-lucide-trash-2"
+                  label="Remove"
+                  type="button"
+                  variant="ghost"
+                  @click="clearSelectedImage"
+                />
+              </div>
+            </div>
+
+            <UFormField
+              description="This is shown with your reviews and contributions."
+              label="Display name"
+            >
+              <UInput
+                v-model="profileForm.name"
+                autocomplete="name"
+                class="w-full"
+                placeholder="Your name"
+              />
+            </UFormField>
+          </div>
+        </UCard>
+
+        <UCard
+          description="Choose which app opens when you ask for directions."
+          title="Directions"
+        >
+          <UFormField label="Preferred navigation app">
             <USelect
               v-model="profileForm.navigationAppPreference"
+              class="w-full"
               :items="navigationAppOptions"
-              icon="i-lucide-navigation"
+              placeholder="Choose an app"
             />
           </UFormField>
-        </div>
+        </UCard>
 
-        <div class="flex items-end">
+        <UAlert
+          v-if="profileError || imageError"
+          :title="profileError || imageError"
+          color="error"
+          icon="i-lucide-circle-alert"
+          variant="soft"
+        />
+
+        <div class="flex justify-end">
           <UButton
             :loading="isSavingProfile"
-            icon="i-lucide-save"
-            label="Save"
+            icon="i-lucide-check"
+            label="Save profile"
+            size="lg"
             type="submit"
           />
         </div>
       </form>
 
-      <UAlert
-        v-if="profileError || imageError"
-        :title="profileError || imageError"
-        color="error"
-        icon="i-lucide-circle-alert"
+      <UCard
+        v-if="user && !user.emailVerified"
+        description="Verify your email to keep your account secure."
+        title="Email verification"
         variant="soft"
-      />
-
-      <UAlert
-        v-if="profileMessage"
-        :title="profileMessage"
-        color="success"
-        icon="i-lucide-circle-check"
-        variant="soft"
-      />
-
-      <div v-if="user && !user.emailVerified">
-        <UButton
-          :loading="isResendingVerification"
-          icon="i-lucide-mail-check"
-          label="Resend verification email"
-          variant="subtle"
-          @click="resendVerification"
-        />
-      </div>
-    </section>
+      >
+        <div
+          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p class="text-muted text-sm">
+            We will send a new verification link to {{ user.email }}.
+          </p>
+          <UButton
+            class="shrink-0"
+            :loading="isResendingVerification"
+            icon="i-lucide-mail-check"
+            label="Send link"
+            variant="subtle"
+            @click="resendVerification"
+          />
+        </div>
+      </UCard>
+    </template>
   </div>
 </template>
