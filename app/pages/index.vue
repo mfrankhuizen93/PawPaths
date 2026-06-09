@@ -312,7 +312,6 @@ async function submitChange() {
     await $fetch(`/api/locations/${selectedLocation.value.slug}/changes`, {
       method: "POST",
       body: changeForm,
-      timeout: 15_000,
     });
     contributionMessage.value =
       "Thanks. Your suggested change is waiting for maintainer review.";
