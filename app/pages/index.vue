@@ -15,6 +15,7 @@ const router = useRouter();
 const { isAdmin, isSignedIn, user } = useAuth();
 const authDrawer = useAuthDrawer();
 const addLocationDrawerOpen = useAddLocationDrawer();
+const toast = useToast();
 
 const typeOptions: Record<string, { icon: string; label: string }> = {
   park: {
@@ -313,9 +314,14 @@ async function submitChange() {
       method: "POST",
       body: changeForm,
     });
-    contributionMessage.value =
-      "Thanks. Your suggested change is waiting for maintainer review.";
     changeBaseline.value = JSON.stringify(changeForm);
+    locationMode.value = "view";
+    toast.add({
+      title: "Changes submitted",
+      description: "Your changes will be reviewed before they appear.",
+      color: "success",
+      icon: "i-lucide-circle-check",
+    });
   } catch (errorValue) {
     contributionError.value = getErrorMessage(errorValue);
   } finally {

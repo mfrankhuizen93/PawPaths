@@ -935,7 +935,7 @@ onBeforeUnmount(() => {
                 content: 'min-h-32',
                 base: [
                   'min-h-32 py-2 text-base leading-5 font-sans text-slate-950 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
-                  readonly ? 'px-0 sm:px-0' : 'px-3 sm:px-3',
+                  readonly ? 'px-0 sm:px-0' : 'px-4 sm:px-4',
                 ],
               }"
             >
