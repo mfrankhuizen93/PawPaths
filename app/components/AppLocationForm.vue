@@ -68,6 +68,25 @@ const characteristicOptions = [
   "walking trails",
   "wheelchair accessible",
 ] as const;
+const typeLabels: Record<(typeof typeOptions)[number], string> = {
+  park: "Park",
+  "nature reserve": "Nature Reserve",
+  "dog playground": "Dog Playground",
+  beach: "Beach",
+};
+const characteristicLabels: Record<
+  (typeof characteristicOptions)[number],
+  string
+> = {
+  "off-leash area": "Off-leash Area",
+  fenced: "Fenced",
+  "food and drink": "Food and Drink",
+  "horse trails": "Horse Trails",
+  "mountain bike trails": "Mountain Bike Trails",
+  "swimming water": "Swimming Water",
+  "walking trails": "Walking Trails",
+  "wheelchair accessible": "Wheelchair Accessible",
+};
 const pointKindOptions = locationCoordinateKindOptions.filter(
   (option) => option.value !== "general",
 ) as {
@@ -76,11 +95,11 @@ const pointKindOptions = locationCoordinateKindOptions.filter(
 }[];
 const pointKindValues = pointKindOptions.map((option) => option.value);
 const typeItems = typeOptions.map((option) => ({
-  label: option,
+  label: typeLabels[option],
   value: option,
 }));
 const characteristicItems = characteristicOptions.map((option) => ({
-  label: option,
+  label: characteristicLabels[option],
   value: option,
 }));
 const formTabs = computed<TabsItem[]>(() => [
