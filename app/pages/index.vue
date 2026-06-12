@@ -12,7 +12,7 @@ import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
 
 const route = useRoute();
 const router = useRouter();
-const { isAdmin, isSignedIn, user } = useAuth();
+const { isAdmin, isSignedIn } = useAuth();
 const authDrawer = useAuthDrawer();
 const addLocationDrawerOpen = useAddLocationDrawer();
 const toast = useToast();
@@ -215,16 +215,6 @@ const selectedLocationDirectionsUrl = computed(() => {
 
   return `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`;
 });
-const profileInitials = computed(() => {
-  const label = user.value?.name?.trim() || user.value?.email?.trim() || "";
-
-  return label
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-});
-
 watch(
   data,
   (response) => {
@@ -244,14 +234,6 @@ function openAddLocation() {
     addLocationDrawerOpen.value = true;
   } else {
     authDrawer.show("add");
-  }
-}
-
-function openProfile() {
-  if (isSignedIn.value) {
-    void navigateTo("/account");
-  } else {
-    authDrawer.show("profile");
   }
 }
 
@@ -574,23 +556,7 @@ watch(
               variant="ghost"
               @click="openAddLocation"
             />
-            <UButton
-              aria-label="Open profile"
-              class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
-              color="neutral"
-              size="lg"
-              square
-              variant="ghost"
-              @click="openProfile"
-            >
-              <UAvatar
-                :alt="user?.name || 'Profile'"
-                :icon="isSignedIn ? undefined : 'i-lucide-user'"
-                size="lg"
-                :src="user?.image || undefined"
-                :text="profileInitials || undefined"
-              />
-            </UButton>
+            <AppProfileButton floating />
           </template>
         </LazyAppLocation>
       </ClientOnly>

@@ -6,11 +6,6 @@ export const footerNavigationItems = [
     icon: "i-lucide-map-pin",
     to: "/",
   },
-  {
-    label: "Profile",
-    icon: "i-lucide-circle-user-round",
-    to: "/account",
-  },
 ] satisfies NavigationMenuItem[];
 
 export const headerNavigationItems = [

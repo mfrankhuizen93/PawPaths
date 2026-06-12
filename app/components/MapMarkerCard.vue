@@ -4,29 +4,38 @@ import {
   type LocationCoordinatePoint,
 } from "#shared/types/locations";
 
-const marker = defineModel({
-  type: Object as PropType<LocationCoordinatePoint>,
-  required: true,
-});
+type MarkerCardValue = Pick<LocationCoordinatePoint, "kind" | "label"> & {
+  id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  sourcePhotoId?: string | null;
+};
 
-defineProps({
-  isActive: {
-    type: Boolean,
-    default: false,
-  },
-  readonly: {
-    type: Boolean,
-    default: false,
-  },
-});
+const marker = defineModel<MarkerCardValue>({ required: true });
 
-const emit = defineEmits(["remove"]);
+withDefaults(
+  defineProps<{
+    isActive?: boolean;
+    readonly?: boolean;
+  }>(),
+  {
+    isActive: false,
+    readonly: false,
+  },
+);
+
+const emit = defineEmits<{
+  remove: [id: string | null | undefined];
+}>();
 
 const isGeneralLocation = computed(() => marker.value.kind === "general");
 
 const pointKindOptions = locationCoordinateKindOptions.filter(
   (option) => option.value !== "general",
-);
+) as {
+  label: string;
+  value: Exclude<LocationCoordinatePoint["kind"], "general">;
+}[];
 const editablePointKind = computed({
   get: () => (marker.value.kind === "general" ? undefined : marker.value.kind),
   set: (
@@ -69,7 +78,7 @@ const editablePointKind = computed({
     />
     <UButton
       v-if="isActive && !isGeneralLocation && !readonly"
-      icon="i-lucide:trash"
+      icon="i-lucide-trash-2"
       color="error"
       variant="ghost"
       @click="emit('remove', marker.id)"

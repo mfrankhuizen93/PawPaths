@@ -20,23 +20,8 @@ const authDrawer = useAuthDrawer();
 const { isAdmin, isMaintainer, isSignedIn } = useAuth();
 const { count: pendingContributions, refresh } = usePendingContributions();
 
-const navigationItems = computed(() =>
-  headerNavigationItems.map((item) =>
-    item.to === "/account" && !isSignedIn.value
-      ? {
-          ...item,
-          to: undefined,
-          onSelect(event: Event) {
-            event.preventDefault();
-            authDrawer.show("profile");
-          },
-        }
-      : item,
-  ),
-);
-
 const drawerNavigationItems = computed(() => [
-  ...navigationItems.value,
+  ...headerNavigationItems,
   ...(isMaintainer.value
     ? [
         getAdminNavigationItems({
@@ -96,10 +81,11 @@ watch(
       </UDrawer>
 
       <UColorModeButton v-if="!isExplore" />
+      <AppProfileButton />
     </template>
 
     <UNavigationMenu
-      :items="navigationItems"
+      :items="headerNavigationItems"
       :ui="{
         link: 'gap-1.5',
         linkLeadingIcon: 'size-4',

@@ -94,14 +94,22 @@ const pointKindOptions = locationCoordinateKindOptions.filter(
   value: Exclude<LocationCoordinateKind, "general">;
 }[];
 const pointKindValues = pointKindOptions.map((option) => option.value);
-const typeItems = typeOptions.map((option) => ({
-  label: typeLabels[option],
-  value: option,
-}));
-const characteristicItems = characteristicOptions.map((option) => ({
-  label: characteristicLabels[option],
-  value: option,
-}));
+const coordinateKindValues = new Set<LocationCoordinateKind>(
+  locationCoordinateKindOptions.map((option) => option.value),
+);
+const typeItems: { label: string; value: string }[] = typeOptions.map(
+  (option) => ({
+    label: typeLabels[option],
+    value: option,
+  }),
+);
+const characteristicItems: { label: string; value: string }[] =
+  characteristicOptions.map((option) => ({
+    label: characteristicLabels[option],
+    value: option,
+  }));
+const typeOptionValues = new Set<string>(typeOptions);
+const characteristicOptionValues = new Set<string>(characteristicOptions);
 const formTabs = computed<TabsItem[]>(() => [
   { label: "Details", slot: "details", icon: "i-lucide-file-text" },
   { label: "Map", slot: "map", icon: "i-lucide-map" },
@@ -262,6 +270,13 @@ function isPointKind(
   );
 }
 
+function isCoordinateKind(value: unknown): value is LocationCoordinateKind {
+  return (
+    typeof value === "string" &&
+    coordinateKindValues.has(value as LocationCoordinateKind)
+  );
+}
+
 const locationPhotoSchema = z
   .object({
     url: z.string().min(1),
@@ -285,28 +300,52 @@ const photoFileSchema = z
     message: "Choose JPG, PNG, or WebP photos.",
   });
 
-const coordinatePointSchema = z.object({
-  id: z.string().nullable().optional(),
-  kind: z.custom<Exclude<LocationCoordinateKind, "general">>(isPointKind, {
-    message: "Choose a point type.",
-  }),
-  label: z.string().trim().min(1, "Enter a point label."),
-  latitude: z.number().finite("Set this point on the map."),
-  longitude: z.number().finite("Set this point on the map."),
-  sourcePhotoId: z.string().nullable().optional(),
-});
+const coordinatePointSchema = z
+  .object({
+    id: z.string().nullable().optional(),
+    kind: z.custom<LocationCoordinateKind>(isCoordinateKind, {
+      message: "Choose a point type.",
+    }),
+    label: z.string().trim().min(1, "Enter a point label."),
+    latitude: z.number().finite("Set this point on the map."),
+    longitude: z.number().finite("Set this point on the map."),
+    sourcePhotoId: z.string().nullable().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.kind === "general") {
+      context.addIssue({
+        code: "custom",
+        path: ["kind"],
+        message: "Choose a point type.",
+      });
+    }
+  });
 
 const locationSchema = z
   .object({
     name: z.string().trim().min(1, "Enter a location name."),
-    city: z.string().trim().min(1, "Enter a city."),
+    city: z.string().trim().nullable().optional(),
     province: z.string().nullable().optional(),
-    country: z.string().trim().min(1, "Enter a country."),
-    latitude: z.number().finite().nullable(),
-    longitude: z.number().finite().nullable(),
-    type: z.array(z.enum(typeOptions)).min(1, "Choose at least one type."),
-    characteristics: z.array(z.enum(characteristicOptions)),
-    coordinatePoints: z.array(coordinatePointSchema),
+    country: z.string().trim().nullable().optional(),
+    latitude: z.number().finite().nullable().optional(),
+    longitude: z.number().finite().nullable().optional(),
+    type: z
+      .array(z.string())
+      .min(1, "Choose at least one type.")
+      .refine(
+        (values) => values.every((value) => typeOptionValues.has(value)),
+        {
+          message: "Choose valid location types.",
+        },
+      ),
+    characteristics: z
+      .array(z.string())
+      .refine(
+        (values) =>
+          values.every((value) => characteristicOptionValues.has(value)),
+        { message: "Choose valid characteristics." },
+      ),
+    coordinatePoints: z.array(coordinatePointSchema).optional(),
     description: z.string().optional(),
     relatedUrls: z
       .array(
@@ -319,6 +358,22 @@ const locationSchema = z
     photos: z.array(locationPhotoSchema).optional(),
   })
   .superRefine((value, context) => {
+    if (!value.city?.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["city"],
+        message: "Enter a city.",
+      });
+    }
+
+    if (!value.country?.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["country"],
+        message: "Enter a country.",
+      });
+    }
+
     if (!Number.isFinite(value.latitude) || !Number.isFinite(value.longitude)) {
       context.addIssue({
         code: "custom",
@@ -328,7 +383,15 @@ const locationSchema = z
     }
   });
 
-const generalLocationMarker = computed({
+type FormMapMarker = {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+const generalLocationMarker = computed<FormMapMarker>({
   get: () => ({
     id: "general",
     kind: "general" as const,
@@ -336,15 +399,18 @@ const generalLocationMarker = computed({
     latitude: form.value.latitude,
     longitude: form.value.longitude,
   }),
-  set: (value: LocationCoordinatePoint) => {
+  set: (value) => {
     form.value.latitude = value.latitude;
     form.value.longitude = value.longitude;
   },
 });
 
-const mapMarkers = computed(() => [
+const mapMarkers = computed<FormMapMarker[]>(() => [
   generalLocationMarker.value,
-  ...(form.value.coordinatePoints ?? []),
+  ...(form.value.coordinatePoints ?? []).map((point, index) => ({
+    ...point,
+    id: point.id ?? `point-${index}`,
+  })),
 ]);
 const directionsUrl = computed(() => {
   if (
@@ -753,17 +819,19 @@ function createPointId() {
 }
 
 function addCoordinatePoint(kind: Exclude<LocationCoordinateKind, "general">) {
+  const latitude = form.value.latitude;
+  const longitude = form.value.longitude;
   const point: LocationCoordinatePoint = {
     id: createPointId(),
     kind,
     label: getPointLabel(kind),
     latitude:
-      Number.isFinite(form.value.latitude) && form.value.latitude !== null
-        ? form.value.latitude
+      typeof latitude === "number" && Number.isFinite(latitude)
+        ? latitude
         : 52.1326,
     longitude:
-      Number.isFinite(form.value.longitude) && form.value.longitude !== null
-        ? form.value.longitude
+      typeof longitude === "number" && Number.isFinite(longitude)
+        ? longitude
         : 5.2913,
   };
 
@@ -865,6 +933,8 @@ watch(
       isReverseGeocoding.value = false;
       return;
     }
+
+    locationForm.value?.clear("latitude");
 
     reverseGeocodeTimer = window.setTimeout(() => {
       void reverseGeocodeGeneralLocation();
