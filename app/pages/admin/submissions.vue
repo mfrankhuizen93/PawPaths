@@ -16,6 +16,7 @@ type ContributionsResponse = {
 };
 
 const { isAdmin, isMaintainer, isSignedIn } = useAuth();
+const authDrawer = useAuthDrawer();
 const { count: pendingContributionCount } = usePendingContributions();
 
 const contributions = ref<LocationContribution[]>([]);
@@ -238,7 +239,11 @@ watch(
       variant="soft"
     >
       <template #actions>
-        <UButton label="Go to account" to="/account" />
+        <UButton
+          icon="i-lucide-log-in"
+          label="Sign in"
+          @click="authDrawer.show('profile')"
+        />
       </template>
     </UAlert>
 

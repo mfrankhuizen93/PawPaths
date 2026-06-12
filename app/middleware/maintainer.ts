@@ -3,5 +3,5 @@ export default defineNuxtRouteMiddleware(() => {
 
   if (isMaintainer.value) return;
 
-  return navigateTo("/account", { replace: true });
+  return navigateTo("/?profile=true", { replace: true });
 });

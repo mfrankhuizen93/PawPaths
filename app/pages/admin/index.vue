@@ -3,12 +3,12 @@ const { isAdmin, isMaintainer, isSignedIn } = useAuth();
 
 await navigateTo(
   !isSignedIn.value
-    ? "/account"
+    ? "/?profile=true"
     : isAdmin.value
       ? "/admin/users"
       : isMaintainer.value
         ? "/admin/submissions"
-        : "/account",
+        : "/?profile=true",
   { replace: true },
 );
 </script>

@@ -39,6 +39,9 @@ export default defineNuxtConfig({
       mapStyleUrl: "",
     },
   },
+  routeRules: {
+    "/account": { redirect: "/?profile=true" },
+  },
   fonts: {
     families: [
       {

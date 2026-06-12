@@ -3,7 +3,10 @@ export default defineNuxtRouteMiddleware(() => {
 
   if (isAdmin.value) return;
 
-  return navigateTo(isMaintainer.value ? "/admin/submissions" : "/account", {
-    replace: true,
-  });
+  return navigateTo(
+    isMaintainer.value ? "/admin/submissions" : "/?profile=true",
+    {
+      replace: true,
+    },
+  );
 });

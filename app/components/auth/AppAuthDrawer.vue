@@ -1,21 +1,15 @@
 <script setup lang="ts">
-import type { UserRole } from "#shared/types/auth";
 import AppAuthForm from "~/components/auth/AppAuthForm.vue";
+import AppProfileForm from "~/components/auth/AppProfileForm.vue";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import AppDrawerHeader from "~/components/drawer/AppDrawerHeader.vue";
 
-const router = useRouter();
+const route = useRoute();
 const authDrawer = useAuthDrawer();
 const authDrawerOpen = authDrawer.open;
 const addLocationDrawerOpen = useAddLocationDrawer();
-const { isSignedIn, logout, user } = useAuth();
-
-const roleLabels: Record<UserRole, string> = {
-  admin: "Administrator",
-  maintainer: "Maintainer",
-  user: "User",
-};
+const { isSignedIn, logout, refreshSession, user } = useAuth();
 
 const showsProfile = computed(
   () => authDrawer.intent.value === "profile" && isSignedIn.value,
@@ -43,19 +37,25 @@ async function continueIntent() {
   }
 }
 
-async function openAccount() {
-  authDrawer.close();
-  await router.push("/account");
-}
-
 async function signOut() {
   authDrawer.close();
   await logout();
 }
+
+onMounted(async () => {
+  if (route.query.verified === "true" || route.query.profile === "true") {
+    await refreshSession();
+    authDrawer.show("profile");
+  }
+});
 </script>
 
 <template>
-  <AppDrawer v-model:open="authDrawerOpen" :title="drawerTitle">
+  <AppDrawer
+    v-model:open="authDrawerOpen"
+    :stable-height="showsProfile"
+    :title="drawerTitle"
+  >
     <template #header>
       <AppDrawerHeader
         :description="
@@ -77,36 +77,7 @@ async function signOut() {
       </AppDrawerHeader>
     </template>
 
-    <div v-if="showsProfile" class="flex flex-col gap-4">
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div class="border-default rounded-md border p-4">
-          <p class="text-muted text-sm">Display name</p>
-          <p class="text-highlighted mt-1 font-medium">
-            {{ user?.name }}
-          </p>
-        </div>
-        <div class="border-default rounded-md border p-4">
-          <p class="text-muted text-sm">Access</p>
-          <p class="text-highlighted mt-1 font-medium">
-            {{ user ? roleLabels[user.role] : "" }}
-          </p>
-        </div>
-      </div>
-
-      <UAlert
-        :color="user?.emailVerified ? 'success' : 'warning'"
-        :description="
-          user?.emailVerified
-            ? 'Your email address is verified.'
-            : 'Verify your email address from your account settings.'
-        "
-        :icon="
-          user?.emailVerified ? 'i-lucide-badge-check' : 'i-lucide-circle-alert'
-        "
-        :title="user?.emailVerified ? 'Verified account' : 'Email not verified'"
-        variant="soft"
-      />
-    </div>
+    <AppProfileForm v-if="showsProfile" />
 
     <AppAuthForm v-else @authenticated="continueIntent" />
 
@@ -118,11 +89,6 @@ async function signOut() {
           label="Sign out"
           variant="ghost"
           @click="signOut"
-        />
-        <UButton
-          icon="i-lucide-settings"
-          label="Manage profile"
-          @click="openAccount"
         />
       </AppDrawerActions>
     </template>

@@ -13,6 +13,7 @@ type UsersResponse = {
 };
 
 const { user, isAdmin, isSignedIn } = useAuth();
+const authDrawer = useAuthDrawer();
 const usersError = ref("");
 const users = ref<AuthUser[]>([]);
 const isLoadingUsers = ref(false);
@@ -132,7 +133,11 @@ watch(
       variant="soft"
     >
       <template #actions>
-        <UButton label="Go to account" to="/account" />
+        <UButton
+          icon="i-lucide-log-in"
+          label="Sign in"
+          @click="authDrawer.show('profile')"
+        />
       </template>
     </UAlert>
 
