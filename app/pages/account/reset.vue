@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import AppPageHeader from "~/components/common/AppPageHeader.vue";
+import AppPageToolbar from "~/components/common/AppPageToolbar.vue";
 
 const route = useRoute();
 const { resetPassword } = useAuth();
@@ -48,6 +49,8 @@ async function submitReset() {
 </script>
 
 <template>
+  <AppPageToolbar />
+
   <div class="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 py-10 sm:px-6">
     <AppPageHeader eyebrow="Account" title="Reset password" />
 

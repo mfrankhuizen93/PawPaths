@@ -6,14 +6,12 @@ const props = withDefaults(
     description?: string;
     loading?: boolean;
     dirty?: boolean;
-    stableHeight?: boolean;
   }>(),
   {
     title: undefined,
     description: undefined,
     loading: false,
     dirty: false,
-    stableHeight: false,
   },
 );
 
@@ -22,6 +20,8 @@ const emit = defineEmits<{
 }>();
 
 const discardDialogOpen = ref(false);
+const snapPoints = [0.5, 1];
+const activeSnapPoint = ref<number | string | null>(snapPoints[0]);
 
 const drawerOpen = computed({
   get: () => props.open,
@@ -47,31 +47,31 @@ function keepEditing() {
 function requestClose() {
   drawerOpen.value = false;
 }
+
+watch(
+  () => props.open,
+  (open) => {
+    if (open) activeSnapPoint.value = snapPoints[0];
+  },
+);
 </script>
 
 <template>
   <div>
     <UDrawer
+      v-model:active-snap-point="activeSnapPoint"
       v-model:open="drawerOpen"
       :description="description"
       direction="bottom"
       handle-only
+      :snap-points="snapPoints"
       :title="title"
       :ui="{
-        content: [
-          'rounded-t-[1.75rem]',
-          stableHeight && 'h-[min(88dvh,52rem)]',
-        ],
-        container: [
-          'mx-auto w-full max-w-5xl',
-          stableHeight && 'min-h-0 flex-1 overflow-hidden',
-        ],
-        header: stableHeight && 'shrink-0',
-        body: [
-          'overflow-y-auto',
-          stableHeight ? 'min-h-0 flex-1' : 'max-h-[70vh]',
-        ],
-        footer: stableHeight && 'shrink-0',
+        content: 'mt-0 h-full max-h-none rounded-t-[1.75rem]',
+        container: 'mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-hidden',
+        header: 'shrink-0',
+        body: 'min-h-0 flex-1 overflow-y-auto',
+        footer: 'shrink-0',
         handle: 'mt-3 h-1.5 w-10 rounded-full',
       }"
     >

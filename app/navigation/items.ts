@@ -1,6 +1,6 @@
 import type { NavigationMenuItem } from "@nuxt/ui/components/NavigationMenu.vue";
 
-export const footerNavigationItems = [
+const baseNavigationItems = [
   {
     label: "Explore",
     icon: "i-lucide-map-pin",
@@ -8,9 +8,32 @@ export const footerNavigationItems = [
   },
 ] satisfies NavigationMenuItem[];
 
-export const headerNavigationItems = [
-  ...footerNavigationItems,
-] satisfies NavigationMenuItem[];
+export function getAppNavigationItems(options: {
+  isAdmin: boolean;
+  isMaintainer: boolean;
+  pendingContributions: number | null;
+}) {
+  return [
+    ...baseNavigationItems,
+    ...(options.isMaintainer
+      ? [
+          getAdminNavigationItems({
+            isAdmin: options.isAdmin,
+            pendingContributions: options.pendingContributions,
+          }).submissionsItem,
+        ]
+      : []),
+    ...(options.isAdmin
+      ? [
+          {
+            label: "Users",
+            icon: "i-lucide-users",
+            to: "/admin/users",
+          } satisfies NavigationMenuItem,
+        ]
+      : []),
+  ] satisfies NavigationMenuItem[];
+}
 
 export function getAdminNavigationItems(options: {
   isAdmin: boolean;

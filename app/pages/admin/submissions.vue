@@ -4,6 +4,7 @@ import type {
   LocationContribution,
 } from "#shared/types/locations";
 import AppPageHeader from "~/components/common/AppPageHeader.vue";
+import AppPageToolbar from "~/components/common/AppPageToolbar.vue";
 import CommunitySubmissionDrawer from "~/components/community/CommunitySubmissionDrawer.vue";
 import CommunitySubmissionList from "~/components/community/CommunitySubmissionList.vue";
 
@@ -212,24 +213,29 @@ watch(
 </script>
 
 <template>
+  <AppPageToolbar>
+    <template v-if="isMaintainer" #actions>
+      <UButton
+        :loading="isLoadingContributions"
+        aria-label="Refresh submissions"
+        class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
+        color="neutral"
+        icon="i-lucide-refresh-cw"
+        size="lg"
+        square
+        variant="ghost"
+        @click="loadContributions"
+      />
+    </template>
+  </AppPageToolbar>
+
   <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 sm:px-6">
     <AppPageHeader
       :badge="isMaintainer ? contributions.length : undefined"
       description="Review pending location additions and suggested edits."
       eyebrow="Administration"
       title="Community submissions"
-    >
-      <template v-if="isMaintainer" #actions>
-        <UButton
-          :loading="isLoadingContributions"
-          aria-label="Refresh submissions"
-          icon="i-lucide-refresh-cw"
-          label="Refresh"
-          variant="subtle"
-          @click="loadContributions"
-        />
-      </template>
-    </AppPageHeader>
+    />
 
     <UAlert
       v-if="!isSignedIn"

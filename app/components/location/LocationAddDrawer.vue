@@ -9,12 +9,7 @@ const dirty = ref(false);
 </script>
 
 <template>
-  <AppDrawer
-    v-model:open="open"
-    :dirty="dirty"
-    stable-height
-    title="Add a location"
-  >
+  <AppDrawer v-model:open="open" :dirty="dirty" title="Add a location">
     <template #header>
       <AppDrawerHeader
         description="New places are reviewed before they appear on the map."

@@ -51,11 +51,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppDrawer
-    v-model:open="authDrawerOpen"
-    :stable-height="showsProfile"
-    :title="drawerTitle"
-  >
+  <AppDrawer v-model:open="authDrawerOpen" :title="drawerTitle">
     <template #header>
       <AppDrawerHeader
         :description="

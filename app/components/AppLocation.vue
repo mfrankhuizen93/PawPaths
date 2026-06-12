@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import AppPageToolbar from "~/components/common/AppPageToolbar.vue";
 import type { GeoJSONSource, Map, MapLayerMouseEvent } from "maplibre-gl";
 import type { GeocodeResult } from "#shared/types/geo";
 import type {
@@ -645,43 +646,39 @@ onBeforeUnmount(() => {
   <div class="bg-muted relative h-full overflow-hidden">
     <div ref="mapContainer" class="h-full min-h-96 w-full" />
 
-    <div
-      v-if="variant === 'search'"
-      class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))]"
-    >
-      <div class="pointer-events-auto flex min-w-0 flex-1 items-center gap-3">
-        <UButton
-          v-if="!isSearchExpanded"
-          aria-label="Search locations"
-          class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
-          color="neutral"
-          icon="i-lucide-search"
-          size="lg"
-          square
-          variant="ghost"
-          @click="isSearchExpanded = true"
-        />
-
-        <div
-          v-else
-          class="border-default/60 bg-default/88 h-12 min-w-0 flex-1 rounded-2xl border shadow-lg backdrop-blur-xl sm:max-w-md"
-        >
-          <AppAddressSearch
-            autofocus
-            collapsible
-            placeholder="Search PawPaths"
-            @close="isSearchExpanded = false"
-            @selected="selectSearchAddress"
+    <div v-if="variant === 'search'" class="absolute inset-x-0 top-0 z-10">
+      <AppPageToolbar overlay>
+        <template #primary>
+          <UButton
+            v-if="!isSearchExpanded"
+            aria-label="Search locations"
+            class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
+            color="neutral"
+            icon="i-lucide-search"
+            size="lg"
+            square
+            variant="ghost"
+            @click="isSearchExpanded = true"
           />
-        </div>
-      </div>
 
-      <div
-        v-if="!isSearchExpanded"
-        class="pointer-events-auto flex shrink-0 items-center gap-2"
-      >
-        <slot name="actions" />
-      </div>
+          <div
+            v-else
+            class="border-default/60 bg-default/88 h-12 min-w-0 flex-1 rounded-2xl border shadow-lg backdrop-blur-xl sm:max-w-md"
+          >
+            <AppAddressSearch
+              autofocus
+              collapsible
+              placeholder="Search PawPaths"
+              @close="isSearchExpanded = false"
+              @selected="selectSearchAddress"
+            />
+          </div>
+        </template>
+
+        <template v-if="!isSearchExpanded" #actions>
+          <slot name="actions" />
+        </template>
+      </AppPageToolbar>
     </div>
 
     <div

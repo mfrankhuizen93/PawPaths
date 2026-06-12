@@ -89,6 +89,8 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
 };
 const activeFilters = useExploreQuery();
 const filterDrawerOpen = ref(false);
+const filterDrawerSnapPoint = ref<number | string | null>(0.5);
+const drawerSnapPoints = [0.5, 1];
 
 const isSubmittingChange = ref(false);
 const isSubmittingReview = ref(false);
@@ -461,6 +463,10 @@ watch(
   },
   { immediate: true },
 );
+
+watch(filterDrawerOpen, (open) => {
+  if (open) filterDrawerSnapPoint.value = drawerSnapPoints[0];
+});
 </script>
 
 <template>
@@ -516,13 +522,20 @@ watch(
         >
           <template #actions>
             <UDrawer
+              v-model:active-snap-point="filterDrawerSnapPoint"
               v-model:open="filterDrawerOpen"
               description="Choose the places and features shown on the map."
               direction="bottom"
+              handle-only
+              :snap-points="drawerSnapPoints"
               title="Filters"
               :ui="{
-                container: 'mx-auto w-full max-w-3xl',
-                body: 'max-h-[70vh] overflow-y-auto',
+                content: 'mt-0 h-full max-h-none rounded-t-[1.75rem]',
+                container:
+                  'mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-hidden',
+                header: 'shrink-0',
+                body: 'min-h-0 flex-1 overflow-y-auto',
+                handle: 'mt-3 h-1.5 w-10 rounded-full',
               }"
             >
               <UChip color="error" :show="activeFilterCount > 0" size="lg">
@@ -556,7 +569,6 @@ watch(
               variant="ghost"
               @click="openAddLocation"
             />
-            <AppProfileButton floating />
           </template>
         </LazyAppLocation>
       </ClientOnly>
@@ -565,7 +577,6 @@ watch(
     <AppDrawer
       :dirty="hasUnsavedLocationChanges"
       :open="isLocationDrawerOpen"
-      stable-height
       :title="selectedLocation?.name"
       @update:open="isLocationDrawerOpen = $event"
     >
