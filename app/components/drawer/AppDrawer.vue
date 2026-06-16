@@ -20,8 +20,6 @@ const emit = defineEmits<{
 }>();
 
 const discardDialogOpen = ref(false);
-const snapPoints = [0.5, 1];
-const activeSnapPoint = ref<number | string | null>(snapPoints[0]);
 
 const drawerOpen = computed({
   get: () => props.open,
@@ -47,35 +45,20 @@ function keepEditing() {
 function requestClose() {
   drawerOpen.value = false;
 }
-
-watch(
-  () => props.open,
-  (open) => {
-    if (open) activeSnapPoint.value = snapPoints[0];
-  },
-);
 </script>
 
 <template>
   <div>
     <UDrawer
-      v-model:active-snap-point="activeSnapPoint"
       v-model:open="drawerOpen"
       :description="description"
       direction="bottom"
-      handle-only
-      :snap-points="snapPoints"
       :title="title"
       :ui="{
-        content: 'mt-0 h-full max-h-none rounded-t-[1.75rem]',
-        container: [
-          'mx-auto min-h-0 w-full max-w-5xl flex-none overflow-hidden',
-          activeSnapPoint === 1
-            ? 'h-[calc(100dvh-1.125rem)]'
-            : 'h-[calc(50dvh-1.125rem)]',
-        ],
+        content: 'max-h-[calc(100dvh-1rem)] rounded-t-[1.75rem]',
+        container: 'mx-auto w-full max-w-5xl',
         header: 'shrink-0',
-        body: 'min-h-0 flex-1 overflow-y-auto',
+        body: 'max-h-[calc(100dvh-12rem)] overflow-y-auto',
         footer: 'shrink-0',
         handle: 'mt-3 h-1.5 w-10 rounded-full',
       }"

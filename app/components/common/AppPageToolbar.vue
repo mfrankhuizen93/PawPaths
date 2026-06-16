@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import AppProfileButton from "~/components/AppProfileButton.vue";
-import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import { getAppNavigationItems } from "~/navigation/items";
 
 withDefaults(
@@ -65,16 +64,53 @@ watch(
     </div>
   </header>
 
-  <AppDrawer
+  <USidebar
     v-if="showsNavigation"
     v-model:open="navigationOpen"
+    :close="false"
+    collapsible="offcanvas"
+    description="Move between PawPaths sections."
+    mode="drawer"
+    :menu="{
+      direction: 'left',
+      ui: {
+        content: 'w-[min(22rem,calc(100vw-2rem))] rounded-r-[1.75rem]',
+        handle: 'hidden',
+      },
+    }"
+    side="left"
     title="Navigation"
+    :ui="{
+      root: '[--sidebar-width:min(22rem,calc(100vw-2rem))]',
+      inner:
+        'bg-default divide-y divide-default rounded-r-[1.75rem] shadow-xl ring ring-default',
+      body: 'overflow-y-auto',
+    }"
   >
-    <UNavigationMenu
-      :items="navigationItems"
-      class="w-full"
-      orientation="vertical"
-      @click="navigationOpen = false"
-    />
-  </AppDrawer>
+    <template #close />
+
+    <template #default="{ close }">
+      <UNavigationMenu
+        :items="navigationItems"
+        class="w-full"
+        orientation="vertical"
+        @click="
+          close();
+          navigationOpen = false;
+        "
+      />
+    </template>
+
+    <template #content="{ close }">
+      <UNavigationMenu
+        :items="navigationItems"
+        class="w-full"
+        orientation="vertical"
+        @click="
+          close();
+          navigationOpen = false;
+        "
+      />
+    </template>
+  </USidebar>
 </template>
