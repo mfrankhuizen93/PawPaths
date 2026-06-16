@@ -25,6 +25,7 @@ const filters = defineModel<LocationFilters>({
 });
 
 const persistKey = "pawpaths.locationFilters";
+const filtersHydrated = useState("location-filters-hydrated", () => false);
 const typeOptions = ["beach", "dog playground", "nature reserve", "park"];
 const characteristicOptions = [
   "off-leash area",
@@ -73,6 +74,7 @@ function setFilterValue<Key extends keyof LocationFilters>(
   }
 
   filters.value = nextFilters;
+  storeFilters(nextFilters);
 }
 
 function getIncludeKey(field: FilterField) {
@@ -134,6 +136,7 @@ function toggleFilterMode(field: FilterField, value: string) {
   }
 
   filters.value = nextFilters;
+  storeFilters(nextFilters);
 }
 
 function getFilterColor(mode: FilterMode | null) {
@@ -160,6 +163,7 @@ function getFilterLabel(label: string, mode: FilterMode | null) {
 
 function clearFilters() {
   filters.value = {};
+  storeFilters({});
 }
 
 function isFilterMode(value: unknown): value is FilterMode {
@@ -257,28 +261,18 @@ function readStoredFilters() {
   }
 }
 
-function storeFilters() {
-  window.localStorage.setItem(persistKey, JSON.stringify(filters.value));
+function storeFilters(value: LocationFilters) {
+  window.localStorage.setItem(persistKey, JSON.stringify(value));
 }
 
 onMounted(() => {
-  const storedFilters = readStoredFilters();
+  if (filtersHydrated.value) return;
 
+  const storedFilters = readStoredFilters();
   if (storedFilters) {
     filters.value = storedFilters;
   }
-});
-
-watch(
-  filters,
-  () => {
-    storeFilters();
-  },
-  { deep: true },
-);
-
-onBeforeUnmount(() => {
-  storeFilters();
+  filtersHydrated.value = true;
 });
 </script>
 
@@ -337,6 +331,7 @@ onBeforeUnmount(() => {
             :title="getFilterLabel(type, getFilterMode('type', type))"
             :variant="getFilterVariant(getFilterMode('type', type))"
             size="sm"
+            type="button"
             @click="toggleFilterMode('type', type)"
           >
             {{ type }}
@@ -374,6 +369,7 @@ onBeforeUnmount(() => {
               getFilterVariant(getFilterMode('characteristic', characteristic))
             "
             size="sm"
+            type="button"
             @click="toggleFilterMode('characteristic', characteristic)"
           >
             {{ characteristic }}
@@ -390,6 +386,7 @@ onBeforeUnmount(() => {
         color="neutral"
         icon="i-lucide-rotate-ccw"
         size="sm"
+        type="button"
         variant="ghost"
         @click="clearFilters"
       >

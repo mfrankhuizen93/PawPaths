@@ -68,7 +68,12 @@ watch(
       :title="title"
       :ui="{
         content: 'mt-0 h-full max-h-none rounded-t-[1.75rem]',
-        container: 'mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-hidden',
+        container: [
+          'mx-auto min-h-0 w-full max-w-5xl flex-none overflow-hidden',
+          activeSnapPoint === 1
+            ? 'h-[calc(100dvh-1.125rem)]'
+            : 'h-[calc(50dvh-1.125rem)]',
+        ],
         header: 'shrink-0',
         body: 'min-h-0 flex-1 overflow-y-auto',
         footer: 'shrink-0',

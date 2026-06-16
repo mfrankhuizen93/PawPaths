@@ -531,8 +531,12 @@ watch(filterDrawerOpen, (open) => {
               title="Filters"
               :ui="{
                 content: 'mt-0 h-full max-h-none rounded-t-[1.75rem]',
-                container:
-                  'mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-hidden',
+                container: [
+                  'mx-auto min-h-0 w-full max-w-3xl flex-none overflow-hidden',
+                  filterDrawerSnapPoint === 1
+                    ? 'h-[calc(100dvh-1.125rem)]'
+                    : 'h-[calc(50dvh-1.125rem)]',
+                ],
                 header: 'shrink-0',
                 body: 'min-h-0 flex-1 overflow-y-auto',
                 handle: 'mt-3 h-1.5 w-10 rounded-full',
