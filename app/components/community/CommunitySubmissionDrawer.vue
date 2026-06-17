@@ -61,6 +61,7 @@ function formatDate(value: string) {
   <AppDrawer
     :description="submission?.submitter.email"
     :dirty="isDirty"
+    full-height
     :open="open"
     :title="submission?.payload.name"
     @update:open="$emit('update:open', $event)"

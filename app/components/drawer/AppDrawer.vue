@@ -6,12 +6,14 @@ const props = withDefaults(
     description?: string;
     loading?: boolean;
     dirty?: boolean;
+    fullHeight?: boolean;
   }>(),
   {
     title: undefined,
     description: undefined,
     loading: false,
     dirty: false,
+    fullHeight: false,
   },
 );
 
@@ -45,6 +47,25 @@ function keepEditing() {
 function requestClose() {
   drawerOpen.value = false;
 }
+
+const drawerUi = computed(() => ({
+  content: [
+    "rounded-t-[1.75rem]",
+    props.fullHeight
+      ? "h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)]"
+      : "max-h-[calc(100dvh-1rem)]",
+  ],
+  container: [
+    "mx-auto w-full max-w-5xl",
+    props.fullHeight ? "min-h-0 flex-1 overflow-hidden" : undefined,
+  ],
+  header: "shrink-0",
+  body: props.fullHeight
+    ? "min-h-0 flex-1 overflow-y-auto"
+    : "max-h-[calc(100dvh-12rem)] overflow-y-auto",
+  footer: "shrink-0",
+  handle: "mt-3 h-1.5 w-10 rounded-full",
+}));
 </script>
 
 <template>
@@ -54,14 +75,7 @@ function requestClose() {
       :description="description"
       direction="bottom"
       :title="title"
-      :ui="{
-        content: 'max-h-[calc(100dvh-1rem)] rounded-t-[1.75rem]',
-        container: 'mx-auto w-full max-w-5xl',
-        header: 'shrink-0',
-        body: 'max-h-[calc(100dvh-12rem)] overflow-y-auto',
-        footer: 'shrink-0',
-        handle: 'mt-3 h-1.5 w-10 rounded-full',
-      }"
+      :ui="drawerUi"
     >
       <template v-if="$slots.header" #header>
         <slot name="header" />

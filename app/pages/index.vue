@@ -566,6 +566,7 @@ watch(
 
     <AppDrawer
       :dirty="hasUnsavedLocationChanges"
+      full-height
       :open="isLocationDrawerOpen"
       :title="selectedLocation?.name"
       @update:open="isLocationDrawerOpen = $event"
