@@ -9,11 +9,12 @@ defineProps<{
 <template>
   <UTabs
     :items="items"
-    class="w-full min-w-0"
+    class="flex h-full min-h-0 w-full min-w-0"
     color="neutral"
     variant="link"
     :ui="{
-      list: 'bg-default sticky top-0 z-20 flex w-full min-w-0 flex-nowrap overflow-x-auto overflow-y-hidden overscroll-x-contain',
+      list: 'bg-default sticky top-0 z-20 flex w-full min-w-0 shrink-0 flex-nowrap overflow-x-auto overflow-y-hidden overscroll-x-contain',
+      content: 'min-h-0 w-full flex-1',
       trigger: 'shrink-0',
       label: 'whitespace-nowrap',
     }"

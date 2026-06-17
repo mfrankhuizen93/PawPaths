@@ -961,7 +961,7 @@ onBeforeUnmount(() => {
     :schema="locationSchema"
     :state="form"
     :class="[
-      'flex flex-col gap-5',
+      'flex h-full min-h-0 flex-col gap-5',
       contained && 'rounded-md border border-slate-200 bg-white p-5 shadow-sm',
     ]"
     @submit="submitForm"
@@ -1146,9 +1146,10 @@ onBeforeUnmount(() => {
       </template>
 
       <template #photos>
-        <div v-if="readonly" class="pt-4">
+        <div v-if="readonly" class="flex h-full min-h-0 flex-col pt-4">
           <AppPhotoLanes
             v-if="form.photos?.length"
+            class="min-h-0 flex-1"
             :location-name="form.name"
             :photos="form.photos"
           />
