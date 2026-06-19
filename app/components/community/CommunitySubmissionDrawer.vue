@@ -87,6 +87,7 @@ function formatDate(value: string) {
       v-else
       v-model="editablePayload"
       :can-generate-description="canGenerateDescription"
+      :contained="false"
       form-id="community-submission-form"
       map-editing-locked
       point-help="Check and adjust the location points before approving."

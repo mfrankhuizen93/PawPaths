@@ -656,7 +656,7 @@ watch(
           :message="contributionMessage"
           point-help="Click the map to move the selected point. Add another point below, then place it on the map."
           :readonly="locationMode === 'view'"
-          :reset-key="selectedLocation.id"
+          :reset-key="`${selectedLocation.id}-${locationMode}`"
           :show-features="locationMode === 'edit'"
           :show-reviews="locationMode === 'view'"
           :show-submit="false"

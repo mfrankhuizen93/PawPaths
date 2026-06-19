@@ -308,7 +308,11 @@ onBeforeUnmount(() => {
   >
     <div
       ref="mapContainer"
-      :class="readonly ? 'h-64 min-h-64' : 'h-80 min-h-80'"
+      :class="
+        readonly
+          ? 'h-[min(20rem,42dvh)] min-h-64'
+          : 'h-[min(22rem,44dvh)] min-h-64'
+      "
       class="w-full"
     />
     <div
