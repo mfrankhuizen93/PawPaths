@@ -88,7 +88,9 @@ function formatDate(value: string) {
       v-model="editablePayload"
       :can-generate-description="canGenerateDescription"
       form-id="community-submission-form"
+      map-editing-locked
       point-help="Check and adjust the location points before approving."
+      :reset-key="`${submission.id ?? 'submission'}-${submission.updatedAt}`"
       :show-submit="false"
       :show-features="true"
       @submit="submitReviewAction"

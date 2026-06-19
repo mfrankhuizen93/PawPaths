@@ -296,6 +296,7 @@ async function submitChange() {
       method: "POST",
       body: changeForm,
     });
+    syncChangeForm(selectedLocation.value);
     changeBaseline.value = JSON.stringify(changeForm);
     locationMode.value = "view";
     toast.add({
@@ -651,6 +652,7 @@ watch(
           :contained="false"
           :error="contributionError"
           form-id="location-detail-form"
+          :map-editing-locked="locationMode === 'edit'"
           :message="contributionMessage"
           point-help="Click the map to move the selected point. Add another point below, then place it on the map."
           :readonly="locationMode === 'view'"

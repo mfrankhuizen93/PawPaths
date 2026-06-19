@@ -21,6 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:latitude": [value: number | null];
   "update:longitude": [value: number | null];
+  picked: [value: { latitude: number; longitude: number }];
   selected: [value: GeocodeResult];
 }>();
 
@@ -127,8 +128,12 @@ function fitMarkersToView() {
 }
 
 function setCoordinates(coordinates: [number, number]) {
-  emit("update:longitude", Number(coordinates[0].toFixed(6)));
-  emit("update:latitude", Number(coordinates[1].toFixed(6)));
+  const longitude = Number(coordinates[0].toFixed(6));
+  const latitude = Number(coordinates[1].toFixed(6));
+
+  emit("update:longitude", longitude);
+  emit("update:latitude", latitude);
+  emit("picked", { latitude, longitude });
 }
 
 function searchAddress(result: GeocodeResult) {

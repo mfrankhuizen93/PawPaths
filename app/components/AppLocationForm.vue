@@ -27,6 +27,7 @@ const props = withDefaults(
     showReviews?: boolean;
     formId?: string;
     contained?: boolean;
+    mapEditingLocked?: boolean;
   }>(),
   {
     error: "",
@@ -43,6 +44,7 @@ const props = withDefaults(
     showReviews: false,
     formId: undefined,
     contained: true,
+    mapEditingLocked: false,
   },
 );
 
@@ -205,7 +207,12 @@ const compressedPhotoMaxDimension = 1600;
 const compressedPhotoQuality = 0.74;
 
 const photoFiles = ref<File[]>([]);
-const activePointId = ref("general");
+const activePointId = ref<string | null>(
+  props.mapEditingLocked ? null : "general",
+);
+const pendingPointKind = ref<Exclude<LocationCoordinateKind, "general"> | null>(
+  null,
+);
 const isReverseGeocoding = ref(false);
 const geocodeError = ref("");
 const descriptionGenerationError = ref("");
@@ -424,6 +431,7 @@ const directionsUrl = computed(() => {
 });
 
 const activePoint = computed<LocationCoordinatePoint | null>(() => {
+  if (!activePointId.value) return null;
   if (activePointId.value === "general") return null;
 
   return (
@@ -432,10 +440,34 @@ const activePoint = computed<LocationCoordinatePoint | null>(() => {
     ) ?? null
   );
 });
+const pointKindMenuItems = computed(() => [
+  pointKindOptions.map((option) => ({
+    label: option.label,
+    icon: "i-lucide-map-pin-plus",
+    onSelect() {
+      startAddingCoordinatePoint(option.value);
+    },
+  })),
+]);
+const mapInstruction = computed(() => {
+  if (pendingPointKind.value) {
+    return `Click the map to place ${getPointLabel(pendingPointKind.value).toLowerCase()}.`;
+  }
+
+  if (activePointId.value) return props.pointHelp;
+
+  return "Choose a location point before clicking the map.";
+});
 
 const activeLatitude = computed({
-  get: () => activePoint.value?.latitude ?? form.value.latitude,
+  get: () => {
+    if (!activePointId.value) return null;
+
+    return activePoint.value?.latitude ?? form.value.latitude;
+  },
   set: (value: number | null) => {
+    if (!activePointId.value) return;
+
     if (activePoint.value) {
       if (value !== null) activePoint.value.latitude = value;
       return;
@@ -446,8 +478,14 @@ const activeLatitude = computed({
 });
 
 const activeLongitude = computed({
-  get: () => activePoint.value?.longitude ?? form.value.longitude,
+  get: () => {
+    if (!activePointId.value) return null;
+
+    return activePoint.value?.longitude ?? form.value.longitude;
+  },
   set: (value: number | null) => {
+    if (!activePointId.value) return;
+
     if (activePoint.value) {
       if (value !== null) activePoint.value.longitude = value;
       return;
@@ -818,25 +856,54 @@ function createPointId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
 
-function addCoordinatePoint(kind: Exclude<LocationCoordinateKind, "general">) {
-  const latitude = form.value.latitude;
-  const longitude = form.value.longitude;
+function createCoordinatePoint(
+  kind: Exclude<LocationCoordinateKind, "general">,
+  latitude: number,
+  longitude: number,
+) {
   const point: LocationCoordinatePoint = {
     id: createPointId(),
     kind,
     label: getPointLabel(kind),
-    latitude:
-      typeof latitude === "number" && Number.isFinite(latitude)
-        ? latitude
-        : 52.1326,
-    longitude:
-      typeof longitude === "number" && Number.isFinite(longitude)
-        ? longitude
-        : 5.2913,
+    latitude,
+    longitude,
   };
 
   form.value.coordinatePoints = [...(form.value.coordinatePoints ?? []), point];
   activePointId.value = point.id ?? "general";
+  pendingPointKind.value = null;
+}
+
+function startAddingCoordinatePoint(
+  kind: Exclude<LocationCoordinateKind, "general">,
+) {
+  pendingPointKind.value = kind;
+  activePointId.value = null;
+}
+
+function handleMapPick(coordinates: { latitude: number; longitude: number }) {
+  if (!pendingPointKind.value) return;
+
+  createCoordinatePoint(
+    pendingPointKind.value,
+    coordinates.latitude,
+    coordinates.longitude,
+  );
+}
+
+function selectCoordinatePoint(id: string | null | undefined) {
+  pendingPointKind.value = null;
+  activePointId.value = id ?? "general";
+}
+
+function editGeneralLocation() {
+  pendingPointKind.value = null;
+  activePointId.value = "general";
+}
+
+function stopEditingMapLocation() {
+  pendingPointKind.value = null;
+  activePointId.value = null;
 }
 
 function removeCoordinatePoint(id: string | null | undefined) {
@@ -845,7 +912,7 @@ function removeCoordinatePoint(id: string | null | undefined) {
   );
 
   if (activePointId.value === id) {
-    activePointId.value = "general";
+    activePointId.value = props.mapEditingLocked ? null : "general";
   }
 }
 
@@ -912,7 +979,8 @@ async function generateDescription() {
 }
 
 function resetLocalState() {
-  activePointId.value = "general";
+  activePointId.value = props.mapEditingLocked ? null : "general";
+  pendingPointKind.value = null;
   photoFiles.value = [];
   clearPhotoFieldError();
   descriptionGenerationError.value = "";
@@ -1074,12 +1142,13 @@ onBeforeUnmount(() => {
               v-model:latitude="activeLatitude"
               v-model:longitude="activeLongitude"
               :markers="mapMarkers"
-              :readonly="readonly"
+              :readonly="readonly || (!activePointId && !pendingPointKind)"
+              @picked="handleMapPick"
             />
             <UAlert
               v-if="!readonly"
               color="neutral"
-              :description="pointHelp"
+              :description="mapInstruction"
               icon="i-lucide-map-pin"
               title="Set location points"
               variant="soft"
@@ -1094,35 +1163,37 @@ onBeforeUnmount(() => {
             <div v-if="!readonly" class="flex flex-wrap gap-2">
               <UButton
                 color="neutral"
-                icon="i-lucide-car"
-                label="Add parking"
+                icon="i-lucide-crosshair"
+                :label="
+                  activePointId === 'general'
+                    ? 'General location selected'
+                    : 'Edit general location'
+                "
                 type="button"
-                variant="outline"
-                @click="addCoordinatePoint('parking')"
+                :variant="activePointId === 'general' ? 'solid' : 'outline'"
+                @click="editGeneralLocation"
               />
+              <UDropdownMenu :items="pointKindMenuItems">
+                <UButton
+                  color="neutral"
+                  icon="i-lucide-map-pin-plus"
+                  :label="
+                    pendingPointKind
+                      ? `Placing ${getPointLabel(pendingPointKind)}`
+                      : 'Add point'
+                  "
+                  type="button"
+                  :variant="pendingPointKind ? 'solid' : 'outline'"
+                />
+              </UDropdownMenu>
               <UButton
+                v-if="mapEditingLocked && (activePointId || pendingPointKind)"
                 color="neutral"
-                icon="i-lucide-door-open"
-                label="Add entrance"
+                icon="i-lucide-lock"
+                label="Stop editing map"
                 type="button"
-                variant="outline"
-                @click="addCoordinatePoint('entrance')"
-              />
-              <UButton
-                color="neutral"
-                icon="i-lucide-map-pinned"
-                label="Add POI"
-                type="button"
-                variant="outline"
-                @click="addCoordinatePoint('poi')"
-              />
-              <UButton
-                color="neutral"
-                icon="i-lucide-plus"
-                label="Add other point"
-                type="button"
-                variant="outline"
-                @click="addCoordinatePoint('other')"
+                variant="ghost"
+                @click="stopEditingMapLocation"
               />
             </div>
             <template
@@ -1134,7 +1205,7 @@ onBeforeUnmount(() => {
                 v-model="form.coordinatePoints[pointIndex]"
                 :is-active="activePointId === point.id"
                 :readonly="readonly"
-                @click="activePointId = point.id ?? 'general'"
+                @click="selectCoordinatePoint(point.id)"
                 @remove="removeCoordinatePoint"
               />
             </template>
