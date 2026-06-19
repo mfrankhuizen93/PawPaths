@@ -51,7 +51,12 @@ const editablePointKind = computed({
     class="grid gap-2 rounded border p-3 sm:grid-cols-[auto_minmax(10rem,1fr)_minmax(10rem,1fr)_auto]"
     :class="{ 'border-brand-500 bg-brand-50 border': isActive }"
   >
-    <UButton color="neutral" icon="i-lucide-crosshair" variant="ghost" />
+    <UButton
+      color="neutral"
+      icon="i-lucide-crosshair"
+      type="button"
+      variant="ghost"
+    />
 
     <UInput
       v-if="isGeneralLocation"

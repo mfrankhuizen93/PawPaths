@@ -15,6 +15,7 @@ const props = defineProps<{
   latitude?: number | null;
   longitude?: number | null;
   markers?: PickerMarker[];
+  fullHeight?: boolean;
   readonly?: boolean;
 }>();
 
@@ -303,21 +304,25 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="relative overflow-hidden rounded-md border border-slate-200"
+    :class="{ 'h-full min-h-0': fullHeight }"
     @pointerdown.stop
     @touchstart.stop
   >
     <div
       ref="mapContainer"
       :class="
-        readonly
-          ? 'h-[min(20rem,42dvh)] min-h-64'
-          : 'h-[min(22rem,44dvh)] min-h-64'
+        fullHeight
+          ? 'h-full min-h-0'
+          : readonly
+            ? 'h-[min(20rem,42dvh)] min-h-64'
+            : 'h-[min(22rem,44dvh)] min-h-64'
       "
       class="w-full"
     />
     <div
       v-if="!readonly"
-      class="absolute top-3 left-3 z-10 w-64 max-w-[calc(100%-1.5rem)]"
+      class="absolute left-3 z-10 w-64 max-w-[calc(100%-1.5rem)]"
+      :class="fullHeight ? 'top-24 sm:top-16' : 'top-3'"
     >
       <div
         class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"
