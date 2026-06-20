@@ -10,6 +10,7 @@ import { isLocationDescriptionTemplate } from "#shared/utils/location-descriptio
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import { z } from "zod";
 import AppTabs from "~/components/common/AppTabs.vue";
+import AppMarkdownText from "~/components/common/AppMarkdownText.vue";
 import AppPhotoLanes from "~/components/AppPhotoLanes.vue";
 
 const props = withDefaults(
@@ -1151,12 +1152,11 @@ onBeforeUnmount(() => {
             description="Write about access, leash rules, terrain, facilities, and useful tips for dog owners."
             name="description"
           >
-            <div
+            <AppMarkdownText
               v-if="readonly"
+              :content="form.description"
               class="min-h-32 w-full whitespace-pre-line py-2 text-base leading-6 text-slate-950"
-            >
-              {{ form.description }}
-            </div>
+            />
             <UEditor
               v-else
               v-model="form.description"
