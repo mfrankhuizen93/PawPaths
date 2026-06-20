@@ -6,6 +6,8 @@ import type {
   LocationsResponse,
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
+import AppDrawer from "~/components/drawer/AppDrawer.vue";
+import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import {
   canDeleteLocation,
   canSuggestLocationUnavailable,
@@ -626,7 +628,7 @@ watch(
       </ClientOnly>
     </div>
 
-    <LazyAppDrawer
+    <AppDrawer
       :dirty="hasUnsavedLocationChanges"
       full-height
       :open="isLocationDrawerOpen"
@@ -813,7 +815,7 @@ watch(
         v-if="selectedLocation && locationMode === 'edit'"
         #actions="{ close }"
       >
-        <LazyAppDrawerActions>
+        <AppDrawerActions>
           <UButton
             color="neutral"
             label="Cancel"
@@ -828,9 +830,9 @@ watch(
             :loading="isSubmittingChange"
             type="submit"
           />
-        </LazyAppDrawerActions>
+        </AppDrawerActions>
       </template>
-    </LazyAppDrawer>
+    </AppDrawer>
 
     <UModal
       v-model:open="deleteDialogOpen"
@@ -839,7 +841,7 @@ watch(
       title="Delete this location?"
     >
       <template #footer>
-        <LazyAppDrawerActions>
+        <AppDrawerActions>
           <UButton
             color="neutral"
             label="Cancel"
@@ -853,7 +855,7 @@ watch(
             :loading="isDeletingLocation"
             @click="deleteLocation"
           />
-        </LazyAppDrawerActions>
+        </AppDrawerActions>
       </template>
     </UModal>
 
