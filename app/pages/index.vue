@@ -6,9 +6,6 @@ import type {
   LocationsResponse,
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
-import AppDrawer from "~/components/drawer/AppDrawer.vue";
-import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
-import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
 import {
   canDeleteLocation,
   canSuggestLocationUnavailable,
@@ -629,7 +626,7 @@ watch(
       </ClientOnly>
     </div>
 
-    <AppDrawer
+    <LazyAppDrawer
       :dirty="hasUnsavedLocationChanges"
       full-height
       :open="isLocationDrawerOpen"
@@ -709,7 +706,7 @@ watch(
         </div>
       </template>
       <template #default>
-        <AppLocationForm
+        <LazyAppLocationForm
           v-if="selectedLocation"
           v-model="changeForm"
           :can-generate-description="isAdmin"
@@ -809,14 +806,14 @@ watch(
               </div>
             </div>
           </template>
-        </AppLocationForm>
+        </LazyAppLocationForm>
       </template>
 
       <template
         v-if="selectedLocation && locationMode === 'edit'"
         #actions="{ close }"
       >
-        <AppDrawerActions>
+        <LazyAppDrawerActions>
           <UButton
             color="neutral"
             label="Cancel"
@@ -831,9 +828,9 @@ watch(
             :loading="isSubmittingChange"
             type="submit"
           />
-        </AppDrawerActions>
+        </LazyAppDrawerActions>
       </template>
-    </AppDrawer>
+    </LazyAppDrawer>
 
     <UModal
       v-model:open="deleteDialogOpen"
@@ -842,7 +839,7 @@ watch(
       title="Delete this location?"
     >
       <template #footer>
-        <AppDrawerActions>
+        <LazyAppDrawerActions>
           <UButton
             color="neutral"
             label="Cancel"
@@ -856,11 +853,11 @@ watch(
             :loading="isDeletingLocation"
             @click="deleteLocation"
           />
-        </AppDrawerActions>
+        </LazyAppDrawerActions>
       </template>
     </UModal>
 
-    <LocationAddDrawer />
+    <LazyLocationAddDrawer />
   </div>
 </template>
 
