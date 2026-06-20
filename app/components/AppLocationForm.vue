@@ -1151,26 +1151,24 @@ onBeforeUnmount(() => {
             description="Write about access, leash rules, terrain, facilities, and useful tips for dog owners."
             name="description"
           >
+            <div
+              v-if="readonly"
+              class="min-h-32 w-full whitespace-pre-line py-2 text-base leading-6 text-slate-950"
+            >
+              {{ form.description }}
+            </div>
             <UEditor
+              v-else
               v-model="form.description"
-              :editable="!readonly"
-              :class="[
-                'min-h-32 w-full min-w-0 overflow-hidden',
-                readonly
-                  ? 'bg-transparent'
-                  : 'rounded-md border border-slate-200 bg-white',
-              ]"
+              class="min-h-32 w-full min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white"
               content-type="markdown"
               placeholder="Describe this location..."
               :ui="{
                 content: 'min-h-32',
-                base: [
-                  'min-h-32 py-2 text-base leading-5 font-sans text-slate-950 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
-                  readonly ? 'px-0 sm:px-0' : 'px-4 sm:px-4',
-                ],
+                base: 'min-h-32 px-4 py-2 text-base leading-5 font-sans text-slate-950 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title sm:px-4',
               }"
             >
-              <template v-if="!readonly" #default="{ editor }">
+              <template #default="{ editor }">
                 <div
                   class="w-full min-w-0 overflow-hidden border-b border-slate-200 px-2 py-1"
                 >
