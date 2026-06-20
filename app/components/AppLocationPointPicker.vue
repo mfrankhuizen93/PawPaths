@@ -1,5 +1,11 @@
 <script lang="ts" setup>
-import type { GeoJSONSource, Map, MapMouseEvent } from "maplibre-gl";
+import type {
+  GeoJSONSource,
+  Map,
+  MapLayerMouseEvent,
+  MapLayerTouchEvent,
+  MapMouseEvent,
+} from "maplibre-gl";
 import type { GeocodeResult } from "#shared/types/geo";
 import type { LocationCoordinateKind } from "#shared/types/locations";
 
@@ -22,6 +28,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:latitude": [value: number | null];
   "update:longitude": [value: number | null];
+  "marker-delete": [value: { id: string; kind: LocationCoordinateKind }];
+  "marker-move": [value: { id: string; kind: LocationCoordinateKind }];
   picked: [value: { latitude: number; longitude: number }];
   selected: [value: GeocodeResult];
 }>();
@@ -30,6 +38,14 @@ const config = useRuntimeConfig();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = shallowRef<Map | null>(null);
 const isReady = ref(false);
+const markerMenu = ref<{
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+  x: number;
+  y: number;
+} | null>(null);
+let markerLongPressTimer: ReturnType<typeof window.setTimeout> | null = null;
 const mapStyle =
   config.public.mapStyleUrl || "https://demotiles.maplibre.org/style.json";
 
@@ -240,6 +256,83 @@ function addSelectionLayer() {
   });
 }
 
+function getMarkerFromFeature(feature: GeoJSON.Feature | undefined): {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+} | null {
+  const properties = feature?.properties;
+
+  if (
+    !properties ||
+    typeof properties.id !== "string" ||
+    typeof properties.label !== "string" ||
+    typeof properties.kind !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: properties.id,
+    kind: properties.kind as LocationCoordinateKind,
+    label: properties.label,
+  };
+}
+
+function openMarkerMenu(event: MapLayerMouseEvent | MapLayerTouchEvent) {
+  if (props.readonly) return;
+
+  const marker = getMarkerFromFeature(event.features?.[0]);
+  if (!marker) return;
+
+  event.preventDefault();
+  markerMenu.value = {
+    ...marker,
+    x: event.point.x,
+    y: event.point.y,
+  };
+}
+
+function closeMarkerMenu() {
+  markerMenu.value = null;
+}
+
+function clearMarkerLongPressTimer() {
+  if (!markerLongPressTimer) return;
+
+  window.clearTimeout(markerLongPressTimer);
+  markerLongPressTimer = null;
+}
+
+function startMarkerLongPress(event: MapLayerTouchEvent) {
+  if (props.readonly) return;
+
+  clearMarkerLongPressTimer();
+  markerLongPressTimer = window.setTimeout(() => {
+    openMarkerMenu(event);
+  }, 520);
+}
+
+function moveMarker() {
+  if (!markerMenu.value) return;
+
+  emit("marker-move", {
+    id: markerMenu.value.id,
+    kind: markerMenu.value.kind,
+  });
+  closeMarkerMenu();
+}
+
+function deleteMarker() {
+  if (!markerMenu.value || markerMenu.value.kind === "general") return;
+
+  emit("marker-delete", {
+    id: markerMenu.value.id,
+    kind: markerMenu.value.kind,
+  });
+  closeMarkerMenu();
+}
+
 onMounted(async () => {
   if (!mapContainer.value) return;
 
@@ -266,7 +359,17 @@ onMounted(async () => {
     }
   });
 
+  map.value.on("contextmenu", "pawpaths-location-selection", openMarkerMenu);
+  map.value.on(
+    "touchstart",
+    "pawpaths-location-selection",
+    startMarkerLongPress,
+  );
+  map.value.on("touchend", clearMarkerLongPressTimer);
+  map.value.on("touchmove", clearMarkerLongPressTimer);
+
   map.value.on("click", (event: MapMouseEvent) => {
+    closeMarkerMenu();
     if (props.readonly) return;
 
     setCoordinates([event.lngLat.lng, event.lngLat.lat]);
@@ -297,6 +400,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  clearMarkerLongPressTimer();
   map.value?.remove();
 });
 </script>
@@ -321,8 +425,7 @@ onBeforeUnmount(() => {
     />
     <div
       v-if="!readonly"
-      class="absolute left-3 z-10 w-64 max-w-[calc(100%-1.5rem)]"
-      :class="fullHeight ? 'top-24 sm:top-16' : 'top-3'"
+      class="absolute top-3 left-3 z-10 flex w-72 max-w-[calc(100%-1.5rem)] flex-col gap-2"
     >
       <div
         class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"
@@ -332,6 +435,39 @@ onBeforeUnmount(() => {
           @selected="searchAddress"
         />
       </div>
+      <slot name="actions" />
+    </div>
+
+    <div
+      v-if="markerMenu && !readonly"
+      class="bg-default/95 border-default/60 absolute z-20 min-w-36 overflow-hidden rounded-lg border shadow-xl backdrop-blur-xl"
+      :style="{
+        left: `${markerMenu.x}px`,
+        top: `${markerMenu.y}px`,
+      }"
+      @click.stop
+      @pointerdown.stop
+      @touchstart.stop
+    >
+      <UButton
+        block
+        color="neutral"
+        icon="i-lucide-move"
+        label="Move"
+        type="button"
+        variant="ghost"
+        @click="moveMarker"
+      />
+      <UButton
+        v-if="markerMenu.kind !== 'general'"
+        block
+        color="error"
+        icon="i-lucide-trash-2"
+        label="Delete"
+        type="button"
+        variant="ghost"
+        @click="deleteMarker"
+      />
     </div>
   </div>
 </template>

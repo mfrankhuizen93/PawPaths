@@ -214,6 +214,7 @@ const activePointId = ref<string | null>(
 const pendingPointKind = ref<Exclude<LocationCoordinateKind, "general"> | null>(
   null,
 );
+const selectedPoiKind = ref<Exclude<LocationCoordinateKind, "general">>();
 const isReverseGeocoding = ref(false);
 const geocodeError = ref("");
 const descriptionGenerationError = ref("");
@@ -249,16 +250,45 @@ const descriptionEditorToolbarItems = computed(() => [
       ]
     : []),
 ]);
-const poiKindOptions = pointKindOptions.filter(
-  (option) => !["parking", "entrance"].includes(option.value),
+const pointKindOptionMap = new Map(
+  pointKindOptions.map((option) => [option.value, option]),
 );
-const poiMenuItems = computed(() => [
-  poiKindOptions.map((option) => ({
-    label: option.label,
-    onSelect() {
-      startAddingCoordinatePoint(option.value);
-    },
-  })),
+const poiKindGroups = [
+  {
+    label: "Main",
+    values: ["poi", "other"],
+  },
+  {
+    label: "Amenities",
+    values: ["water", "swimming", "bench", "toilet", "cafe", "shade"],
+  },
+  {
+    label: "Dogs",
+    values: ["dog-playground", "off-leash-area"],
+  },
+  {
+    label: "Practical",
+    values: ["waste-bin", "rest-area", "viewpoint", "photo-spot"],
+  },
+  {
+    label: "Warnings",
+    values: ["hazard", "livestock"],
+  },
+] satisfies {
+  label: string;
+  values: Exclude<LocationCoordinateKind, "general">[];
+}[];
+const poiSelectItems = poiKindGroups.flatMap((group) => [
+  {
+    label: group.label,
+    value: `heading-${group.label}`,
+    disabled: true,
+  },
+  ...group.values
+    .map((value) => pointKindOptionMap.get(value))
+    .filter((option): option is (typeof pointKindOptions)[number] =>
+      Boolean(option),
+    ),
 ]);
 const locationForm = ref<{
   clear: (name?: string | RegExp) => void;
@@ -451,27 +481,6 @@ const activePoint = computed<LocationCoordinatePoint | null>(() => {
       (point) => point.id === activePointId.value,
     ) ?? null
   );
-});
-const activePointKind = computed<
-  Exclude<LocationCoordinateKind, "general"> | undefined
->({
-  get: () => {
-    if (!activePoint.value || activePoint.value.kind === "general") {
-      return undefined;
-    }
-
-    return activePoint.value.kind;
-  },
-  set: (value) => updateActivePointKind(value),
-});
-const mapInstruction = computed(() => {
-  if (pendingPointKind.value) {
-    return `Click the map to place ${getPointLabel(pendingPointKind.value).toLowerCase()}.`;
-  }
-
-  if (activePointId.value) return props.pointHelp;
-
-  return "Choose a location point before clicking the map.";
 });
 
 const activeLatitude = computed({
@@ -851,28 +860,6 @@ function getPointLabel(kind: LocationCoordinateKind) {
   );
 }
 
-function updatePointKind(
-  point: LocationCoordinatePoint,
-  kind: Exclude<LocationCoordinateKind, "general">,
-) {
-  const currentDefaultLabel = getPointLabel(point.kind);
-  const nextDefaultLabel = getPointLabel(kind);
-  const shouldUpdateLabel =
-    !point.label.trim() || point.label === currentDefaultLabel;
-
-  point.kind = kind;
-
-  if (shouldUpdateLabel) {
-    point.label = nextDefaultLabel;
-  }
-}
-
-function updateActivePointKind(value: unknown) {
-  if (!activePoint.value || !isPointKind(value)) return;
-
-  updatePointKind(activePoint.value, value);
-}
-
 function createPointId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -903,6 +890,13 @@ function startAddingCoordinatePoint(
   activePointId.value = null;
 }
 
+function handlePoiKindSelect(kind: unknown) {
+  if (!isPointKind(kind)) return;
+
+  startAddingCoordinatePoint(kind);
+  selectedPoiKind.value = undefined;
+}
+
 function handleMapPick(coordinates: { latitude: number; longitude: number }) {
   if (!pendingPointKind.value) return;
 
@@ -913,18 +907,9 @@ function handleMapPick(coordinates: { latitude: number; longitude: number }) {
   );
 }
 
-function selectCoordinatePoint(id: string | null | undefined) {
+function moveMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
   pendingPointKind.value = null;
-  activePointId.value = id ?? "general";
-  if (!props.readonly) isMapEditorOpen.value = true;
-}
-
-function editGeneralLocation() {
-  if (props.readonly) return;
-
-  isMapEditorOpen.value = true;
-  pendingPointKind.value = null;
-  activePointId.value = "general";
+  activePointId.value = marker.kind === "general" ? "general" : marker.id;
 }
 
 function openMapEditor() {
@@ -941,10 +926,10 @@ function removeCoordinatePoint(id: string | null | undefined) {
   }
 }
 
-function removeActiveCoordinatePoint() {
-  if (!activePoint.value) return;
+function removeMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
+  if (marker.kind === "general") return;
 
-  removeCoordinatePoint(activePoint.value.id);
+  removeCoordinatePoint(marker.id);
 }
 
 async function reverseGeocodeGeneralLocation() {
@@ -1013,6 +998,7 @@ function resetLocalState() {
   isMapEditorOpen.value = false;
   activePointId.value = props.mapEditingLocked ? null : "general";
   pendingPointKind.value = null;
+  selectedPoiKind.value = undefined;
   photoFiles.value = [];
   clearPhotoFieldError();
   descriptionGenerationError.value = "";
@@ -1171,14 +1157,6 @@ onBeforeUnmount(() => {
         >
           <div class="flex flex-col gap-3">
             <UAlert
-              v-if="!readonly"
-              color="neutral"
-              :description="mapInstruction"
-              icon="i-lucide-map-pin"
-              title="Set location points"
-              variant="soft"
-            />
-            <UAlert
               v-if="geocodeError"
               :title="geocodeError"
               color="warning"
@@ -1204,25 +1182,6 @@ onBeforeUnmount(() => {
               :markers="mapMarkers"
               readonly
             />
-            <MapMarkerCard
-              v-model="generalLocationMarker"
-              :is-active="activePointId === 'general'"
-              readonly
-              @click="editGeneralLocation"
-            />
-            <template
-              v-for="(point, pointIndex) in form.coordinatePoints"
-              :key="point.id + '-' + pointIndex"
-            >
-              <MapMarkerCard
-                v-if="form?.coordinatePoints?.[pointIndex]"
-                v-model="form.coordinatePoints[pointIndex]"
-                :is-active="activePointId === point.id"
-                readonly
-                @click="selectCoordinatePoint(point.id)"
-                @remove="removeCoordinatePoint"
-              />
-            </template>
             <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
               Finding place details from the general location...
             </p>
@@ -1236,83 +1195,66 @@ onBeforeUnmount(() => {
           title="Edit map points"
         >
           <template #body>
-            <div class="flex h-[calc(100dvh-4rem)] min-h-0 flex-col gap-3">
-              <UAlert
-                color="neutral"
-                :description="mapInstruction"
-                icon="i-lucide-map-pin"
-                title="Set location points"
-                variant="soft"
-              />
-              <div
-                v-if="activePoint"
-                class="grid gap-2 sm:grid-cols-[minmax(10rem,16rem)_minmax(12rem,1fr)_auto]"
-              >
-                <USelectMenu
-                  v-model="activePointKind"
-                  :items="pointKindOptions"
-                  placeholder="Kind"
-                  value-key="value"
-                />
-                <UInput v-model="activePoint.label" placeholder="Label" />
-                <UButton
-                  color="error"
-                  icon="i-lucide-trash-2"
-                  label="Remove point"
-                  type="button"
-                  variant="subtle"
-                  @click="removeActiveCoordinatePoint"
-                />
-              </div>
+            <div class="flex h-[calc(100dvh-4rem)] min-h-0 flex-col">
               <div class="relative min-h-0 flex-1">
-                <div
-                  class="absolute top-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2"
-                >
-                  <UButton
-                    color="neutral"
-                    icon="i-lucide-car"
-                    label="Add parking"
-                    type="button"
-                    :variant="
-                      pendingPointKind === 'parking' ? 'solid' : 'subtle'
-                    "
-                    @click="startAddingCoordinatePoint('parking')"
-                  />
-                  <UButton
-                    color="neutral"
-                    icon="i-lucide-door-open"
-                    label="Add Entrance"
-                    type="button"
-                    :variant="
-                      pendingPointKind === 'entrance' ? 'solid' : 'subtle'
-                    "
-                    @click="startAddingCoordinatePoint('entrance')"
-                  />
-                  <UDropdownMenu :items="poiMenuItems">
-                    <UButton
-                      color="neutral"
-                      icon="i-lucide-map-pinned"
-                      label="Add POI"
-                      trailing-icon="i-lucide-chevron-down"
-                      type="button"
-                      :variant="
-                        pendingPointKind &&
-                        pendingPointKind !== 'parking' &&
-                        pendingPointKind !== 'entrance'
-                          ? 'solid'
-                          : 'subtle'
-                      "
-                    />
-                  </UDropdownMenu>
-                </div>
                 <AppLocationPointPicker
                   v-model:latitude="activeLatitude"
                   v-model:longitude="activeLongitude"
                   full-height
                   :markers="mapMarkers"
                   :readonly="!activePointId && !pendingPointKind"
+                  @marker-delete="removeMapMarker"
+                  @marker-move="moveMapMarker"
                   @picked="handleMapPick"
-                />
+                >
+                  <template #actions>
+                    <div class="flex flex-wrap gap-2">
+                      <UButton
+                        color="neutral"
+                        icon="i-lucide-car"
+                        label="Add parking"
+                        type="button"
+                        :variant="
+                          pendingPointKind === 'parking' ? 'solid' : 'subtle'
+                        "
+                        @click="startAddingCoordinatePoint('parking')"
+                      />
+                      <UButton
+                        color="neutral"
+                        icon="i-lucide-door-open"
+                        label="Add Entrance"
+                        type="button"
+                        :variant="
+                          pendingPointKind === 'entrance' ? 'solid' : 'subtle'
+                        "
+                        @click="startAddingCoordinatePoint('entrance')"
+                      />
+                      <USelectMenu
+                        v-model="selectedPoiKind"
+                        class="min-w-40"
+                        :items="poiSelectItems"
+                        placeholder="Add POI"
+                        value-key="value"
+                        @update:model-value="handlePoiKindSelect"
+                      >
+                        <UButton
+                          color="neutral"
+                          icon="i-lucide-map-pinned"
+                          label="Add POI"
+                          trailing-icon="i-lucide-chevron-down"
+                          type="button"
+                          :variant="
+                            pendingPointKind &&
+                            pendingPointKind !== 'parking' &&
+                            pendingPointKind !== 'entrance'
+                              ? 'solid'
+                              : 'subtle'
+                          "
+                        />
+                      </USelectMenu>
+                    </div>
+                  </template>
+                </AppLocationPointPicker>
               </div>
             </div>
           </template>
