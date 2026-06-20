@@ -9,10 +9,14 @@ import { useExploreQuery } from "~/composables/states";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
+import {
+  canDeleteLocation,
+  canSuggestLocationUnavailable,
+} from "#shared/utils/location-permissions";
 
 const route = useRoute();
 const router = useRouter();
-const { isAdmin, isSignedIn } = useAuth();
+const { isAdmin, isSignedIn, user } = useAuth();
 const authDrawer = useAuthDrawer();
 const addLocationDrawerOpen = useAddLocationDrawer();
 const toast = useToast();
@@ -148,6 +152,7 @@ const hasUnsavedLocationChanges = computed(
     locationMode.value === "edit" &&
     JSON.stringify(changeForm) !== changeBaseline.value,
 );
+const currentRole = computed(() => user.value?.role ?? null);
 const locationMenuItems = computed(() => [
   [
     {
@@ -157,15 +162,30 @@ const locationMenuItems = computed(() => [
         requestSuggestEdit();
       },
     },
-    {
-      label: "Delete",
-      icon: "i-lucide-trash-2",
-      color: "error" as const,
-      disabled: !isAdmin.value,
-      onSelect() {
-        deleteDialogOpen.value = true;
-      },
-    },
+    ...(canSuggestLocationUnavailable(currentRole.value) &&
+    !canDeleteLocation(currentRole.value)
+      ? [
+          {
+            label: "Suggest unavailable",
+            icon: "i-lucide-ban",
+            onSelect() {
+              void suggestLocationUnavailable();
+            },
+          },
+        ]
+      : []),
+    ...(canDeleteLocation(currentRole.value)
+      ? [
+          {
+            label: "Delete",
+            icon: "i-lucide-trash-2",
+            color: "error" as const,
+            onSelect() {
+              deleteDialogOpen.value = true;
+            },
+          },
+        ]
+      : []),
   ],
 ]);
 
@@ -329,8 +349,35 @@ async function submitChange() {
   }
 }
 
+function getUnavailableSuggestionDescription(description: string | undefined) {
+  const note =
+    "**Maintainer note**\nThis location may no longer be available, relevant, or open. Please verify before keeping it published.";
+  const currentDescription = description?.trim();
+
+  return currentDescription ? `${note}\n\n${currentDescription}` : note;
+}
+
+async function suggestLocationUnavailable() {
+  if (
+    !selectedLocation.value ||
+    !canSuggestLocationUnavailable(currentRole.value) ||
+    canDeleteLocation(currentRole.value) ||
+    isSubmittingChange.value
+  ) {
+    return;
+  }
+
+  syncChangeForm(selectedLocation.value);
+  changeForm.description = getUnavailableSuggestionDescription(
+    changeForm.description,
+  );
+  changeBaseline.value = JSON.stringify({});
+
+  await submitChange();
+}
+
 async function deleteLocation() {
-  if (!selectedLocation.value || !isAdmin.value) return;
+  if (!selectedLocation.value || !canDeleteLocation(currentRole.value)) return;
 
   isDeletingLocation.value = true;
 

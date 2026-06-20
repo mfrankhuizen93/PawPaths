@@ -7,6 +7,7 @@ import AppPageHeader from "~/components/common/AppPageHeader.vue";
 import AppPageToolbar from "~/components/common/AppPageToolbar.vue";
 import CommunitySubmissionDrawer from "~/components/community/CommunitySubmissionDrawer.vue";
 import CommunitySubmissionList from "~/components/community/CommunitySubmissionList.vue";
+import { normalizeEditableLocationFields } from "#shared/utils/editable-location-fields";
 
 definePageMeta({
   middleware: "maintainer",
@@ -59,22 +60,7 @@ function getErrorMessage(error: unknown) {
 function cloneLocationFields(
   payload: EditableLocationFields,
 ): EditableLocationFields {
-  return {
-    name: payload.name ?? "",
-    city: payload.city ?? "",
-    province: payload.province ?? "",
-    country: payload.country ?? "Netherlands",
-    latitude: payload.latitude ?? null,
-    longitude: payload.longitude ?? null,
-    type: [...(payload.type ?? [])],
-    characteristics: [...(payload.characteristics ?? [])],
-    description: payload.description ?? "",
-    relatedUrls: (payload.relatedUrls ?? []).map((url) => ({ ...url })),
-    photos: (payload.photos ?? []).map((photo) => ({ ...photo })),
-    coordinatePoints: (payload.coordinatePoints ?? []).map((point) => ({
-      ...point,
-    })),
-  };
+  return normalizeEditableLocationFields(payload);
 }
 
 function syncContributionEdits() {
