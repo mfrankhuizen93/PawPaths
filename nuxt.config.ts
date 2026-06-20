@@ -41,6 +41,8 @@ export default defineNuxtConfig({
   },
   routeRules: {
     "/account": { redirect: "/?profile=true" },
+    "/api/locations": { swr: 60 },
+    "/api/locations/**": { swr: 300 },
   },
   fonts: {
     families: [
