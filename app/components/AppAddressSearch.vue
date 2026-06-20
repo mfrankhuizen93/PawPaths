@@ -6,11 +6,13 @@ const props = withDefaults(
     placeholder?: string;
     autofocus?: boolean;
     collapsible?: boolean;
+    size?: "sm" | "md" | "lg" | "xl";
   }>(),
   {
     placeholder: "Search address or place",
     autofocus: false,
     collapsible: false,
+    size: "lg",
   },
 );
 
@@ -105,8 +107,8 @@ onBeforeUnmount(() => {
       :placeholder="props.placeholder"
       class="min-w-0 flex-1"
       icon="i-lucide-search"
-      size="lg"
-      :ui="{ base: 'h-12' }"
+      :size="props.size"
+      :ui="{ base: props.size === 'lg' ? 'h-12' : undefined }"
       variant="none"
     >
       <template v-if="props.collapsible" #trailing>

@@ -78,6 +78,7 @@ const pointKindOptions = [
 }[];
 const markerContextMenuItems = computed(() => {
   if (!contextMarker.value) return [];
+  const marker = contextMarker.value;
   const isGeneralMarker = contextMarker.value.kind === "general";
 
   return [
@@ -86,7 +87,7 @@ const markerContextMenuItems = computed(() => {
         label: "Move",
         icon: "i-lucide-move",
         onSelect() {
-          moveMarker();
+          moveMarker(marker);
         },
       },
       ...(isGeneralMarker
@@ -96,7 +97,7 @@ const markerContextMenuItems = computed(() => {
               label: "Rename",
               icon: "i-lucide-pencil",
               onSelect() {
-                renameMarker();
+                renameMarker(marker);
               },
             },
             {
@@ -104,9 +105,9 @@ const markerContextMenuItems = computed(() => {
               icon: "i-lucide-list-restart",
               children: pointKindOptions.map((option) => ({
                 label: option.label,
-                disabled: option.value === contextMarker.value?.kind,
+                disabled: option.value === marker.kind,
                 onSelect() {
-                  changeMarkerKind(option.value);
+                  changeMarkerKind(marker, option.value);
                 },
               })),
             },
@@ -114,7 +115,7 @@ const markerContextMenuItems = computed(() => {
               label: "Set as general location",
               icon: "i-lucide-crosshair",
               onSelect() {
-                setMarkerAsGeneral();
+                setMarkerAsGeneral(marker);
               },
             },
             {
@@ -125,7 +126,7 @@ const markerContextMenuItems = computed(() => {
               icon: "i-lucide-trash-2",
               color: "error" as const,
               onSelect() {
-                deleteMarker();
+                deleteMarker(marker);
               },
             },
           ]),
@@ -409,9 +410,7 @@ function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
   contextMarker.value = point ? getMarkerAtPoint(point) : null;
 
   if (contextMarker.value) {
-    if (event.type === "contextmenu") {
-      suppressNextMapClick = true;
-    }
+    suppressNextMapClick = true;
     return;
   }
 
@@ -422,55 +421,74 @@ function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
   }
 }
 
-function moveMarker() {
-  if (!contextMarker.value) return;
-
+function moveMarker(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
   emit("marker-move", {
-    id: contextMarker.value.id,
-    kind: contextMarker.value.kind,
+    id: marker.id,
+    kind: marker.kind,
   });
   contextMarker.value = null;
 }
 
-function renameMarker() {
-  if (!contextMarker.value || contextMarker.value.kind === "general") return;
+function renameMarker(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
+  if (marker.kind === "general") return;
 
   emit("marker-rename", {
-    id: contextMarker.value.id,
-    kind: contextMarker.value.kind,
+    id: marker.id,
+    kind: marker.kind,
   });
   contextMarker.value = null;
 }
 
 function changeMarkerKind(
+  marker: {
+    id: string;
+    kind: LocationCoordinateKind;
+    label: string;
+  },
   nextKind: Exclude<LocationCoordinateKind, "general">,
 ) {
-  if (!contextMarker.value || contextMarker.value.kind === "general") return;
+  if (marker.kind === "general") return;
 
   emit("marker-change-kind", {
-    id: contextMarker.value.id,
-    kind: contextMarker.value.kind,
+    id: marker.id,
+    kind: marker.kind,
     nextKind,
   });
   contextMarker.value = null;
 }
 
-function setMarkerAsGeneral() {
-  if (!contextMarker.value || contextMarker.value.kind === "general") return;
+function setMarkerAsGeneral(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
+  if (marker.kind === "general") return;
 
   emit("marker-set-general", {
-    id: contextMarker.value.id,
-    kind: contextMarker.value.kind,
+    id: marker.id,
+    kind: marker.kind,
   });
   contextMarker.value = null;
 }
 
-function deleteMarker() {
-  if (!contextMarker.value || contextMarker.value.kind === "general") return;
+function deleteMarker(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
+  if (marker.kind === "general") return;
 
   emit("marker-delete", {
-    id: contextMarker.value.id,
-    kind: contextMarker.value.kind,
+    id: marker.id,
+    kind: marker.kind,
   });
   contextMarker.value = null;
 }
@@ -578,6 +596,7 @@ onBeforeUnmount(() => map.value?.remove());
         >
           <AppAddressSearch
             placeholder="Search address or place"
+            size="sm"
             @selected="searchAddress"
           />
         </div>

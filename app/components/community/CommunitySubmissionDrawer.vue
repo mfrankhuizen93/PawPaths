@@ -33,11 +33,36 @@ const editablePayload = computed({
   },
 });
 const pendingSubmitAction = ref<"approve" | "save">("save");
+const normalizedSubmissionPayload = computed(() =>
+  props.submission ? cloneLocationFields(props.submission.payload) : null,
+);
 const isDirty = computed(
   () =>
-    Boolean(props.edit && props.submission) &&
-    JSON.stringify(props.edit) !== JSON.stringify(props.submission?.payload),
+    Boolean(props.edit && normalizedSubmissionPayload.value) &&
+    JSON.stringify(props.edit) !==
+      JSON.stringify(normalizedSubmissionPayload.value),
 );
+
+function cloneLocationFields(
+  payload: EditableLocationFields,
+): EditableLocationFields {
+  return {
+    name: payload.name ?? "",
+    city: payload.city ?? "",
+    province: payload.province ?? "",
+    country: payload.country ?? "Netherlands",
+    latitude: payload.latitude ?? null,
+    longitude: payload.longitude ?? null,
+    type: [...(payload.type ?? [])],
+    characteristics: [...(payload.characteristics ?? [])],
+    description: payload.description ?? "",
+    relatedUrls: (payload.relatedUrls ?? []).map((url) => ({ ...url })),
+    photos: (payload.photos ?? []).map((photo) => ({ ...photo })),
+    coordinatePoints: (payload.coordinatePoints ?? []).map((point) => ({
+      ...point,
+    })),
+  };
+}
 
 function submitReviewAction() {
   if (!props.submission) return;

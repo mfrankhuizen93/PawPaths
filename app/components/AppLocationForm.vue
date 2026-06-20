@@ -1317,6 +1317,10 @@ onBeforeUnmount(() => {
                         :content="{ align: 'start' }"
                         :items="poiDropdownItems"
                         size="sm"
+                        :ui="{
+                          content:
+                            'max-h-[min(20rem,calc(100dvh-8rem))] overflow-y-auto',
+                        }"
                         @update:open="
                           $event &&
                           ((activePointId = null), (pendingPointKind = null))
