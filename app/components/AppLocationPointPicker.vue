@@ -46,8 +46,13 @@ const markerMenu = ref<{
   y: number;
 } | null>(null);
 let markerLongPressTimer: ReturnType<typeof window.setTimeout> | null = null;
+let suppressNextMapClick = false;
 const mapStyle =
   config.public.mapStyleUrl || "https://demotiles.maplibre.org/style.json";
+const selectionLayerIds = [
+  "pawpaths-location-selection",
+  "pawpaths-location-selection-halo",
+] as const;
 
 const selectedCoordinates = computed<[number, number] | null>(() => {
   if (!Number.isFinite(props.latitude) || !Number.isFinite(props.longitude)) {
@@ -179,7 +184,7 @@ function addSelectionLayer() {
     source: "pawpaths-location-selection",
     paint: {
       "circle-color": "#ffffff",
-      "circle-radius": 14,
+      "circle-radius": 18,
       "circle-opacity": 0.92,
     },
   });
@@ -230,7 +235,7 @@ function addSelectionLayer() {
         "#db2777",
         "#475569",
       ],
-      "circle-radius": 8,
+      "circle-radius": 10,
       "circle-stroke-color": "#1f2937",
       "circle-stroke-opacity": 0.22,
       "circle-stroke-width": 1,
@@ -286,11 +291,20 @@ function openMarkerMenu(event: MapLayerMouseEvent | MapLayerTouchEvent) {
   if (!marker) return;
 
   event.preventDefault();
-  markerMenu.value = {
-    ...marker,
-    x: event.point.x,
-    y: event.point.y,
-  };
+  openMarkerMenuAt(marker, event.point.x, event.point.y);
+}
+
+function openMarkerMenuAt(
+  marker: {
+    id: string;
+    kind: LocationCoordinateKind;
+    label: string;
+  },
+  x: number,
+  y: number,
+) {
+  suppressNextMapClick = true;
+  markerMenu.value = { ...marker, x, y };
 }
 
 function closeMarkerMenu() {
@@ -307,9 +321,15 @@ function clearMarkerLongPressTimer() {
 function startMarkerLongPress(event: MapLayerTouchEvent) {
   if (props.readonly) return;
 
+  const marker = getMarkerFromFeature(event.features?.[0]);
+  if (!marker) return;
+
+  event.preventDefault();
+  const { x, y } = event.point;
+
   clearMarkerLongPressTimer();
   markerLongPressTimer = window.setTimeout(() => {
-    openMarkerMenu(event);
+    openMarkerMenuAt(marker, x, y);
   }, 520);
 }
 
@@ -359,16 +379,18 @@ onMounted(async () => {
     }
   });
 
-  map.value.on("contextmenu", "pawpaths-location-selection", openMarkerMenu);
-  map.value.on(
-    "touchstart",
-    "pawpaths-location-selection",
-    startMarkerLongPress,
-  );
+  selectionLayerIds.forEach((layerId) => {
+    map.value?.on("contextmenu", layerId, openMarkerMenu);
+    map.value?.on("touchstart", layerId, startMarkerLongPress);
+  });
   map.value.on("touchend", clearMarkerLongPressTimer);
-  map.value.on("touchmove", clearMarkerLongPressTimer);
 
   map.value.on("click", (event: MapMouseEvent) => {
+    if (suppressNextMapClick) {
+      suppressNextMapClick = false;
+      return;
+    }
+
     closeMarkerMenu();
     if (props.readonly) return;
 
@@ -424,8 +446,8 @@ onBeforeUnmount(() => {
       class="w-full"
     />
     <div
-      v-if="!readonly"
-      class="absolute top-3 left-3 z-10 flex w-72 max-w-[calc(100%-1.5rem)] flex-col gap-2"
+      v-if="!readonly || $slots.actions"
+      class="absolute top-3 left-3 z-10 flex w-[min(calc(100%-1.5rem),24rem)] flex-col gap-2"
     >
       <div
         class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"

@@ -1195,24 +1195,27 @@ onBeforeUnmount(() => {
           title="Edit map points"
         >
           <template #body>
-            <div class="flex h-[calc(100dvh-4rem)] min-h-0 flex-col">
+            <div
+              class="flex h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 flex-col overflow-hidden"
+            >
               <div class="relative min-h-0 flex-1">
                 <AppLocationPointPicker
                   v-model:latitude="activeLatitude"
                   v-model:longitude="activeLongitude"
                   full-height
                   :markers="mapMarkers"
-                  :readonly="!activePointId && !pendingPointKind"
+                  :readonly="false"
                   @marker-delete="removeMapMarker"
                   @marker-move="moveMapMarker"
                   @picked="handleMapPick"
                 >
                   <template #actions>
-                    <div class="flex flex-wrap gap-2">
+                    <div class="flex items-center gap-1.5">
                       <UButton
                         color="neutral"
                         icon="i-lucide-car"
-                        label="Add parking"
+                        label="+ Parking"
+                        size="xs"
                         type="button"
                         :variant="
                           pendingPointKind === 'parking' ? 'solid' : 'subtle'
@@ -1222,36 +1225,32 @@ onBeforeUnmount(() => {
                       <UButton
                         color="neutral"
                         icon="i-lucide-door-open"
-                        label="Add Entrance"
+                        label="+ Entrance"
+                        size="xs"
                         type="button"
                         :variant="
                           pendingPointKind === 'entrance' ? 'solid' : 'subtle'
                         "
                         @click="startAddingCoordinatePoint('entrance')"
                       />
-                      <USelectMenu
+                      <USelect
                         v-model="selectedPoiKind"
-                        class="min-w-40"
+                        class="w-28"
+                        :color="
+                          pendingPointKind &&
+                          pendingPointKind !== 'parking' &&
+                          pendingPointKind !== 'entrance'
+                            ? 'primary'
+                            : 'neutral'
+                        "
+                        icon="i-lucide-map-pinned"
                         :items="poiSelectItems"
-                        placeholder="Add POI"
+                        placeholder="+ POI"
+                        size="xs"
+                        variant="subtle"
                         value-key="value"
                         @update:model-value="handlePoiKindSelect"
-                      >
-                        <UButton
-                          color="neutral"
-                          icon="i-lucide-map-pinned"
-                          label="Add POI"
-                          trailing-icon="i-lucide-chevron-down"
-                          type="button"
-                          :variant="
-                            pendingPointKind &&
-                            pendingPointKind !== 'parking' &&
-                            pendingPointKind !== 'entrance'
-                              ? 'solid'
-                              : 'subtle'
-                          "
-                        />
-                      </USelectMenu>
+                      />
                     </div>
                   </template>
                 </AppLocationPointPicker>
