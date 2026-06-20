@@ -37,7 +37,9 @@ defineProps({
           :src="item.url"
           :width="item.width"
           class="h-full rounded-md object-contain"
+          format="webp"
           loading="lazy"
+          sizes="100vw"
         />
       </UCarousel>
     </template>
