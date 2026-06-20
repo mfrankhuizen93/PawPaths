@@ -24,6 +24,7 @@ type LocationReview = {
 
 type RawLocationItem = {
   reviews?: LocationReview[];
+  warnings?: unknown;
   [key: string]: unknown;
 };
 
@@ -288,12 +289,11 @@ function buildRatingFieldsStage(): PipelineStage {
   };
 }
 
-function buildProjection(): MongoFilter {
-  return {
+function buildProjection(includeReviews: boolean): MongoFilter {
+  const projection: MongoFilter = {
     _id: 0,
     id: { $toString: "$_id" },
     slug: 1,
-    sourceUrl: 1,
     name: 1,
     city: 1,
     province: 1,
@@ -305,6 +305,17 @@ function buildProjection(): MongoFilter {
     characteristics: 1,
     coordinatePoints: 1,
     warnings: { $ifNull: ["$warnings", []] },
+    photos: { $slice: [{ $ifNull: ["$photos", []] }, 1] },
+    reviewCount: 1,
+    ratingCount: 1,
+    averageRating: 1,
+  };
+
+  if (!includeReviews) return projection;
+
+  return {
+    ...projection,
+    sourceUrl: 1,
     description: 1,
     relatedUrls: 1,
     photos: 1,
@@ -312,9 +323,6 @@ function buildProjection(): MongoFilter {
     source: 1,
     createdAt: 1,
     updatedAt: 1,
-    reviewCount: 1,
-    ratingCount: 1,
-    averageRating: 1,
     reviews: 1,
   };
 }
@@ -358,7 +366,11 @@ function normalizeWarnings(
   includeReviews: boolean,
 ): LocationsResponse["items"] {
   return items.map((item) => {
-    const warnings = inferLocationWarnings(item.reviews);
+    const warnings = item.reviews
+      ? inferLocationWarnings(item.reviews)
+      : Array.isArray(item.warnings)
+        ? item.warnings
+        : [];
 
     if (includeReviews) {
       return {
@@ -393,7 +405,7 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   const isGeoSearch =
     !boundsFilter && lat !== null && lng !== null && radiusKm !== null;
   const minRating = toRating(query.minRating);
-  const projection = buildProjection();
+  const projection = buildProjection(includeReviews);
   const ratingFieldsStage = buildRatingFieldsStage();
 
   const pipeline: PipelineStage[] = [];
