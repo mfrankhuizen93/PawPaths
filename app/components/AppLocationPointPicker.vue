@@ -408,6 +408,8 @@ function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
 
   if (event.type === "contextmenu") {
     event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
   }
 }
 

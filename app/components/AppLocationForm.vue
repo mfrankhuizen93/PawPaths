@@ -916,6 +916,7 @@ function startAddingCoordinatePoint(
   isMapEditorOpen.value = true;
   pendingPointKind.value = kind;
   activePointId.value = null;
+  selectedPoiKind.value = undefined;
 }
 
 function handlePoiKindSelect(kind: unknown) {
@@ -1333,13 +1334,7 @@ onBeforeUnmount(() => {
                       <USelect
                         v-model="selectedPoiKind"
                         class="w-auto"
-                        :color="
-                          pendingPointKind &&
-                          pendingPointKind !== 'parking' &&
-                          pendingPointKind !== 'entrance'
-                            ? 'primary'
-                            : 'neutral'
-                        "
+                        color="neutral"
                         icon="i-lucide-map-pinned"
                         :items="poiSelectItems"
                         placeholder="+ POI"
@@ -1367,6 +1362,7 @@ onBeforeUnmount(() => {
           v-if="!readonly"
           :open="Boolean(renamingPointId)"
           title="Rename point"
+          :ui="{ footer: 'justify-end' }"
           @update:open="
             !$event && ((renamingPointId = null), (renamingPointLabel = ''))
           "
@@ -1384,7 +1380,7 @@ onBeforeUnmount(() => {
           </template>
 
           <template #footer>
-            <AppDrawerActions>
+            <div class="flex w-full items-center justify-end gap-2">
               <UButton
                 color="neutral"
                 label="Cancel"
@@ -1398,7 +1394,7 @@ onBeforeUnmount(() => {
                 type="button"
                 @click="saveRenamedMapMarker"
               />
-            </AppDrawerActions>
+            </div>
           </template>
         </UModal>
       </template>

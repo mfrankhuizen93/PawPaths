@@ -154,12 +154,7 @@ const locationMenuItems = computed(() => [
       label: "Edit",
       icon: "i-lucide-pencil",
       onSelect() {
-        if (!isSignedIn.value) {
-          authDrawer.show("profile");
-          return;
-        }
-
-        beginEditing();
+        requestSuggestEdit();
       },
     },
     {
@@ -187,6 +182,15 @@ function beginEditing() {
   contributionError.value = "";
   contributionMessage.value = "";
   locationMode.value = "edit";
+}
+
+function requestSuggestEdit() {
+  if (!isSignedIn.value) {
+    authDrawer.show("suggest-edit");
+    return;
+  }
+
+  beginEditing();
 }
 
 const selectedLocationMeta = computed(() =>
@@ -222,6 +226,19 @@ watch(
     total.value = response?.total ?? 0;
   },
   { immediate: true },
+);
+
+watch(
+  () => [isSignedIn.value, authDrawer.intent.value] as const,
+  ([signedIn, intent]) => {
+    if (!signedIn || intent !== "suggest-edit") return;
+
+    authDrawer.close();
+
+    if (selectedLocation.value) {
+      beginEditing();
+    }
+  },
 );
 
 function applyMapResults(response: LocationsResponse) {
@@ -615,7 +632,7 @@ watch(
               icon="i-lucide-pencil"
               label="Suggest edit"
               variant="soft"
-              @click="isSignedIn ? beginEditing() : authDrawer.show('profile')"
+              @click="requestSuggestEdit"
             />
           </div>
 

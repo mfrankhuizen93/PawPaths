@@ -1,4 +1,4 @@
-export type AuthDrawerIntent = "add" | "profile" | null;
+export type AuthDrawerIntent = "add" | "profile" | "suggest-edit" | null;
 
 export function useAuthDrawer() {
   const open = useState("auth-drawer:open", () => false);
