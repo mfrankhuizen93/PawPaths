@@ -8,7 +8,6 @@ import type {
 import { useExploreQuery } from "~/composables/states";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
-import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
 import {
   canDeleteLocation,
   canSuggestLocationUnavailable,
@@ -709,7 +708,7 @@ watch(
         </div>
       </template>
       <template #default>
-        <AppLocationForm
+        <LazyAppLocationForm
           v-if="selectedLocation"
           v-model="changeForm"
           :can-generate-description="isAdmin"
@@ -809,7 +808,7 @@ watch(
               </div>
             </div>
           </template>
-        </AppLocationForm>
+        </LazyAppLocationForm>
       </template>
 
       <template
@@ -860,7 +859,7 @@ watch(
       </template>
     </UModal>
 
-    <LocationAddDrawer />
+    <LazyLocationAddDrawer />
   </div>
 </template>
 
