@@ -447,6 +447,14 @@ function replaceLocationQuery(slug: string | null) {
   void router.replace({ query });
 }
 
+function hasLocationDetail(location: LocationListItem | null) {
+  return (
+    location &&
+    "description" in location &&
+    "relatedUrls" in location
+  );
+}
+
 async function openLocationBySlug(slug: string) {
   if (!slug) {
     selectedLocation.value = null;
@@ -454,7 +462,12 @@ async function openLocationBySlug(slug: string) {
     return;
   }
 
-  if (selectedLocation.value?.slug === slug) return;
+  if (
+    selectedLocation.value?.slug === slug &&
+    hasLocationDetail(selectedLocation.value)
+  ) {
+    return;
+  }
 
   selectedLocationError.value = "";
 
@@ -474,6 +487,7 @@ function selectLocation(location: LocationListItem) {
   selectedLocationError.value = "";
   syncChangeForm(location);
   replaceLocationQuery(location.slug);
+  void openLocationBySlug(location.slug);
 }
 
 function getTypeMeta(type: string) {
