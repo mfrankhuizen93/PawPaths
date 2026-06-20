@@ -136,10 +136,10 @@ const mapPointActionSelectUi = {
   base: "h-7 w-auto min-w-0 px-2 text-xs",
   leading: "me-1",
   leadingIcon: "size-3.5",
-  placeholder: "truncate text-xs",
+  placeholder: "text-highlighted truncate text-xs",
   trailing: "ms-1",
   trailingIcon: "size-3.5",
-  value: "truncate text-xs",
+  value: "text-highlighted truncate text-xs",
 };
 const baseDescriptionEditorToolbarItems = [
   [
@@ -907,6 +907,7 @@ function createCoordinatePoint(
 
   form.value.coordinatePoints = [...(form.value.coordinatePoints ?? []), point];
   activePointId.value = null;
+  pendingPointKind.value = null;
 }
 
 function startAddingCoordinatePoint(
@@ -925,7 +926,12 @@ function handlePoiKindSelect(kind: unknown) {
 }
 
 function handleMapPick(coordinates: { latitude: number; longitude: number }) {
-  if (!pendingPointKind.value) return;
+  if (!pendingPointKind.value) {
+    if (activePointId.value && activePointId.value !== "general") {
+      activePointId.value = null;
+    }
+    return;
+  }
 
   createCoordinatePoint(
     pendingPointKind.value,
