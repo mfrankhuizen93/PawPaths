@@ -1,11 +1,5 @@
 <script lang="ts" setup>
-import type {
-  GeoJSONSource,
-  Map,
-  MapLayerMouseEvent,
-  MapLayerTouchEvent,
-  MapMouseEvent,
-} from "maplibre-gl";
+import type { GeoJSONSource, Map, MapMouseEvent } from "maplibre-gl";
 import type { GeocodeResult } from "#shared/types/geo";
 import type { LocationCoordinateKind } from "#shared/types/locations";
 
@@ -38,14 +32,11 @@ const config = useRuntimeConfig();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = shallowRef<Map | null>(null);
 const isReady = ref(false);
-const markerMenu = ref<{
+const contextMarker = ref<{
   id: string;
   kind: LocationCoordinateKind;
   label: string;
-  x: number;
-  y: number;
 } | null>(null);
-let markerLongPressTimer: ReturnType<typeof window.setTimeout> | null = null;
 let suppressNextMapClick = false;
 const mapStyle =
   config.public.mapStyleUrl || "https://demotiles.maplibre.org/style.json";
@@ -53,6 +44,36 @@ const selectionLayerIds = [
   "pawpaths-location-selection",
   "pawpaths-location-selection-halo",
 ] as const;
+const markerContextMenuItems = computed(() => {
+  if (!contextMarker.value) return [];
+
+  return [
+    [
+      {
+        label: "Move",
+        icon: "i-lucide-move",
+        onSelect() {
+          moveMarker();
+        },
+      },
+      ...(contextMarker.value.kind === "general"
+        ? []
+        : [
+            {
+              label: "Delete",
+              icon: "i-lucide-trash-2",
+              color: "error" as const,
+              onSelect() {
+                deleteMarker();
+              },
+            },
+          ]),
+    ],
+  ];
+});
+const contextMenuDisabled = computed(
+  () => props.readonly || !contextMarker.value,
+);
 
 const selectedCoordinates = computed<[number, number] | null>(() => {
   if (!Number.isFinite(props.latitude) || !Number.isFinite(props.longitude)) {
@@ -284,73 +305,63 @@ function getMarkerFromFeature(feature: GeoJSON.Feature | undefined): {
   };
 }
 
-function openMarkerMenu(event: MapLayerMouseEvent | MapLayerTouchEvent) {
+function getMapPointFromEvent(event: MouseEvent | PointerEvent) {
+  const container = mapContainer.value;
+  if (!container) return null;
+
+  const rect = container.getBoundingClientRect();
+
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
+
+function getMarkerAtPoint(point: { x: number; y: number }) {
+  const activeMap = map.value;
+  if (!activeMap) return null;
+
+  const features = activeMap.queryRenderedFeatures(point, {
+    layers: [...selectionLayerIds],
+  });
+
+  return getMarkerFromFeature(features[0]);
+}
+
+function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
   if (props.readonly) return;
 
-  const marker = getMarkerFromFeature(event.features?.[0]);
-  if (!marker) return;
+  const point = getMapPointFromEvent(event);
+  contextMarker.value = point ? getMarkerAtPoint(point) : null;
 
-  event.preventDefault();
-  openMarkerMenuAt(marker, event.point.x, event.point.y);
-}
+  if (contextMarker.value) {
+    suppressNextMapClick = true;
+    return;
+  }
 
-function openMarkerMenuAt(
-  marker: {
-    id: string;
-    kind: LocationCoordinateKind;
-    label: string;
-  },
-  x: number,
-  y: number,
-) {
-  suppressNextMapClick = true;
-  markerMenu.value = { ...marker, x, y };
-}
-
-function closeMarkerMenu() {
-  markerMenu.value = null;
-}
-
-function clearMarkerLongPressTimer() {
-  if (!markerLongPressTimer) return;
-
-  window.clearTimeout(markerLongPressTimer);
-  markerLongPressTimer = null;
-}
-
-function startMarkerLongPress(event: MapLayerTouchEvent) {
-  if (props.readonly) return;
-
-  const marker = getMarkerFromFeature(event.features?.[0]);
-  if (!marker) return;
-
-  event.preventDefault();
-  const { x, y } = event.point;
-
-  clearMarkerLongPressTimer();
-  markerLongPressTimer = window.setTimeout(() => {
-    openMarkerMenuAt(marker, x, y);
-  }, 520);
+  if (event.type === "contextmenu") {
+    event.preventDefault();
+  }
 }
 
 function moveMarker() {
-  if (!markerMenu.value) return;
+  if (!contextMarker.value) return;
 
   emit("marker-move", {
-    id: markerMenu.value.id,
-    kind: markerMenu.value.kind,
+    id: contextMarker.value.id,
+    kind: contextMarker.value.kind,
   });
-  closeMarkerMenu();
+  contextMarker.value = null;
 }
 
 function deleteMarker() {
-  if (!markerMenu.value || markerMenu.value.kind === "general") return;
+  if (!contextMarker.value || contextMarker.value.kind === "general") return;
 
   emit("marker-delete", {
-    id: markerMenu.value.id,
-    kind: markerMenu.value.kind,
+    id: contextMarker.value.id,
+    kind: contextMarker.value.kind,
   });
-  closeMarkerMenu();
+  contextMarker.value = null;
 }
 
 onMounted(async () => {
@@ -379,19 +390,13 @@ onMounted(async () => {
     }
   });
 
-  selectionLayerIds.forEach((layerId) => {
-    map.value?.on("contextmenu", layerId, openMarkerMenu);
-    map.value?.on("touchstart", layerId, startMarkerLongPress);
-  });
-  map.value.on("touchend", clearMarkerLongPressTimer);
-
   map.value.on("click", (event: MapMouseEvent) => {
     if (suppressNextMapClick) {
       suppressNextMapClick = false;
       return;
     }
 
-    closeMarkerMenu();
+    contextMarker.value = null;
     if (props.readonly) return;
 
     setCoordinates([event.lngLat.lng, event.lngLat.lat]);
@@ -421,75 +426,51 @@ watch(
   },
 );
 
-onBeforeUnmount(() => {
-  clearMarkerLongPressTimer();
-  map.value?.remove();
-});
+onBeforeUnmount(() => map.value?.remove());
 </script>
 
 <template>
-  <div
-    class="relative overflow-hidden rounded-md border border-slate-200"
-    :class="{ 'h-full min-h-0': fullHeight }"
-    @pointerdown.stop
-    @touchstart.stop
+  <UContextMenu
+    :disabled="contextMenuDisabled"
+    :items="markerContextMenuItems"
+    :modal="false"
+    :press-open-delay="520"
+    size="sm"
+    @update:open="!$event && (contextMarker = null)"
   >
     <div
-      ref="mapContainer"
-      :class="
-        fullHeight
-          ? 'h-full min-h-0'
-          : readonly
-            ? 'h-[min(20rem,42dvh)] min-h-64'
-            : 'h-[min(22rem,44dvh)] min-h-64'
-      "
-      class="w-full"
-    />
-    <div
-      v-if="!readonly || $slots.actions"
-      class="absolute top-3 left-3 z-10 flex w-[min(calc(100%-1.5rem),24rem)] flex-col gap-2"
-    >
-      <div
-        class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"
-      >
-        <AppAddressSearch
-          placeholder="Search address or place"
-          @selected="searchAddress"
-        />
-      </div>
-      <slot name="actions" />
-    </div>
-
-    <div
-      v-if="markerMenu && !readonly"
-      class="bg-default/95 border-default/60 absolute z-20 min-w-36 overflow-hidden rounded-lg border shadow-xl backdrop-blur-xl"
-      :style="{
-        left: `${markerMenu.x}px`,
-        top: `${markerMenu.y}px`,
-      }"
-      @click.stop
+      class="relative overflow-hidden rounded-md border border-slate-200"
+      :class="{ 'h-full min-h-0': fullHeight }"
+      @contextmenu.capture="prepareMarkerContextMenu"
+      @pointerdown.capture="prepareMarkerContextMenu"
       @pointerdown.stop
       @touchstart.stop
     >
-      <UButton
-        block
-        color="neutral"
-        icon="i-lucide-move"
-        label="Move"
-        type="button"
-        variant="ghost"
-        @click="moveMarker"
+      <div
+        ref="mapContainer"
+        :class="
+          fullHeight
+            ? 'h-full min-h-0'
+            : readonly
+              ? 'h-[min(20rem,42dvh)] min-h-64'
+              : 'h-[min(22rem,44dvh)] min-h-64'
+        "
+        class="w-full"
       />
-      <UButton
-        v-if="markerMenu.kind !== 'general'"
-        block
-        color="error"
-        icon="i-lucide-trash-2"
-        label="Delete"
-        type="button"
-        variant="ghost"
-        @click="deleteMarker"
-      />
+      <div
+        v-if="!readonly || $slots.actions"
+        class="absolute top-3 left-3 z-10 flex w-[min(calc(100%-1.5rem),24rem)] flex-col gap-2"
+      >
+        <div
+          class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"
+        >
+          <AppAddressSearch
+            placeholder="Search address or place"
+            @selected="searchAddress"
+          />
+        </div>
+        <slot name="actions" />
+      </div>
     </div>
-  </div>
+  </UContextMenu>
 </template>
