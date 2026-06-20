@@ -4,13 +4,20 @@ import type { GeocodeResult } from "#shared/types/geo";
 const props = withDefaults(
   defineProps<{
     placeholder?: string;
+    autofocus?: boolean;
+    collapsible?: boolean;
+    size?: "sm" | "md" | "lg" | "xl";
   }>(),
   {
     placeholder: "Search address or place",
+    autofocus: false,
+    collapsible: false,
+    size: "lg",
   },
 );
 
 const emit = defineEmits<{
+  close: [];
   selected: [result: GeocodeResult];
 }>();
 
@@ -92,35 +99,57 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-2">
+  <div class="relative flex flex-col">
     <UInput
       v-model="query"
+      :autofocus="props.autofocus"
       :loading="isSearching"
       :placeholder="props.placeholder"
       class="min-w-0 flex-1"
       icon="i-lucide-search"
-      size="md"
-    />
+      :size="props.size"
+      :ui="{ base: props.size === 'lg' ? 'h-12' : undefined }"
+      variant="none"
+    >
+      <template v-if="props.collapsible" #trailing>
+        <UButton
+          aria-label="Close search"
+          color="neutral"
+          icon="i-lucide-x"
+          size="sm"
+          square
+          variant="ghost"
+          @click="emit('close')"
+        />
+      </template>
+    </UInput>
 
     <div
       v-if="results.length"
-      class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm"
+      class="border-default bg-default absolute top-[calc(100%+0.75rem)] left-0 w-full overflow-hidden rounded-2xl border shadow-xl"
     >
       <button
         v-for="result in results"
         :key="result.id"
-        class="hover:bg-brand-50 flex w-full items-start gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-b-0"
+        class="border-default hover:bg-elevated flex w-full items-start gap-3 border-b px-4 py-3 text-left text-sm last:border-b-0"
         type="button"
         @click="selectResult(result)"
       >
-        <UIcon class="text-brand-600 mt-0.5 shrink-0" name="i-lucide-map-pin" />
-        <span class="min-w-0 leading-5 text-slate-700">
+        <span
+          class="bg-primary/10 text-primary grid size-8 shrink-0 place-items-center rounded-full"
+        >
+          <UIcon name="i-lucide-map-pin" />
+        </span>
+        <span class="text-highlighted min-w-0 py-1 leading-5">
           {{ result.label }}
         </span>
       </button>
     </div>
 
-    <p v-if="error" class="text-xs font-medium text-red-700">
+    <p
+      v-if="error"
+      class="bg-default border-default text-error absolute top-[calc(100%+0.75rem)] left-0 w-full rounded-xl border px-3 py-2 text-sm font-medium shadow-lg"
+    >
       {{ error }}
     </p>
   </div>

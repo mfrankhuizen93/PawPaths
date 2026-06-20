@@ -42,15 +42,15 @@ const selectedPhotoIndex = ref(0);
 
 <style scoped>
 .app-photo-lanes {
-  @apply grid w-max grid-flow-col gap-4;
-  @apply auto-rows-[6rem];
+  @apply grid h-full min-h-0 w-max grid-flow-col grid-rows-2 gap-4;
+  grid-auto-columns: minmax(8rem, min(18rem, 38vh));
 }
 .app-photo-lanes__container {
-  @apply w-full overflow-x-auto;
+  @apply h-full min-h-0 w-full overflow-x-auto;
 }
 
 img {
-  @apply w-32 rounded-md;
+  @apply h-full w-full rounded-md object-cover;
   @apply row-span-1;
 }
 

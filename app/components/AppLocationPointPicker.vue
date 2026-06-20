@@ -15,12 +15,25 @@ const props = defineProps<{
   latitude?: number | null;
   longitude?: number | null;
   markers?: PickerMarker[];
+  fullHeight?: boolean;
   readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
   "update:latitude": [value: number | null];
   "update:longitude": [value: number | null];
+  "marker-change-kind": [
+    value: {
+      id: string;
+      kind: LocationCoordinateKind;
+      nextKind: Exclude<LocationCoordinateKind, "general">;
+    },
+  ];
+  "marker-delete": [value: { id: string; kind: LocationCoordinateKind }];
+  "marker-move": [value: { id: string; kind: LocationCoordinateKind }];
+  "marker-rename": [value: { id: string; kind: LocationCoordinateKind }];
+  "marker-set-general": [value: { id: string; kind: LocationCoordinateKind }];
+  picked: [value: { latitude: number; longitude: number }];
   selected: [value: GeocodeResult];
 }>();
 
@@ -28,8 +41,101 @@ const config = useRuntimeConfig();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = shallowRef<Map | null>(null);
 const isReady = ref(false);
+const contextMarker = ref<{
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+} | null>(null);
+let suppressNextMapClick = false;
 const mapStyle =
   config.public.mapStyleUrl || "https://demotiles.maplibre.org/style.json";
+const selectionLayerIds = [
+  "pawpaths-location-selection",
+  "pawpaths-location-selection-halo",
+] as const;
+const pointKindOptions = [
+  { label: "Entrance", value: "entrance" },
+  { label: "Parking", value: "parking" },
+  { label: "POI", value: "poi" },
+  { label: "Water", value: "water" },
+  { label: "Swimming", value: "swimming" },
+  { label: "Dog Playground", value: "dog-playground" },
+  { label: "Off-Leash Area", value: "off-leash-area" },
+  { label: "Bench", value: "bench" },
+  { label: "Toilet", value: "toilet" },
+  { label: "Cafe", value: "cafe" },
+  { label: "Viewpoint", value: "viewpoint" },
+  { label: "Shade", value: "shade" },
+  { label: "Waste Bin", value: "waste-bin" },
+  { label: "Rest Area", value: "rest-area" },
+  { label: "Hazard", value: "hazard" },
+  { label: "Livestock", value: "livestock" },
+  { label: "Photo Spot", value: "photo-spot" },
+  { label: "Other", value: "other" },
+] satisfies {
+  label: string;
+  value: Exclude<LocationCoordinateKind, "general">;
+}[];
+const markerContextMenuItems = computed(() => {
+  if (!contextMarker.value) return [];
+  const marker = contextMarker.value;
+  const isGeneralMarker = contextMarker.value.kind === "general";
+
+  return [
+    [
+      {
+        label: "Move",
+        icon: "i-lucide-move",
+        onSelect() {
+          moveMarker(marker);
+        },
+      },
+      ...(isGeneralMarker
+        ? []
+        : [
+            {
+              label: "Rename",
+              icon: "i-lucide-pencil",
+              onSelect() {
+                renameMarker(marker);
+              },
+            },
+            {
+              label: "Change type",
+              icon: "i-lucide-list-restart",
+              children: pointKindOptions.map((option) => ({
+                label: option.label,
+                disabled: option.value === marker.kind,
+                onSelect() {
+                  changeMarkerKind(marker, option.value);
+                },
+              })),
+            },
+            {
+              label: "Set as general location",
+              icon: "i-lucide-crosshair",
+              onSelect() {
+                setMarkerAsGeneral(marker);
+              },
+            },
+            {
+              type: "separator" as const,
+            },
+            {
+              label: "Delete",
+              icon: "i-lucide-trash-2",
+              color: "error" as const,
+              onSelect() {
+                deleteMarker(marker);
+              },
+            },
+          ]),
+    ],
+  ];
+});
+const contextMenuDisabled = computed(
+  () => props.readonly || !contextMarker.value,
+);
 
 const selectedCoordinates = computed<[number, number] | null>(() => {
   if (!Number.isFinite(props.latitude) || !Number.isFinite(props.longitude)) {
@@ -127,8 +233,12 @@ function fitMarkersToView() {
 }
 
 function setCoordinates(coordinates: [number, number]) {
-  emit("update:longitude", Number(coordinates[0].toFixed(6)));
-  emit("update:latitude", Number(coordinates[1].toFixed(6)));
+  const longitude = Number(coordinates[0].toFixed(6));
+  const latitude = Number(coordinates[1].toFixed(6));
+
+  emit("update:longitude", longitude);
+  emit("update:latitude", latitude);
+  emit("picked", { latitude, longitude });
 }
 
 function searchAddress(result: GeocodeResult) {
@@ -157,7 +267,7 @@ function addSelectionLayer() {
     source: "pawpaths-location-selection",
     paint: {
       "circle-color": "#ffffff",
-      "circle-radius": 14,
+      "circle-radius": 18,
       "circle-opacity": 0.92,
     },
   });
@@ -208,7 +318,7 @@ function addSelectionLayer() {
         "#db2777",
         "#475569",
       ],
-      "circle-radius": 8,
+      "circle-radius": 10,
       "circle-stroke-color": "#1f2937",
       "circle-stroke-opacity": 0.22,
       "circle-stroke-width": 1,
@@ -232,6 +342,155 @@ function addSelectionLayer() {
       "text-halo-width": 2,
     },
   });
+}
+
+function getMarkerFromFeature(feature: GeoJSON.Feature | undefined): {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+} | null {
+  const properties = feature?.properties;
+
+  if (
+    !properties ||
+    typeof properties.id !== "string" ||
+    typeof properties.label !== "string" ||
+    typeof properties.kind !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: properties.id,
+    kind: properties.kind as LocationCoordinateKind,
+    label: properties.label,
+  };
+}
+
+function getMapPointFromEvent(event: MouseEvent | PointerEvent) {
+  const container = mapContainer.value;
+  if (!container) return null;
+
+  const rect = container.getBoundingClientRect();
+
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
+
+function getMarkerAtPoint(point: { x: number; y: number }) {
+  const activeMap = map.value;
+  if (!activeMap) return null;
+
+  const features = activeMap.queryRenderedFeatures(point, {
+    layers: [...selectionLayerIds],
+  });
+
+  return getMarkerFromFeature(features[0]);
+}
+
+function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
+  if (props.readonly) return;
+  if (
+    event instanceof PointerEvent &&
+    event.pointerType === "mouse" &&
+    event.button === 0
+  ) {
+    return;
+  }
+  if (
+    event.target instanceof HTMLElement &&
+    event.target.closest("[data-map-controls]")
+  ) {
+    return;
+  }
+
+  const point = getMapPointFromEvent(event);
+  contextMarker.value = point ? getMarkerAtPoint(point) : null;
+
+  if (contextMarker.value) {
+    suppressNextMapClick = true;
+    return;
+  }
+
+  if (event.type === "contextmenu") {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  }
+}
+
+function moveMarker(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
+  emit("marker-move", {
+    id: marker.id,
+    kind: marker.kind,
+  });
+  contextMarker.value = null;
+}
+
+function renameMarker(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
+  if (marker.kind === "general") return;
+
+  emit("marker-rename", {
+    id: marker.id,
+    kind: marker.kind,
+  });
+  contextMarker.value = null;
+}
+
+function changeMarkerKind(
+  marker: {
+    id: string;
+    kind: LocationCoordinateKind;
+    label: string;
+  },
+  nextKind: Exclude<LocationCoordinateKind, "general">,
+) {
+  if (marker.kind === "general") return;
+
+  emit("marker-change-kind", {
+    id: marker.id,
+    kind: marker.kind,
+    nextKind,
+  });
+  contextMarker.value = null;
+}
+
+function setMarkerAsGeneral(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
+  if (marker.kind === "general") return;
+
+  emit("marker-set-general", {
+    id: marker.id,
+    kind: marker.kind,
+  });
+  contextMarker.value = null;
+}
+
+function deleteMarker(marker: {
+  id: string;
+  kind: LocationCoordinateKind;
+  label: string;
+}) {
+  if (marker.kind === "general") return;
+
+  emit("marker-delete", {
+    id: marker.id,
+    kind: marker.kind,
+  });
+  contextMarker.value = null;
 }
 
 onMounted(async () => {
@@ -261,6 +520,12 @@ onMounted(async () => {
   });
 
   map.value.on("click", (event: MapMouseEvent) => {
+    if (suppressNextMapClick) {
+      suppressNextMapClick = false;
+      return;
+    }
+
+    contextMarker.value = null;
     if (props.readonly) return;
 
     setCoordinates([event.lngLat.lng, event.lngLat.lat]);
@@ -290,23 +555,53 @@ watch(
   },
 );
 
-onBeforeUnmount(() => {
-  map.value?.remove();
-});
+onBeforeUnmount(() => map.value?.remove());
 </script>
 
 <template>
-  <div class="relative overflow-hidden rounded-md border border-slate-200">
+  <UContextMenu
+    :disabled="contextMenuDisabled"
+    :items="markerContextMenuItems"
+    :modal="false"
+    :press-open-delay="520"
+    size="sm"
+    @update:open="!$event && (contextMarker = null)"
+  >
     <div
-      ref="mapContainer"
-      :class="readonly ? 'h-64 min-h-64' : 'h-80 min-h-80'"
-      class="w-full"
-    />
-    <div v-if="!readonly" class="absolute top-3 left-3 z-10 w-64">
-      <AppAddressSearch
-        placeholder="Search address or place"
-        @selected="searchAddress"
+      class="relative overflow-hidden rounded-md border border-slate-200"
+      :class="{ 'h-full min-h-0': fullHeight }"
+      @contextmenu.capture="prepareMarkerContextMenu"
+      @pointerdown.capture="prepareMarkerContextMenu"
+      @pointerdown.stop
+      @touchstart.stop
+    >
+      <div
+        ref="mapContainer"
+        :class="
+          fullHeight
+            ? 'h-full min-h-0'
+            : readonly
+              ? 'h-[min(20rem,42dvh)] min-h-64'
+              : 'h-[min(22rem,44dvh)] min-h-64'
+        "
+        class="w-full"
       />
+      <div
+        v-if="!readonly || $slots.actions"
+        data-map-controls
+        class="absolute top-3 left-3 z-10 flex w-[min(calc(100%-1.5rem),24rem)] flex-col gap-2"
+      >
+        <div
+          class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"
+        >
+          <AppAddressSearch
+            placeholder="Search address or place"
+            size="sm"
+            @selected="searchAddress"
+          />
+        </div>
+        <slot name="actions" />
+      </div>
     </div>
-  </div>
+  </UContextMenu>
 </template>

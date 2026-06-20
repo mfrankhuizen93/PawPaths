@@ -44,7 +44,11 @@
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.110",
     "@nuxt/ui": "^4.7.1",
+    "playwright": "^1.60.0",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0"
+  },
+  "overrides": {
+    "esbuild": "0.28.0"
   }
 }

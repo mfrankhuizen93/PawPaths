@@ -123,7 +123,7 @@ export function useAuth() {
       password: payload.password,
       image: payload.image ?? undefined,
       navigationAppPreference: payload.navigationAppPreference ?? "device",
-      callbackURL: "/account?verified=true",
+      callbackURL: "/?verified=true&profile=true",
     })) as BetterAuthResult<unknown>;
 
     assertAuthResult(result);
@@ -173,7 +173,7 @@ export function useAuth() {
     const result = (await getRequestAuthClient().signIn.email({
       email: payload.email,
       password: payload.password,
-      callbackURL: "/account",
+      callbackURL: "/",
     })) as BetterAuthResult<unknown>;
 
     assertAuthResult(result);
@@ -187,13 +187,13 @@ export function useAuth() {
 
     user.value = null;
     isLoaded.value = true;
-    await navigateTo("/account");
+    await navigateTo("/");
   }
 
   async function sendVerificationEmail(email: string) {
     const result = (await getRequestAuthClient().sendVerificationEmail({
       email,
-      callbackURL: "/account?verified=true",
+      callbackURL: "/?verified=true&profile=true",
     })) as BetterAuthResult<unknown>;
 
     return assertAuthResult(result);
