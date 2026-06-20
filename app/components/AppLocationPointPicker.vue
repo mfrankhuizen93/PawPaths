@@ -22,8 +22,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:latitude": [value: number | null];
   "update:longitude": [value: number | null];
+  "marker-change-kind": [
+    value: {
+      id: string;
+      kind: LocationCoordinateKind;
+      nextKind: Exclude<LocationCoordinateKind, "general">;
+    },
+  ];
   "marker-delete": [value: { id: string; kind: LocationCoordinateKind }];
   "marker-move": [value: { id: string; kind: LocationCoordinateKind }];
+  "marker-rename": [value: { id: string; kind: LocationCoordinateKind }];
+  "marker-set-general": [value: { id: string; kind: LocationCoordinateKind }];
   picked: [value: { latitude: number; longitude: number }];
   selected: [value: GeocodeResult];
 }>();
@@ -44,8 +53,32 @@ const selectionLayerIds = [
   "pawpaths-location-selection",
   "pawpaths-location-selection-halo",
 ] as const;
+const pointKindOptions = [
+  { label: "Entrance", value: "entrance" },
+  { label: "Parking", value: "parking" },
+  { label: "POI", value: "poi" },
+  { label: "Water", value: "water" },
+  { label: "Swimming", value: "swimming" },
+  { label: "Dog Playground", value: "dog-playground" },
+  { label: "Off-Leash Area", value: "off-leash-area" },
+  { label: "Bench", value: "bench" },
+  { label: "Toilet", value: "toilet" },
+  { label: "Cafe", value: "cafe" },
+  { label: "Viewpoint", value: "viewpoint" },
+  { label: "Shade", value: "shade" },
+  { label: "Waste Bin", value: "waste-bin" },
+  { label: "Rest Area", value: "rest-area" },
+  { label: "Hazard", value: "hazard" },
+  { label: "Livestock", value: "livestock" },
+  { label: "Photo Spot", value: "photo-spot" },
+  { label: "Other", value: "other" },
+] satisfies {
+  label: string;
+  value: Exclude<LocationCoordinateKind, "general">;
+}[];
 const markerContextMenuItems = computed(() => {
   if (!contextMarker.value) return [];
+  const isGeneralMarker = contextMarker.value.kind === "general";
 
   return [
     [
@@ -56,9 +89,37 @@ const markerContextMenuItems = computed(() => {
           moveMarker();
         },
       },
-      ...(contextMarker.value.kind === "general"
+      ...(isGeneralMarker
         ? []
         : [
+            {
+              label: "Rename",
+              icon: "i-lucide-pencil",
+              onSelect() {
+                renameMarker();
+              },
+            },
+            {
+              label: "Change type",
+              icon: "i-lucide-list-restart",
+              children: pointKindOptions.map((option) => ({
+                label: option.label,
+                disabled: option.value === contextMarker.value?.kind,
+                onSelect() {
+                  changeMarkerKind(option.value);
+                },
+              })),
+            },
+            {
+              label: "Set as general location",
+              icon: "i-lucide-crosshair",
+              onSelect() {
+                setMarkerAsGeneral();
+              },
+            },
+            {
+              type: "separator" as const,
+            },
             {
               label: "Delete",
               icon: "i-lucide-trash-2",
@@ -330,6 +391,12 @@ function getMarkerAtPoint(point: { x: number; y: number }) {
 
 function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
   if (props.readonly) return;
+  if (
+    event.target instanceof HTMLElement &&
+    event.target.closest("[data-map-controls]")
+  ) {
+    return;
+  }
 
   const point = getMapPointFromEvent(event);
   contextMarker.value = point ? getMarkerAtPoint(point) : null;
@@ -348,6 +415,39 @@ function moveMarker() {
   if (!contextMarker.value) return;
 
   emit("marker-move", {
+    id: contextMarker.value.id,
+    kind: contextMarker.value.kind,
+  });
+  contextMarker.value = null;
+}
+
+function renameMarker() {
+  if (!contextMarker.value || contextMarker.value.kind === "general") return;
+
+  emit("marker-rename", {
+    id: contextMarker.value.id,
+    kind: contextMarker.value.kind,
+  });
+  contextMarker.value = null;
+}
+
+function changeMarkerKind(
+  nextKind: Exclude<LocationCoordinateKind, "general">,
+) {
+  if (!contextMarker.value || contextMarker.value.kind === "general") return;
+
+  emit("marker-change-kind", {
+    id: contextMarker.value.id,
+    kind: contextMarker.value.kind,
+    nextKind,
+  });
+  contextMarker.value = null;
+}
+
+function setMarkerAsGeneral() {
+  if (!contextMarker.value || contextMarker.value.kind === "general") return;
+
+  emit("marker-set-general", {
     id: contextMarker.value.id,
     kind: contextMarker.value.kind,
   });
@@ -459,6 +559,7 @@ onBeforeUnmount(() => map.value?.remove());
       />
       <div
         v-if="!readonly || $slots.actions"
+        data-map-controls
         class="absolute top-3 left-3 z-10 flex w-[min(calc(100%-1.5rem),24rem)] flex-col gap-2"
       >
         <div
