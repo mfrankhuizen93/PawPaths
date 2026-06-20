@@ -22,8 +22,13 @@ const selectedPhotoIndex = ref(0);
         v-for="(photo, index) in photos"
         :key="photo.url"
         :alt="photo.alt"
+        :height="index % 3 === 0 ? 384 : 192"
         :src="photo.url"
+        width="256"
         class="h-full w-full object-cover"
+        format="webp"
+        loading="lazy"
+        sizes="128px"
         @click="
           showPhotoFullscreen = true;
           selectedPhotoIndex = index;
