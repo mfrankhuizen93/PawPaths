@@ -24,6 +24,7 @@ type LocationReview = {
 
 type RawLocationItem = {
   reviews?: LocationReview[];
+  warnings?: unknown;
   [key: string]: unknown;
 };
 
@@ -365,7 +366,11 @@ function normalizeWarnings(
   includeReviews: boolean,
 ): LocationsResponse["items"] {
   return items.map((item) => {
-    const warnings = inferLocationWarnings(item.reviews);
+    const warnings = item.reviews
+      ? inferLocationWarnings(item.reviews)
+      : Array.isArray(item.warnings)
+        ? item.warnings
+        : [];
 
     if (includeReviews) {
       return {
