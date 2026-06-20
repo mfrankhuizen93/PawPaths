@@ -95,7 +95,6 @@ const pointKindOptions = locationCoordinateKindOptions.filter(
   label: string;
   value: Exclude<LocationCoordinateKind, "general">;
 }[];
-const pointKindValues = pointKindOptions.map((option) => option.value);
 const coordinateKindValues = new Set<LocationCoordinateKind>(
   locationCoordinateKindOptions.map((option) => option.value),
 );
@@ -132,15 +131,6 @@ const formTabs = computed<TabsItem[]>(() => [
 ]);
 const secondaryToolbarButtonClass = "hidden sm:inline-flex";
 const mapPointActionButtonClass = "h-7 px-2 text-xs";
-const mapPointActionSelectUi = {
-  base: "h-7 w-auto min-w-0 px-2 text-xs",
-  leading: "me-1",
-  leadingIcon: "size-3.5",
-  placeholder: "text-highlighted truncate text-xs",
-  trailing: "ms-1",
-  trailingIcon: "size-3.5",
-  value: "text-highlighted truncate text-xs",
-};
 const baseDescriptionEditorToolbarItems = [
   [
     {
@@ -226,7 +216,6 @@ const pendingPointKind = ref<Exclude<LocationCoordinateKind, "general"> | null>(
 );
 const renamingPointId = ref<string | null>(null);
 const renamingPointLabel = ref("");
-const selectedPoiKind = ref<Exclude<LocationCoordinateKind, "general">>();
 const isReverseGeocoding = ref(false);
 const geocodeError = ref("");
 const descriptionGenerationError = ref("");
@@ -290,18 +279,25 @@ const poiKindGroups = [
   label: string;
   values: Exclude<LocationCoordinateKind, "general">[];
 }[];
-const poiSelectItems = poiKindGroups.flatMap((group) => [
-  {
-    label: group.label,
-    value: `heading-${group.label}`,
-    disabled: true,
-  },
-  ...group.values
-    .map((value) => pointKindOptionMap.get(value))
-    .filter((option): option is (typeof pointKindOptions)[number] =>
-      Boolean(option),
-    ),
-]);
+const poiDropdownItems = computed(() =>
+  poiKindGroups.map((group) => [
+    {
+      label: group.label,
+      type: "label" as const,
+    },
+    ...group.values
+      .map((value) => pointKindOptionMap.get(value))
+      .filter((option): option is (typeof pointKindOptions)[number] =>
+        Boolean(option),
+      )
+      .map((option) => ({
+        label: option.label,
+        onSelect() {
+          startAddingCoordinatePoint(option.value);
+        },
+      })),
+  ]),
+);
 const locationForm = ref<{
   clear: (name?: string | RegExp) => void;
   setErrors: (
@@ -319,17 +315,6 @@ type PhotoMetadata = {
   latitude?: number | null;
   longitude?: number | null;
 };
-
-function isPointKind(
-  value: unknown,
-): value is Exclude<LocationCoordinateKind, "general"> {
-  return (
-    typeof value === "string" &&
-    pointKindValues.includes(
-      value as Exclude<LocationCoordinateKind, "general">,
-    )
-  );
-}
 
 function isCoordinateKind(value: unknown): value is LocationCoordinateKind {
   return (
@@ -494,6 +479,12 @@ const activePoint = computed<LocationCoordinatePoint | null>(() => {
     ) ?? null
   );
 });
+const isPoiAddMode = computed(
+  () =>
+    Boolean(pendingPointKind.value) &&
+    pendingPointKind.value !== "parking" &&
+    pendingPointKind.value !== "entrance",
+);
 
 const activeLatitude = computed({
   get: () => {
@@ -916,14 +907,6 @@ function startAddingCoordinatePoint(
   isMapEditorOpen.value = true;
   pendingPointKind.value = kind;
   activePointId.value = null;
-  selectedPoiKind.value = undefined;
-}
-
-function handlePoiKindSelect(kind: unknown) {
-  if (!isPointKind(kind)) return;
-
-  startAddingCoordinatePoint(kind);
-  selectedPoiKind.value = undefined;
 }
 
 function handleMapPick(coordinates: { latitude: number; longitude: number }) {
@@ -1091,7 +1074,6 @@ function resetLocalState() {
   pendingPointKind.value = null;
   renamingPointId.value = null;
   renamingPointLabel.value = "";
-  selectedPoiKind.value = undefined;
   photoFiles.value = [];
   clearPhotoFieldError();
   descriptionGenerationError.value = "";
@@ -1331,25 +1313,26 @@ onBeforeUnmount(() => {
                         "
                         @click="startAddingCoordinatePoint('entrance')"
                       />
-                      <USelect
-                        v-model="selectedPoiKind"
-                        class="w-auto"
-                        color="neutral"
-                        icon="i-lucide-map-pinned"
-                        :items="poiSelectItems"
-                        placeholder="+ POI"
-                        size="xs"
-                        :ui="mapPointActionSelectUi"
-                        :variant="
-                          pendingPointKind &&
-                          pendingPointKind !== 'parking' &&
-                          pendingPointKind !== 'entrance'
-                            ? 'solid'
-                            : 'subtle'
+                      <UDropdownMenu
+                        :content="{ align: 'start' }"
+                        :items="poiDropdownItems"
+                        size="sm"
+                        @update:open="
+                          $event &&
+                          ((activePointId = null), (pendingPointKind = null))
                         "
-                        value-key="value"
-                        @update:model-value="handlePoiKindSelect"
-                      />
+                      >
+                        <UButton
+                          :class="mapPointActionButtonClass"
+                          color="neutral"
+                          icon="i-lucide-map-pinned"
+                          label="+ POI"
+                          size="xs"
+                          trailing-icon="i-lucide-chevron-down"
+                          type="button"
+                          :variant="isPoiAddMode ? 'solid' : 'subtle'"
+                        />
+                      </UDropdownMenu>
                     </div>
                   </template>
                 </AppLocationPointPicker>

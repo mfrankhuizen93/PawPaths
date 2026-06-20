@@ -392,6 +392,13 @@ function getMarkerAtPoint(point: { x: number; y: number }) {
 function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
   if (props.readonly) return;
   if (
+    event instanceof PointerEvent &&
+    event.pointerType === "mouse" &&
+    event.button === 0
+  ) {
+    return;
+  }
+  if (
     event.target instanceof HTMLElement &&
     event.target.closest("[data-map-controls]")
   ) {
@@ -402,7 +409,9 @@ function prepareMarkerContextMenu(event: MouseEvent | PointerEvent) {
   contextMarker.value = point ? getMarkerAtPoint(point) : null;
 
   if (contextMarker.value) {
-    suppressNextMapClick = true;
+    if (event.type === "contextmenu") {
+      suppressNextMapClick = true;
+    }
     return;
   }
 
