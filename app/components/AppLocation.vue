@@ -548,10 +548,13 @@ function addLocationLayers() {
   }
 
   if (props.variant === "search") {
-    map.value.on("moveend", () => {
+    const queueViewportSearch = () => {
       storeMapViewport();
       queueVisibleSearch();
-    });
+    };
+
+    map.value.on("moveend", queueViewportSearch);
+    map.value.on("zoomend", queueViewportSearch);
   }
 }
 
