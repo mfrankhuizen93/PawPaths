@@ -571,7 +571,7 @@ watch(
       <ClientOnly>
         <LazyAppLocation
           :filters="activeFilters"
-          :limit="60"
+          :limit="100"
           :location="selectedLocation"
           :locations="locations"
           class="h-full"

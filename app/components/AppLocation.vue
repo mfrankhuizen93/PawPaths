@@ -7,6 +7,7 @@ import type {
   LocationListItem,
   LocationsResponse,
 } from "#shared/types/locations";
+import { fetchAllLocationPages } from "#shared/utils/location-pages";
 import { getLocationPath } from "#shared/utils/location-route";
 
 type StoredMapViewport = {
@@ -57,6 +58,8 @@ const locationError = ref("");
 const userLocation = ref<[number, number] | null>(null);
 const fetchedLocations = ref<LocationListItem[]>([]);
 let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
+let searchRequestId = 0;
+let searchAbortController: AbortController | null = null;
 
 const mapStyle =
   config.public.mapStyleUrl || "https://demotiles.maplibre.org/style.json";
@@ -343,6 +346,10 @@ async function zoomToMyLocation() {
 async function searchVisibleLocations() {
   if (!map.value || props.variant !== "search") return;
 
+  const requestId = (searchRequestId += 1);
+  searchAbortController?.abort();
+  const abortController = new AbortController();
+  searchAbortController = abortController;
   const bounds = map.value.getBounds();
   const southWest = bounds.getSouthWest();
   const northEast = bounds.getNorthEast();
@@ -351,24 +358,42 @@ async function searchVisibleLocations() {
   searchError.value = false;
 
   try {
-    const response = await $fetch<LocationsResponse>("/api/locations", {
-      query: {
-        west: southWest.lng,
-        south: southWest.lat,
-        east: northEast.lng,
-        north: northEast.lat,
-        limit: props.limit,
-        ...props.filters,
+    const baseQuery = {
+      west: southWest.lng,
+      south: southWest.lat,
+      east: northEast.lng,
+      north: northEast.lat,
+      ...props.filters,
+    };
+    const response = await fetchAllLocationPages(({ limit, skip }) =>
+      $fetch<LocationsResponse>("/api/locations", {
+        query: {
+          ...baseQuery,
+          limit,
+          skip,
+        },
+        signal: abortController.signal,
+      }),
+      {
+        pageSize: props.limit,
       },
-    });
+    );
+
+    if (requestId !== searchRequestId) return;
 
     hasSearched.value = true;
     fetchedLocations.value = response.items;
     emit("locationsLoaded", response);
   } catch {
+    if (requestId !== searchRequestId) return;
+    if (abortController.signal.aborted) return;
+
     searchError.value = true;
   } finally {
-    isSearching.value = false;
+    if (requestId === searchRequestId) {
+      isSearching.value = false;
+      searchAbortController = null;
+    }
   }
 }
 
@@ -638,6 +663,8 @@ onBeforeUnmount(() => {
   if (searchTimer) {
     window.clearTimeout(searchTimer);
   }
+
+  searchAbortController?.abort();
   map.value?.remove();
 });
 </script>
