@@ -7,7 +7,6 @@ import type {
   LocationListItem,
   LocationsResponse,
 } from "#shared/types/locations";
-import { fetchAllLocationPages } from "#shared/utils/location-pages";
 import { getLocationPath } from "#shared/utils/location-route";
 
 type StoredMapViewport = {
@@ -93,28 +92,66 @@ const mappedLocations = computed(() =>
   ),
 );
 
+const mappedLocationFeatures = computed(() =>
+  activeLocations.value.flatMap((location) => {
+    const points: Array<{
+      coordinates: [number, number];
+      kind: string;
+      name: string;
+    }> = [];
+
+    if (
+      Number.isFinite(location.latitude) &&
+      Number.isFinite(location.longitude)
+    ) {
+      points.push({
+        coordinates: [
+          location.longitude as number,
+          location.latitude as number,
+        ],
+        kind: location.type[0] ?? "location",
+        name: location.name,
+      });
+    }
+
+    for (const point of location.coordinatePoints ?? []) {
+      if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) {
+        continue;
+      }
+
+      points.push({
+        coordinates: [point.longitude, point.latitude],
+        kind: point.kind,
+        name: point.label || location.name,
+      });
+    }
+
+    return points.map((point) => ({
+      location,
+      ...point,
+    }));
+  }),
+);
+
 const locationCountLabel = computed(() => {
-  const count = mappedLocations.value.length;
+  const count = activeLocations.value.length;
   return `${count} mapped ${count === 1 ? "location" : "locations"}`;
 });
 
 function getFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: "FeatureCollection",
-    features: mappedLocations.value.map((location) => ({
+    features: mappedLocationFeatures.value.map(({ location, ...point }) => ({
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: [
-          location.longitude as number,
-          location.latitude as number,
-        ],
+        coordinates: point.coordinates,
       },
       properties: {
         id: location.id,
-        name: location.name,
+        name: point.name,
         locality: [location.city, location.country].filter(Boolean).join(", "),
-        kind: location.type[0] ?? "location",
+        kind: point.kind,
         characteristics: location.characteristics.join(" • "),
         reviewCount: location.reviewCount,
         ratingCount: location.ratingCount,
@@ -182,14 +219,10 @@ function syncUserLocation() {
 }
 
 function fitToLocations() {
-  if (!map.value || mappedLocations.value.length === 0) return;
+  if (!map.value || mappedLocationFeatures.value.length === 0) return;
 
-  const coordinates = mappedLocations.value.map(
-    (location) =>
-      [location.longitude as number, location.latitude as number] as [
-        number,
-        number,
-      ],
+  const coordinates = mappedLocationFeatures.value.map(
+    (feature) => feature.coordinates,
   );
   const lngs = coordinates.map(([lng]) => lng);
   const lats = coordinates.map(([, lat]) => lat);
@@ -363,30 +396,22 @@ async function searchVisibleLocations() {
       south: southWest.lat,
       east: northEast.lng,
       north: northEast.lat,
+      viewport: true,
       ...props.filters,
     };
-    await fetchAllLocationPages(
-      ({ cursor, limit, pageNumber }) =>
-        $fetch<LocationsResponse>("/api/locations", {
-          query: {
-            ...baseQuery,
-            cursor,
-            limit,
-            pageNumber,
-          },
-          signal: abortController.signal,
-        }),
-      {
-        pageSize: props.limit,
-        onProgress: ({ response }) => {
-          if (requestId !== searchRequestId) return;
-
-          hasSearched.value = true;
-          fetchedLocations.value = response.items;
-          emit("locationsLoaded", response);
-        },
+    const response = await $fetch<LocationsResponse>("/api/locations", {
+      query: {
+        ...baseQuery,
+        limit: props.limit,
       },
-    );
+      signal: abortController.signal,
+    });
+
+    if (requestId !== searchRequestId) return;
+
+    hasSearched.value = true;
+    fetchedLocations.value = response.items;
+    emit("locationsLoaded", response);
   } catch {
     if (requestId !== searchRequestId) return;
     if (abortController.signal.aborted) return;
@@ -635,7 +660,7 @@ onMounted(async () => {
   });
 });
 
-watch(mappedLocations, () => {
+watch(mappedLocationFeatures, () => {
   syncLocations();
   if (isReady.value && props.variant !== "search") fitToLocations();
 });
@@ -771,7 +796,7 @@ onBeforeUnmount(() => {
     />
 
     <div
-      v-if="mappedLocations.length === 0"
+      v-if="mappedLocationFeatures.length === 0"
       class="pointer-events-none absolute inset-0 grid place-items-center p-6"
     >
       <AppEmptyState

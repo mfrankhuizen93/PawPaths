@@ -106,6 +106,7 @@ export type LocationsResponse = {
     pageSize: number;
     totalFound: number;
     resultCount: number;
+    truncated?: boolean;
   };
 };
 

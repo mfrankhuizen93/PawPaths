@@ -7,6 +7,7 @@ import { inferLocationWarnings } from "../utils/location-warnings.js";
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
+const MAX_VIEWPORT_LIMIT = 1000;
 const CHARACTERISTIC_POINT_KIND_MAP: Record<string, string[]> = {
   "food and drink": ["cafe"],
   "off-leash area": ["off-leash-area"],
@@ -64,12 +65,15 @@ function toPositiveInteger(
   return Number.isInteger(number) && number >= 1 ? number : fallback;
 }
 
-function toLimitedInteger(value: QueryValue | QueryValue[]): number {
+function toLimitedInteger(
+  value: QueryValue | QueryValue[],
+  max = MAX_LIMIT,
+): number {
   const number = Number(value);
 
   if (!Number.isInteger(number) || number < 1) return DEFAULT_LIMIT;
 
-  return Math.min(number, MAX_LIMIT);
+  return Math.min(number, max);
 }
 
 function toRating(value: QueryValue | QueryValue[]): number | null {
@@ -267,7 +271,11 @@ function buildFilter(query: QueryObject): MongoFilter {
   return filter;
 }
 
-function getBoundsFilter(query: QueryObject): MongoFilter | null {
+function getBoundsFilter(
+  query: QueryObject,
+  options: { includeCoordinatePoints?: boolean } = {},
+): MongoFilter | null {
+  const includeCoordinatePoints = options.includeCoordinatePoints ?? true;
   const west = toFiniteNumber(query.west);
   const south = toFiniteNumber(query.south);
   const east = toFiniteNumber(query.east);
@@ -323,12 +331,15 @@ function getBoundsFilter(query: QueryObject): MongoFilter | null {
     },
   });
 
-  const makeBoundsClause = (minLng: number, maxLng: number): MongoFilter => ({
-    $or: [
-      makeMainLocationBoundsClause(minLng, maxLng),
-      makeCoordinatePointBoundsClause(minLng, maxLng),
-    ],
-  });
+  const makeBoundsClause = (minLng: number, maxLng: number): MongoFilter =>
+    includeCoordinatePoints
+      ? {
+          $or: [
+            makeMainLocationBoundsClause(minLng, maxLng),
+            makeCoordinatePointBoundsClause(minLng, maxLng),
+          ],
+        }
+      : makeMainLocationBoundsClause(minLng, maxLng);
 
   if (west <= east) {
     return makeBoundsClause(west, east);
@@ -400,8 +411,8 @@ function buildRatingFieldsStage(): PipelineStage {
   };
 }
 
-function buildProjection(): MongoFilter {
-  return {
+function buildProjection(options: { compact?: boolean } = {}): MongoFilter {
+  const sharedProjection: MongoFilter = {
     _id: 1,
     id: { $toString: "$_id" },
     averageRatingSort: 1,
@@ -419,6 +430,20 @@ function buildProjection(): MongoFilter {
     characteristics: 1,
     coordinatePoints: 1,
     warnings: { $ifNull: ["$warnings", []] },
+    reviewCount: 1,
+    ratingCount: 1,
+    averageRating: 1,
+  };
+
+  if (options.compact) {
+    return {
+      ...sharedProjection,
+      photos: { $slice: ["$photos", 1] },
+    };
+  }
+
+  return {
+    ...sharedProjection,
     description: 1,
     relatedUrls: 1,
     photos: 1,
@@ -426,9 +451,6 @@ function buildProjection(): MongoFilter {
     source: 1,
     createdAt: 1,
     updatedAt: 1,
-    reviewCount: 1,
-    ratingCount: 1,
-    averageRating: 1,
     reviews: 1,
   };
 }
@@ -532,7 +554,13 @@ function normalizeWarnings(
   includeReviews: boolean,
 ): LocationsResponse["items"] {
   return items.map((item) => {
-    const warnings = inferLocationWarnings(item.reviews);
+    const inferredWarnings = inferLocationWarnings(item.reviews);
+    const warnings =
+      inferredWarnings.length > 0
+        ? inferredWarnings
+        : Array.isArray(item.warnings)
+          ? item.warnings
+          : [];
     const {
       _id,
       averageRatingSort,
@@ -567,18 +595,24 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
 
   const filter = buildFilter(query);
   const searchQuery = toSearchQuery(query.q);
-  const limit = toLimitedInteger(query.limit);
-  const cursor = toCursor(query.cursor);
+  const boundsFilter = getBoundsFilter(query, {
+    includeCoordinatePoints: query.viewport !== "true",
+  });
+  const isViewportSearch = query.viewport === "true" && Boolean(boundsFilter);
+  const limit = toLimitedInteger(
+    query.limit,
+    isViewportSearch ? MAX_VIEWPORT_LIMIT : MAX_LIMIT,
+  );
+  const cursor = isViewportSearch ? null : toCursor(query.cursor);
   const pageNumber = toPositiveInteger(query.pageNumber);
   const includeReviews = query.includeReviews === "true";
   const lat = toFiniteNumber(query.lat);
   const lng = toFiniteNumber(query.lng);
   const radiusKm = toPositiveNumber(query.radiusKm);
-  const boundsFilter = getBoundsFilter(query);
   const isGeoSearch =
     !boundsFilter && lat !== null && lng !== null && radiusKm !== null;
   const minRating = toRating(query.minRating);
-  const projection = buildProjection();
+  const projection = buildProjection({ compact: isViewportSearch });
   const ratingFieldsStage = buildRatingFieldsStage();
 
   const pipeline: PipelineStage[] = [];
@@ -645,13 +679,16 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
 
   const [rawItems, countResult] = await Promise.all([
     locations.aggregate(pipeline).toArray(),
-    locations.aggregate(countPipeline).toArray(),
+    isViewportSearch
+      ? Promise.resolve([])
+      : locations.aggregate(countPipeline).toArray(),
   ]);
-  const total = countResult[0]?.total ?? 0;
+  const isTruncated = rawItems.length > limit;
   const pageItems = rawItems.slice(0, limit);
   const items = normalizeWarnings(pageItems, includeReviews);
+  const total = isViewportSearch ? items.length : (countResult[0]?.total ?? 0);
   const nextCursor =
-    rawItems.length > limit
+    !isViewportSearch && isTruncated
       ? toNextCursor(pageItems.at(-1), Boolean(searchQuery))
       : null;
 
@@ -665,6 +702,7 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
       pageSize: limit,
       totalFound: total,
       resultCount: items.length,
+      truncated: isViewportSearch ? isTruncated : false,
     },
   };
 });

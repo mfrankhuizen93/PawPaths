@@ -447,14 +447,17 @@ function replaceLocationQuery(slug: string | null) {
   void router.replace({ query });
 }
 
-async function openLocationBySlug(slug: string) {
+async function openLocationBySlug(
+  slug: string,
+  options: { force?: boolean } = {},
+) {
   if (!slug) {
     selectedLocation.value = null;
     selectedLocationError.value = "";
     return;
   }
 
-  if (selectedLocation.value?.slug === slug) return;
+  if (!options.force && selectedLocation.value?.slug === slug) return;
 
   selectedLocationError.value = "";
 
@@ -474,6 +477,7 @@ function selectLocation(location: LocationListItem) {
   selectedLocationError.value = "";
   syncChangeForm(location);
   replaceLocationQuery(location.slug);
+  void openLocationBySlug(location.slug, { force: true });
 }
 
 function getTypeMeta(type: string) {
@@ -571,7 +575,7 @@ watch(
       <ClientOnly>
         <LazyAppLocation
           :filters="activeFilters"
-          :limit="100"
+          :limit="1000"
           :location="selectedLocation"
           :locations="locations"
           class="h-full"
