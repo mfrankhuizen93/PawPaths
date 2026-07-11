@@ -57,6 +57,8 @@ const locationError = ref("");
 const userLocation = ref<[number, number] | null>(null);
 const fetchedLocations = ref<LocationListItem[]>([]);
 let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
+let searchRequestId = 0;
+let searchAbortController: AbortController | null = null;
 
 const mapStyle =
   config.public.mapStyleUrl || "https://demotiles.maplibre.org/style.json";
@@ -90,28 +92,66 @@ const mappedLocations = computed(() =>
   ),
 );
 
+const mappedLocationFeatures = computed(() =>
+  activeLocations.value.flatMap((location) => {
+    const points: Array<{
+      coordinates: [number, number];
+      kind: string;
+      name: string;
+    }> = [];
+
+    if (
+      Number.isFinite(location.latitude) &&
+      Number.isFinite(location.longitude)
+    ) {
+      points.push({
+        coordinates: [
+          location.longitude as number,
+          location.latitude as number,
+        ],
+        kind: location.type[0] ?? "location",
+        name: location.name,
+      });
+    }
+
+    for (const point of location.coordinatePoints ?? []) {
+      if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) {
+        continue;
+      }
+
+      points.push({
+        coordinates: [point.longitude, point.latitude],
+        kind: point.kind,
+        name: point.label || location.name,
+      });
+    }
+
+    return points.map((point) => ({
+      location,
+      ...point,
+    }));
+  }),
+);
+
 const locationCountLabel = computed(() => {
-  const count = mappedLocations.value.length;
+  const count = activeLocations.value.length;
   return `${count} mapped ${count === 1 ? "location" : "locations"}`;
 });
 
 function getFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: "FeatureCollection",
-    features: mappedLocations.value.map((location) => ({
+    features: mappedLocationFeatures.value.map(({ location, ...point }) => ({
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: [
-          location.longitude as number,
-          location.latitude as number,
-        ],
+        coordinates: point.coordinates,
       },
       properties: {
         id: location.id,
-        name: location.name,
+        name: point.name,
         locality: [location.city, location.country].filter(Boolean).join(", "),
-        kind: location.type[0] ?? "location",
+        kind: point.kind,
         characteristics: location.characteristics.join(" • "),
         reviewCount: location.reviewCount,
         ratingCount: location.ratingCount,
@@ -179,14 +219,10 @@ function syncUserLocation() {
 }
 
 function fitToLocations() {
-  if (!map.value || mappedLocations.value.length === 0) return;
+  if (!map.value || mappedLocationFeatures.value.length === 0) return;
 
-  const coordinates = mappedLocations.value.map(
-    (location) =>
-      [location.longitude as number, location.latitude as number] as [
-        number,
-        number,
-      ],
+  const coordinates = mappedLocationFeatures.value.map(
+    (feature) => feature.coordinates,
   );
   const lngs = coordinates.map(([lng]) => lng);
   const lats = coordinates.map(([, lat]) => lat);
@@ -303,6 +339,31 @@ function storeMapViewport() {
   );
 }
 
+function clampLatitude(latitude: number) {
+  return Math.max(-90, Math.min(90, latitude));
+}
+
+function normalizeLongitude(longitude: number) {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
+function getVisibleBoundsQuery() {
+  if (!map.value) return null;
+
+  const bounds = map.value.getBounds();
+  const southWest = bounds.getSouthWest();
+  const northEast = bounds.getNorthEast();
+  const longitudeSpan = Math.abs(northEast.lng - southWest.lng);
+
+  return {
+    west:
+      longitudeSpan >= 360 ? -180 : normalizeLongitude(southWest.lng),
+    south: clampLatitude(southWest.lat),
+    east: longitudeSpan >= 360 ? 180 : normalizeLongitude(northEast.lng),
+    north: clampLatitude(northEast.lat),
+  };
+}
+
 async function zoomToMyLocation() {
   if (!map.value || isLocating.value) return;
 
@@ -343,32 +404,46 @@ async function zoomToMyLocation() {
 async function searchVisibleLocations() {
   if (!map.value || props.variant !== "search") return;
 
-  const bounds = map.value.getBounds();
-  const southWest = bounds.getSouthWest();
-  const northEast = bounds.getNorthEast();
+  const requestId = (searchRequestId += 1);
+  searchAbortController?.abort();
+  const abortController = new AbortController();
+  searchAbortController = abortController;
+  const boundsQuery = getVisibleBoundsQuery();
+
+  if (!boundsQuery) return;
 
   isSearching.value = true;
   searchError.value = false;
 
   try {
+    const baseQuery = {
+      ...boundsQuery,
+      viewport: true,
+      ...props.filters,
+    };
     const response = await $fetch<LocationsResponse>("/api/locations", {
       query: {
-        west: southWest.lng,
-        south: southWest.lat,
-        east: northEast.lng,
-        north: northEast.lat,
+        ...baseQuery,
         limit: props.limit,
-        ...props.filters,
       },
+      signal: abortController.signal,
     });
+
+    if (requestId !== searchRequestId) return;
 
     hasSearched.value = true;
     fetchedLocations.value = response.items;
     emit("locationsLoaded", response);
   } catch {
+    if (requestId !== searchRequestId) return;
+    if (abortController.signal.aborted) return;
+
     searchError.value = true;
   } finally {
-    isSearching.value = false;
+    if (requestId === searchRequestId) {
+      isSearching.value = false;
+      searchAbortController = null;
+    }
   }
 }
 
@@ -523,10 +598,13 @@ function addLocationLayers() {
   }
 
   if (props.variant === "search") {
-    map.value.on("moveend", () => {
+    const queueViewportSearch = () => {
       storeMapViewport();
       queueVisibleSearch();
-    });
+    };
+
+    map.value.on("moveend", queueViewportSearch);
+    map.value.on("zoomend", queueViewportSearch);
   }
 }
 
@@ -604,7 +682,7 @@ onMounted(async () => {
   });
 });
 
-watch(mappedLocations, () => {
+watch(mappedLocationFeatures, () => {
   syncLocations();
   if (isReady.value && props.variant !== "search") fitToLocations();
 });
@@ -638,6 +716,8 @@ onBeforeUnmount(() => {
   if (searchTimer) {
     window.clearTimeout(searchTimer);
   }
+
+  searchAbortController?.abort();
   map.value?.remove();
 });
 </script>
@@ -738,7 +818,7 @@ onBeforeUnmount(() => {
     />
 
     <div
-      v-if="mappedLocations.length === 0"
+      v-if="mappedLocationFeatures.length === 0"
       class="pointer-events-none absolute inset-0 grid place-items-center p-6"
     >
       <AppEmptyState

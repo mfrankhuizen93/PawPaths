@@ -100,7 +100,14 @@ export type LocationsResponse = {
   items: LocationListItem[];
   total: number;
   limit: number;
-  skip: number;
+  nextCursor?: string | null;
+  metadata: {
+    pageNumber: number;
+    pageSize: number;
+    totalFound: number;
+    resultCount: number;
+    truncated?: boolean;
+  };
 };
 
 export type LocationFilters = {
