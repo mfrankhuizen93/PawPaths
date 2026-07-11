@@ -365,25 +365,27 @@ async function searchVisibleLocations() {
       north: northEast.lat,
       ...props.filters,
     };
-    const response = await fetchAllLocationPages(({ limit, skip }) =>
-      $fetch<LocationsResponse>("/api/locations", {
-        query: {
-          ...baseQuery,
-          limit,
-          skip,
-        },
-        signal: abortController.signal,
-      }),
+    await fetchAllLocationPages(
+      ({ limit, skip }) =>
+        $fetch<LocationsResponse>("/api/locations", {
+          query: {
+            ...baseQuery,
+            limit,
+            skip,
+          },
+          signal: abortController.signal,
+        }),
       {
         pageSize: props.limit,
+        onProgress: ({ response }) => {
+          if (requestId !== searchRequestId) return;
+
+          hasSearched.value = true;
+          fetchedLocations.value = response.items;
+          emit("locationsLoaded", response);
+        },
       },
     );
-
-    if (requestId !== searchRequestId) return;
-
-    hasSearched.value = true;
-    fetchedLocations.value = response.items;
-    emit("locationsLoaded", response);
   } catch {
     if (requestId !== searchRequestId) return;
     if (abortController.signal.aborted) return;

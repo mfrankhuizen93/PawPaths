@@ -8,3 +8,10 @@ test("queues visible location searches when the map is moved or zoomed", async (
   assert.match(component, /map\.value\.on\("moveend", queueViewportSearch\)/);
   assert.match(component, /map\.value\.on\("zoomend", queueViewportSearch\)/);
 });
+
+test("renders visible location pages progressively", async () => {
+  const component = await fs.readFile("app/components/AppLocation.vue", "utf8");
+
+  assert.match(component, /onProgress: \(\{ response \}\) =>/);
+  assert.match(component, /fetchedLocations\.value = response\.items/);
+});
