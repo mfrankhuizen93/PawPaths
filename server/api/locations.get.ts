@@ -211,7 +211,10 @@ function getBoundsFilter(query: QueryObject): MongoFilter | null {
     return null;
   }
 
-  const makeBoundsPolygon = (minLng: number, maxLng: number): MongoFilter => ({
+  const makeMainLocationBoundsClause = (
+    minLng: number,
+    maxLng: number,
+  ): MongoFilter => ({
     location: {
       $geoWithin: {
         $geometry: {
@@ -230,12 +233,31 @@ function getBoundsFilter(query: QueryObject): MongoFilter | null {
     },
   });
 
+  const makeCoordinatePointBoundsClause = (
+    minLng: number,
+    maxLng: number,
+  ): MongoFilter => ({
+    coordinatePoints: {
+      $elemMatch: {
+        latitude: { $gte: south, $lte: north },
+        longitude: { $gte: minLng, $lte: maxLng },
+      },
+    },
+  });
+
+  const makeBoundsClause = (minLng: number, maxLng: number): MongoFilter => ({
+    $or: [
+      makeMainLocationBoundsClause(minLng, maxLng),
+      makeCoordinatePointBoundsClause(minLng, maxLng),
+    ],
+  });
+
   if (west <= east) {
-    return makeBoundsPolygon(west, east);
+    return makeBoundsClause(west, east);
   }
 
   return {
-    $or: [makeBoundsPolygon(west, 180), makeBoundsPolygon(-180, east)],
+    $or: [makeBoundsClause(west, 180), makeBoundsClause(-180, east)],
   };
 }
 
