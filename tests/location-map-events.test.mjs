@@ -15,3 +15,9 @@ test("renders visible location pages progressively", async () => {
   assert.match(component, /onProgress: \(\{ response \}\) =>/);
   assert.match(component, /fetchedLocations\.value = response\.items/);
 });
+
+test("location API uses stable pagination sorting", async () => {
+  const route = await fs.readFile("server/api/locations.get.ts", "utf8");
+
+  assert.match(route, /name: 1,\s+_id: 1,/);
+});

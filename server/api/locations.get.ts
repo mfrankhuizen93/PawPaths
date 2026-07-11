@@ -1,4 +1,5 @@
 import { defineEventHandler, getQuery } from "h3";
+import { ObjectId } from "mongodb";
 import type { QueryObject, QueryValue } from "ufo";
 import type { LocationsResponse } from "#shared/types/locations";
 import { getDb } from "../utils/mongodb.js";
@@ -23,8 +24,23 @@ type LocationReview = {
 };
 
 type RawLocationItem = {
+  _id?: ObjectId;
+  searchScore?: number;
+  reviewCount?: number;
+  ratingCount?: number;
+  averageRatingSort?: number;
+  name?: string;
   reviews?: LocationReview[];
   [key: string]: unknown;
+};
+
+type LocationCursor = {
+  searchScore?: number;
+  reviewCount: number;
+  averageRatingSort: number;
+  ratingCount: number;
+  name: string;
+  id: string;
 };
 
 function toFiniteNumber(value: QueryValue | QueryValue[]): number | null {
@@ -39,12 +55,13 @@ function toPositiveNumber(value: QueryValue | QueryValue[]): number | null {
   return number && number > 0 ? number : null;
 }
 
-function toNonNegativeInteger(
+function toPositiveInteger(
   value: QueryValue | QueryValue[],
-  fallback = 0,
+  fallback = 1,
 ): number {
   const number = Number(value);
-  return Number.isInteger(number) && number >= 0 ? number : fallback;
+
+  return Number.isInteger(number) && number >= 1 ? number : fallback;
 }
 
 function toLimitedInteger(value: QueryValue | QueryValue[]): number {
@@ -71,6 +88,67 @@ function toSearchQuery(value: QueryValue | QueryValue[]) {
   const rawValue = Array.isArray(value) ? value[0] : value;
 
   return rawValue ? String(rawValue).trim() : "";
+}
+
+function toCursor(value: QueryValue | QueryValue[]): LocationCursor | null {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  if (!rawValue) return null;
+
+  try {
+    const parsedValue = JSON.parse(
+      Buffer.from(String(rawValue), "base64url").toString("utf8"),
+    ) as Partial<LocationCursor>;
+
+    if (
+      typeof parsedValue.reviewCount !== "number" ||
+      typeof parsedValue.averageRatingSort !== "number" ||
+      typeof parsedValue.ratingCount !== "number" ||
+      typeof parsedValue.name !== "string" ||
+      typeof parsedValue.id !== "string" ||
+      !ObjectId.isValid(parsedValue.id)
+    ) {
+      return null;
+    }
+
+    if (
+      parsedValue.searchScore !== undefined &&
+      typeof parsedValue.searchScore !== "number"
+    ) {
+      return null;
+    }
+
+    return {
+      searchScore: parsedValue.searchScore,
+      reviewCount: parsedValue.reviewCount,
+      averageRatingSort: parsedValue.averageRatingSort,
+      ratingCount: parsedValue.ratingCount,
+      name: parsedValue.name,
+      id: parsedValue.id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function toNextCursor(
+  item: RawLocationItem | undefined,
+  includeSearchScore: boolean,
+) {
+  if (!item?._id) return null;
+
+  const cursor: LocationCursor = {
+    reviewCount: Number(item.reviewCount ?? 0),
+    averageRatingSort: Number(item.averageRatingSort ?? -1),
+    ratingCount: Number(item.ratingCount ?? 0),
+    name: String(item.name ?? ""),
+    id: item._id.toHexString(),
+  };
+
+  if (includeSearchScore) {
+    cursor.searchScore = Number(item.searchScore ?? 0);
+  }
+
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
 function asArray(value: QueryValue | QueryValue[]): string[] {
@@ -306,14 +384,28 @@ function buildRatingFieldsStage(): PipelineStage {
           },
         },
       },
+      averageRatingSort: {
+        $let: {
+          vars: { ratings: ratingValues },
+          in: {
+            $cond: [
+              { $gt: [{ $size: "$$ratings" }, 0] },
+              { $round: [{ $avg: "$$ratings" }, 1] },
+              -1,
+            ],
+          },
+        },
+      },
     },
   };
 }
 
 function buildProjection(): MongoFilter {
   return {
-    _id: 0,
+    _id: 1,
     id: { $toString: "$_id" },
+    averageRatingSort: 1,
+    searchScore: 1,
     slug: 1,
     sourceUrl: 1,
     name: 1,
@@ -375,21 +467,91 @@ function buildSearchScoreStage(searchQuery: string): PipelineStage {
   };
 }
 
+function buildCursorMatchStage(
+  cursor: LocationCursor,
+  includeSearchScore: boolean,
+): PipelineStage {
+  const fields = [
+    ...(includeSearchScore
+      ? [
+          {
+            expression: "$searchScore",
+            value: cursor.searchScore ?? 0,
+            direction: "desc" as const,
+          },
+        ]
+      : []),
+    {
+      expression: "$reviewCount",
+      value: cursor.reviewCount,
+      direction: "desc" as const,
+    },
+    {
+      expression: "$averageRatingSort",
+      value: cursor.averageRatingSort,
+      direction: "desc" as const,
+    },
+    {
+      expression: "$ratingCount",
+      value: cursor.ratingCount,
+      direction: "desc" as const,
+    },
+    { expression: "$name", value: cursor.name, direction: "asc" as const },
+    {
+      expression: "$_id",
+      value: new ObjectId(cursor.id),
+      direction: "asc" as const,
+    },
+  ];
+
+  return {
+    $match: {
+      $expr: {
+        $or: fields.map((field, index) => ({
+          $and: [
+            ...fields
+              .slice(0, index)
+              .map((previous) => ({
+                $eq: [previous.expression, previous.value],
+              })),
+            {
+              [field.direction === "desc" ? "$lt" : "$gt"]: [
+                field.expression,
+                field.value,
+              ],
+            },
+          ],
+        })),
+      },
+    },
+  };
+}
+
 function normalizeWarnings(
   items: RawLocationItem[],
   includeReviews: boolean,
 ): LocationsResponse["items"] {
   return items.map((item) => {
     const warnings = inferLocationWarnings(item.reviews);
+    const {
+      _id,
+      averageRatingSort,
+      searchScore,
+      ...publicItem
+    } = item;
+
+    void _id;
+    void averageRatingSort;
+    void searchScore;
 
     if (includeReviews) {
       return {
-        ...item,
+        ...publicItem,
         warnings,
       } as LocationsResponse["items"][number];
     }
 
-    const { reviews, ...location } = item;
+    const { reviews, ...location } = publicItem;
 
     return {
       ...location,
@@ -406,7 +568,8 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   const filter = buildFilter(query);
   const searchQuery = toSearchQuery(query.q);
   const limit = toLimitedInteger(query.limit);
-  const skip = toNonNegativeInteger(query.skip);
+  const cursor = toCursor(query.cursor);
+  const pageNumber = toPositiveInteger(query.pageNumber);
   const includeReviews = query.includeReviews === "true";
   const lat = toFiniteNumber(query.lat);
   const lng = toFiniteNumber(query.lng);
@@ -459,28 +622,24 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
 
   if (searchQuery) {
     pipeline.push(buildSearchScoreStage(searchQuery));
-    pipeline.push({
-      $sort: {
-        searchScore: -1,
-        reviewCount: -1,
-        averageRating: -1,
-        ratingCount: -1,
-        name: 1,
-      },
-    });
-  } else {
-    pipeline.push({
-      $sort: {
-        reviewCount: -1,
-        averageRating: -1,
-        ratingCount: -1,
-        name: 1,
-      },
-    });
   }
 
-  pipeline.push({ $skip: skip });
-  pipeline.push({ $limit: limit });
+  if (cursor) {
+    pipeline.push(buildCursorMatchStage(cursor, Boolean(searchQuery)));
+  }
+
+  pipeline.push({
+    $sort: {
+      ...(searchQuery ? { searchScore: -1 } : {}),
+      reviewCount: -1,
+      averageRatingSort: -1,
+      ratingCount: -1,
+      name: 1,
+      _id: 1,
+    },
+  });
+
+  pipeline.push({ $limit: limit + 1 });
   pipeline.push({ $project: projection });
   countPipeline.push({ $count: "total" });
 
@@ -489,12 +648,23 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
     locations.aggregate(countPipeline).toArray(),
   ]);
   const total = countResult[0]?.total ?? 0;
-  const items = normalizeWarnings(rawItems, includeReviews);
+  const pageItems = rawItems.slice(0, limit);
+  const items = normalizeWarnings(pageItems, includeReviews);
+  const nextCursor =
+    rawItems.length > limit
+      ? toNextCursor(pageItems.at(-1), Boolean(searchQuery))
+      : null;
 
   return {
     items,
     total,
     limit,
-    skip,
+    nextCursor,
+    metadata: {
+      pageNumber,
+      pageSize: limit,
+      totalFound: total,
+      resultCount: items.length,
+    },
   };
 });

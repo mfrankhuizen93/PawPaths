@@ -7,8 +7,8 @@ const { fetchAllLocationPages } = locationPages;
 
 test("fetches every location page until the response total is loaded", async () => {
   const requests = [];
-  const response = await fetchAllLocationPages(async ({ limit, skip }) => {
-    requests.push({ limit, skip });
+  const response = await fetchAllLocationPages(async ({ cursor, limit, pageNumber }) => {
+    requests.push({ cursor, limit, pageNumber });
     const allItems = Array.from({ length: 205 }, (_, index) => ({
       id: String(index),
       slug: `location-${index}`,
@@ -20,27 +20,36 @@ test("fetches every location page until the response total is loaded", async () 
       ratingCount: 0,
       photos: [],
     }));
+    const start = cursor ? Number(cursor) : 0;
+    const items = allItems.slice(start, start + limit);
 
     return {
-      items: allItems.slice(skip, skip + limit),
+      items,
       total: allItems.length,
       limit,
-      skip,
+      nextCursor:
+        start + items.length < allItems.length ? String(start + limit) : null,
     };
   });
 
   assert.equal(response.items.length, 205);
+  assert.deepEqual(response.metadata, {
+    pageNumber: 3,
+    pageSize: 100,
+    totalFound: 205,
+    resultCount: 205,
+  });
   assert.deepEqual(requests, [
-    { limit: 100, skip: 0 },
-    { limit: 100, skip: 100 },
-    { limit: 100, skip: 200 },
+    { cursor: null, limit: 100, pageNumber: 1 },
+    { cursor: "100", limit: 100, pageNumber: 2 },
+    { cursor: "200", limit: 100, pageNumber: 3 },
   ]);
 });
 
-test("stops paging when a response returns no more locations", async () => {
+test("stops paging when a response has no cursor", async () => {
   let calls = 0;
   const response = await fetchAllLocationPages(
-    async ({ limit, skip }) => {
+    async ({ limit }) => {
       calls += 1;
 
       return {
@@ -62,14 +71,19 @@ test("stops paging when a response returns no more locations", async () => {
             : [],
         total: 10,
         limit,
-        skip,
       };
     },
     { pageSize: 5 },
   );
 
   assert.equal(response.items.length, 1);
-  assert.equal(calls, 2);
+  assert.deepEqual(response.metadata, {
+    pageNumber: 1,
+    pageSize: 5,
+    totalFound: 10,
+    resultCount: 1,
+  });
+  assert.equal(calls, 1);
 });
 
 test("reports progress after each loaded location page", async () => {
@@ -87,12 +101,18 @@ test("reports progress after each loaded location page", async () => {
   }));
 
   const response = await fetchAllLocationPages(
-    async ({ limit, skip }) => ({
-      items: allItems.slice(skip, skip + limit),
-      total: allItems.length,
-      limit,
-      skip,
-    }),
+    async ({ cursor, limit }) => {
+      const start = cursor ? Number(cursor) : 0;
+      const items = allItems.slice(start, start + limit);
+
+      return {
+        items,
+        total: allItems.length,
+        limit,
+        nextCursor:
+          start + items.length < allItems.length ? String(start + limit) : null,
+      };
+    },
     {
       pageSize: 2,
       onProgress: ({ response, pagesLoaded }) => {
@@ -122,14 +142,15 @@ test("keeps fetching past the old fifty page cap", async () => {
   const total = 5105;
   let calls = 0;
 
-  const response = await fetchAllLocationPages(async ({ limit, skip }) => {
+  const response = await fetchAllLocationPages(async ({ cursor, limit }) => {
     calls += 1;
+    const start = cursor ? Number(cursor) : 0;
 
     return {
       items: Array.from(
-        { length: Math.max(0, Math.min(limit, total - skip)) },
+        { length: Math.max(0, Math.min(limit, total - start)) },
         (_, index) => {
-          const id = skip + index;
+          const id = start + index;
 
           return {
             id: String(id),
@@ -146,7 +167,7 @@ test("keeps fetching past the old fifty page cap", async () => {
       ),
       total,
       limit,
-      skip,
+      nextCursor: start + limit < total ? String(start + limit) : null,
     };
   });
 

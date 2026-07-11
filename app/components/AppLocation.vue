@@ -366,12 +366,13 @@ async function searchVisibleLocations() {
       ...props.filters,
     };
     await fetchAllLocationPages(
-      ({ limit, skip }) =>
+      ({ cursor, limit, pageNumber }) =>
         $fetch<LocationsResponse>("/api/locations", {
           query: {
             ...baseQuery,
+            cursor,
             limit,
-            skip,
+            pageNumber,
           },
           signal: abortController.signal,
         }),
