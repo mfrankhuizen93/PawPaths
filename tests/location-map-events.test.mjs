@@ -14,6 +14,7 @@ test("fetches visible locations with a single viewport request", async () => {
 
   assert.doesNotMatch(component, /fetchAllLocationPages/);
   assert.match(component, /viewport: true/);
+  assert.match(component, /normalizeLongitude/);
   assert.match(component, /fetchedLocations\.value = response\.items/);
 });
 
@@ -22,5 +23,8 @@ test("location API keeps pagination for non-map searches", async () => {
 
   assert.match(route, /name: 1,\s+_id: 1,/);
   assert.match(route, /isViewportSearch \? null : toCursor\(query\.cursor\)/);
+  assert.match(route, /Cache-Control", "no-store"/);
   assert.match(route, /isViewportSearch\s+\?\s+Promise\.resolve\(\[\]\)/);
+  assert.match(route, /normalizeLongitude\(rawWest\)/);
+  assert.match(route, /photos: \{ \$literal: \[\] \}/);
 });

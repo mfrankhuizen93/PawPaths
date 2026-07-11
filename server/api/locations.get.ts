@@ -1,4 +1,4 @@
-import { defineEventHandler, getQuery } from "h3";
+import { defineEventHandler, getQuery, setHeader } from "h3";
 import { ObjectId } from "mongodb";
 import type { QueryObject, QueryValue } from "ufo";
 import type { LocationsResponse } from "#shared/types/locations";
@@ -82,6 +82,14 @@ function toRating(value: QueryValue | QueryValue[]): number | null {
   if (number === null || number < 1 || number > 5) return null;
 
   return number;
+}
+
+function clampLatitude(latitude: number) {
+  return Math.max(-90, Math.min(90, latitude));
+}
+
+function normalizeLongitude(longitude: number) {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
 }
 
 function escapeRegex(value: unknown) {
@@ -276,22 +284,25 @@ function getBoundsFilter(
   options: { includeCoordinatePoints?: boolean } = {},
 ): MongoFilter | null {
   const includeCoordinatePoints = options.includeCoordinatePoints ?? true;
-  const west = toFiniteNumber(query.west);
-  const south = toFiniteNumber(query.south);
-  const east = toFiniteNumber(query.east);
-  const north = toFiniteNumber(query.north);
+  const rawWest = toFiniteNumber(query.west);
+  const rawSouth = toFiniteNumber(query.south);
+  const rawEast = toFiniteNumber(query.east);
+  const rawNorth = toFiniteNumber(query.north);
 
-  if (west === null || south === null || east === null || north === null) {
+  if (
+    rawWest === null ||
+    rawSouth === null ||
+    rawEast === null ||
+    rawNorth === null
+  ) {
     return null;
   }
 
-  if (south < -90 || south > 90 || north < -90 || north > 90) {
-    return null;
-  }
-
-  if (west < -180 || west > 180 || east < -180 || east > 180) {
-    return null;
-  }
+  const south = clampLatitude(rawSouth);
+  const north = clampLatitude(rawNorth);
+  const longitudeSpan = Math.abs(rawEast - rawWest);
+  const west = longitudeSpan >= 360 ? -180 : normalizeLongitude(rawWest);
+  const east = longitudeSpan >= 360 ? 180 : normalizeLongitude(rawEast);
 
   if (south > north) {
     return null;
@@ -418,14 +429,11 @@ function buildProjection(options: { compact?: boolean } = {}): MongoFilter {
     averageRatingSort: 1,
     searchScore: 1,
     slug: 1,
-    sourceUrl: 1,
     name: 1,
     city: 1,
-    province: 1,
     country: 1,
     latitude: 1,
     longitude: 1,
-    location: 1,
     type: 1,
     characteristics: 1,
     coordinatePoints: 1,
@@ -438,12 +446,15 @@ function buildProjection(options: { compact?: boolean } = {}): MongoFilter {
   if (options.compact) {
     return {
       ...sharedProjection,
-      photos: { $slice: ["$photos", 1] },
+      photos: { $literal: [] },
     };
   }
 
   return {
     ...sharedProjection,
+    sourceUrl: 1,
+    province: 1,
+    location: 1,
     description: 1,
     relatedUrls: 1,
     photos: 1,
@@ -599,6 +610,9 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
     includeCoordinatePoints: query.viewport !== "true",
   });
   const isViewportSearch = query.viewport === "true" && Boolean(boundsFilter);
+  if (isViewportSearch) {
+    setHeader(event, "Cache-Control", "no-store");
+  }
   const limit = toLimitedInteger(
     query.limit,
     isViewportSearch ? MAX_VIEWPORT_LIMIT : MAX_LIMIT,

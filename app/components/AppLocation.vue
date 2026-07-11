@@ -339,6 +339,31 @@ function storeMapViewport() {
   );
 }
 
+function clampLatitude(latitude: number) {
+  return Math.max(-90, Math.min(90, latitude));
+}
+
+function normalizeLongitude(longitude: number) {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
+function getVisibleBoundsQuery() {
+  if (!map.value) return null;
+
+  const bounds = map.value.getBounds();
+  const southWest = bounds.getSouthWest();
+  const northEast = bounds.getNorthEast();
+  const longitudeSpan = Math.abs(northEast.lng - southWest.lng);
+
+  return {
+    west:
+      longitudeSpan >= 360 ? -180 : normalizeLongitude(southWest.lng),
+    south: clampLatitude(southWest.lat),
+    east: longitudeSpan >= 360 ? 180 : normalizeLongitude(northEast.lng),
+    north: clampLatitude(northEast.lat),
+  };
+}
+
 async function zoomToMyLocation() {
   if (!map.value || isLocating.value) return;
 
@@ -383,19 +408,16 @@ async function searchVisibleLocations() {
   searchAbortController?.abort();
   const abortController = new AbortController();
   searchAbortController = abortController;
-  const bounds = map.value.getBounds();
-  const southWest = bounds.getSouthWest();
-  const northEast = bounds.getNorthEast();
+  const boundsQuery = getVisibleBoundsQuery();
+
+  if (!boundsQuery) return;
 
   isSearching.value = true;
   searchError.value = false;
 
   try {
     const baseQuery = {
-      west: southWest.lng,
-      south: southWest.lat,
-      east: northEast.lng,
-      north: northEast.lat,
+      ...boundsQuery,
       viewport: true,
       ...props.filters,
     };
