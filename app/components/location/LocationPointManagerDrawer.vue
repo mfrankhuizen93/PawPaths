@@ -22,6 +22,11 @@ type ManagerState =
   | { name: "adding"; coordinates: Coordinates | null }
   | { name: "editing"; id: string }
   | { name: "moving"; id: string; original: Coordinates; draft: Coordinates }
+  | {
+      name: "moving-general";
+      original: Coordinates | null;
+      draft: Coordinates | null;
+    }
   | { name: "confirming-delete"; id: string };
 
 type Coordinates = {
@@ -37,7 +42,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "update:open": [open: boolean];
-  saved: [points: LocationCoordinatePoint[]];
+  saved: [points: LocationCoordinatePoint[], coordinates: Coordinates | null];
 }>();
 
 const config = useRuntimeConfig();
@@ -48,7 +53,8 @@ const listItemRefs = new Map<string, HTMLElement>();
 const map = shallowRef<MapLibreMap | null>(null);
 const markerInstances = new Map<string, Marker>();
 const localPoints = ref<LocationCoordinatePoint[]>([]);
-const selectedPointId = ref<string | null>(null);
+const localGeneralCoordinates = ref<Coordinates | null>(null);
+const selectedPointId = ref<string | null>("general");
 const state = ref<ManagerState>({ name: "viewing" });
 const form = reactive({
   name: "",
@@ -67,15 +73,16 @@ const drawerOpen = computed({
 });
 const selectedPoint = computed(
   () =>
-    localPoints.value.find((point) => point.id === selectedPointId.value) ??
+    listPoints.value.find((point) => point.id === selectedPointId.value) ??
     null,
 );
 const selectedPointMeta = computed(() =>
-  selectedPoint.value ? getLocationPointTypeConfig(selectedPoint.value.kind) : null,
+  selectedPoint.value ? getPointMeta(selectedPoint.value) : null,
 );
 const activeCoordinates = computed<Coordinates | null>(() => {
   if (state.value.name === "adding") return state.value.coordinates;
   if (state.value.name === "moving") return state.value.draft;
+  if (state.value.name === "moving-general") return state.value.draft;
 
   return null;
 });
@@ -97,9 +104,32 @@ const mapInstruction = computed(() => {
   if (state.value.name === "moving") {
     return "Move the map, choose Place here or drag the marker, then choose Done.";
   }
+  if (state.value.name === "moving-general") {
+    return state.value.draft
+      ? "Choose Done to save the main location."
+      : "Move the map to the main location, then choose Place here.";
+  }
 
   return "";
 });
+const hasGeneralCoordinates = computed(() => Boolean(localGeneralCoordinates.value));
+const generalPoint = computed<LocationCoordinatePoint>(() => ({
+  id: "general",
+  kind: "general",
+  label: "Main location",
+  latitude:
+    state.value.name === "moving-general" && state.value.draft
+      ? state.value.draft.latitude
+      : localGeneralCoordinates.value?.latitude ?? 0,
+  longitude:
+    state.value.name === "moving-general" && state.value.draft
+      ? state.value.draft.longitude
+      : localGeneralCoordinates.value?.longitude ?? 0,
+}));
+const listPoints = computed(() => [
+  ...(hasGeneralCoordinates.value ? [generalPoint.value] : []),
+  ...localPoints.value,
+]);
 
 function createPointId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -123,7 +153,15 @@ function resetForm() {
 
 function resetLocalState() {
   localPoints.value = clonePoints(props.location?.coordinatePoints);
-  selectedPointId.value = localPoints.value[0]?.id ?? null;
+  localGeneralCoordinates.value =
+    Number.isFinite(props.location?.latitude) &&
+    Number.isFinite(props.location?.longitude)
+      ? {
+          latitude: props.location?.latitude as number,
+          longitude: props.location?.longitude as number,
+        }
+      : null;
+  selectedPointId.value = "general";
   state.value = { name: "viewing" };
   resetForm();
   error.value = "";
@@ -142,8 +180,9 @@ function createEditablePayload(points: LocationCoordinatePoint[]): EditableLocat
     city: location.city ?? "",
     province: location.province ?? "",
     country: location.country ?? "Netherlands",
-    latitude: location.latitude ?? null,
-    longitude: location.longitude ?? null,
+    latitude: localGeneralCoordinates.value?.latitude ?? location.latitude ?? null,
+    longitude:
+      localGeneralCoordinates.value?.longitude ?? location.longitude ?? null,
     type: [...(location.type ?? [])],
     characteristics: [...(location.characteristics ?? [])],
     description: location.description ?? "",
@@ -168,7 +207,7 @@ async function savePoints(points: LocationCoordinatePoint[], successTitle: strin
       body: payload,
     });
     localPoints.value = clonePoints(points);
-    emit("saved", localPoints.value);
+    emit("saved", localPoints.value, localGeneralCoordinates.value);
     state.value = { name: "viewing" };
     resetForm();
     toast.add({
@@ -237,7 +276,27 @@ function startAdding() {
   syncMarkers();
 }
 
+function startMovingGeneral() {
+  const original = localGeneralCoordinates.value
+    ? { ...localGeneralCoordinates.value }
+    : null;
+
+  state.value = {
+    name: "moving-general",
+    original,
+    draft: original ? { ...original } : null,
+  };
+  selectedPointId.value = "general";
+  syncMarkers();
+
+  if (original) {
+    centerPoint("general");
+  }
+}
+
 function startEditing(point: LocationCoordinatePoint) {
+  if (point.id === "general") return;
+
   state.value = { name: "editing", id: point.id ?? "" };
   selectedPointId.value = point.id ?? null;
   form.name = getLocationPointCustomLabel(point);
@@ -316,6 +375,19 @@ async function saveForm() {
 }
 
 async function finishMove() {
+  if (state.value.name === "moving-general") {
+    const original = state.value.original;
+    if (state.value.draft) {
+      localGeneralCoordinates.value = state.value.draft;
+    }
+    const saved = await savePoints(localPoints.value, "Main location moved");
+    if (!saved) {
+      localGeneralCoordinates.value = original;
+      syncMarkers();
+    }
+    return;
+  }
+
   if (state.value.name !== "moving") return;
 
   const nextPoints = localPoints.value.map((point) =>
@@ -325,6 +397,8 @@ async function finishMove() {
 }
 
 function confirmDelete(point: LocationCoordinatePoint) {
+  if (point.id === "general") return;
+
   state.value = { name: "confirming-delete", id: point.id ?? "" };
   selectedPointId.value = point.id ?? null;
   syncMarkers();
@@ -337,7 +411,7 @@ async function deleteSelectedPoint() {
   const nextPoints = localPoints.value.filter((point) => point.id !== id);
 
   if (await savePoints(nextPoints, "Location point deleted")) {
-    selectedPointId.value = nextPoints[0]?.id ?? null;
+    selectedPointId.value = "general";
   }
 }
 
@@ -361,6 +435,10 @@ function applyMapCoordinates(coordinates: Coordinates) {
     state.value = { ...state.value, draft: coordinates };
     syncMarkers();
   }
+  if (state.value.name === "moving-general") {
+    state.value = { ...state.value, draft: coordinates };
+    syncMarkers();
+  }
 }
 
 function placeAtMapCenter() {
@@ -379,6 +457,12 @@ function getMarkerCoordinates(point: LocationCoordinatePoint) {
   if (state.value.name === "moving" && state.value.id === point.id) {
     return state.value.draft;
   }
+  if (point.id === "general") {
+    return {
+      latitude: generalPoint.value.latitude,
+      longitude: generalPoint.value.longitude,
+    };
+  }
 
   return {
     latitude: point.latitude,
@@ -387,10 +471,14 @@ function getMarkerCoordinates(point: LocationCoordinatePoint) {
 }
 
 function getVisiblePoints() {
-  return localPoints.value.map((point) => ({
-    ...point,
-    ...getMarkerCoordinates(point),
-  }));
+  return [generalPoint.value, ...localPoints.value]
+    .map((point) => ({
+      ...point,
+      ...getMarkerCoordinates(point),
+    }))
+    .filter((point) =>
+      point.id === "general" ? hasGeneralCoordinates.value : true,
+    );
 }
 
 function makeMarkerElement(point: LocationCoordinatePoint, temporary = false) {
@@ -440,15 +528,29 @@ async function syncMarkers() {
     const markerElement = makeMarkerElement(point);
     const marker = new maplibregl.Marker({
       element: markerElement,
-      draggable: state.value.name === "moving" && state.value.id === id,
+      draggable:
+        (state.value.name === "moving" && state.value.id === id) ||
+        (state.value.name === "moving-general" && id === "general"),
     })
       .setLngLat([point.longitude, point.latitude])
       .addTo(activeMap);
 
     marker.on("dragend", () => {
+      const lngLat = marker.getLngLat();
+      if (state.value.name === "moving-general" && id === "general") {
+        state.value = {
+          ...state.value,
+          draft: roundCoordinates({
+            latitude: lngLat.lat,
+            longitude: lngLat.lng,
+          }),
+        };
+        syncMarkers();
+        return;
+      }
+
       if (state.value.name !== "moving" || state.value.id !== id) return;
 
-      const lngLat = marker.getLngLat();
       state.value = {
         ...state.value,
         draft: roundCoordinates({
@@ -484,7 +586,12 @@ async function syncMarkers() {
 }
 
 function centerPoint(id: string) {
-  const point = localPoints.value.find((item) => item.id === id);
+  const point =
+    id === "general"
+      ? hasGeneralCoordinates.value
+        ? generalPoint.value
+        : null
+      : localPoints.value.find((item) => item.id === id);
   if (!point || !map.value) return;
 
   const coordinates = getMarkerCoordinates(point);
@@ -532,6 +639,23 @@ function fitAllMarkers() {
 }
 
 function getPointMenuItems(point: LocationCoordinatePoint) {
+  if (point.id === "general") {
+    return [
+      [
+        {
+          label: "Center on map",
+          icon: "i-lucide-crosshair",
+          onSelect: () => selectPoint("general"),
+        },
+        {
+          label: "Move marker",
+          icon: "i-lucide-move",
+          onSelect: () => startMovingGeneral(),
+        },
+      ],
+    ];
+  }
+
   return [
     [
       {
@@ -557,6 +681,19 @@ function getPointMenuItems(point: LocationCoordinatePoint) {
       },
     ],
   ];
+}
+
+function getPointMeta(point: LocationCoordinatePoint) {
+  if (point.id === "general") {
+    return {
+      label: hasGeneralCoordinates.value ? "Main location" : "Not placed",
+      icon: "i-lucide-crosshair",
+      color: "#4d7c5e",
+      textColor: "#ffffff",
+    };
+  }
+
+  return getLocationPointTypeConfig(point.kind);
 }
 
 async function initializeMap() {
@@ -701,9 +838,10 @@ onBeforeUnmount(() => {
               @click="cancelState"
             />
             <UButton
-              v-if="state.name === 'moving'"
+              v-if="state.name === 'moving' || state.name === 'moving-general'"
               icon="i-lucide-check"
               label="Done"
+              :disabled="!activeCoordinates"
               :loading="isSaving"
               size="sm"
               type="button"
@@ -736,6 +874,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="mt-3 flex gap-2 overflow-x-auto pb-1">
             <UButton
+              v-if="selectedPoint.id !== 'general'"
               color="neutral"
               icon="i-lucide-pencil"
               label="Edit"
@@ -747,9 +886,14 @@ onBeforeUnmount(() => {
               icon="i-lucide-move"
               label="Move marker"
               variant="soft"
-              @click="startMoving(selectedPoint)"
+              @click="
+                selectedPoint.id === 'general'
+                  ? startMovingGeneral()
+                  : startMoving(selectedPoint)
+              "
             />
             <UButton
+              v-if="selectedPoint.id !== 'general'"
               color="error"
               icon="i-lucide-trash-2"
               label="Delete"
@@ -875,7 +1019,7 @@ onBeforeUnmount(() => {
           class="max-h-[18rem] min-h-44 overflow-y-auto rounded-md border border-default"
         >
           <div
-            v-if="localPoints.length === 0"
+            v-if="listPoints.length === 0"
             class="flex min-h-48 flex-col items-center justify-center gap-3 p-5 text-center"
           >
             <UIcon name="i-lucide-map-pinned" class="text-muted size-8" />
@@ -896,7 +1040,7 @@ onBeforeUnmount(() => {
 
           <ul v-else class="divide-y divide-default">
             <li
-              v-for="point in localPoints"
+              v-for="point in listPoints"
               :key="point.id"
               :ref="(el) => setListItemRef(point.id ?? '', el)"
               class="flex min-h-16 items-center gap-2 px-3 py-2 transition"
@@ -910,12 +1054,12 @@ onBeforeUnmount(() => {
                 <span
                   class="grid size-11 shrink-0 place-items-center rounded-full"
                   :style="{
-                    backgroundColor: getLocationPointTypeConfig(point.kind).color,
-                    color: getLocationPointTypeConfig(point.kind).textColor,
+                    backgroundColor: getPointMeta(point).color,
+                    color: getPointMeta(point).textColor,
                   }"
                 >
                   <span
-                    :class="getLocationPointTypeConfig(point.kind).icon"
+                    :class="getPointMeta(point).icon"
                     class="text-xl"
                   />
                 </span>
@@ -924,7 +1068,7 @@ onBeforeUnmount(() => {
                     {{ getLocationPointDisplayLabel(point) }}
                   </span>
                   <span class="text-muted block text-sm">
-                    {{ getLocationPointTypeConfig(point.kind).label }}
+                    {{ getPointMeta(point).label }}
                   </span>
                 </span>
                 <UIcon

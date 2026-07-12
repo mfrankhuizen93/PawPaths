@@ -508,17 +508,26 @@ function selectLocation(location: LocationListItem) {
   void openLocationBySlug(location.slug, { force: true });
 }
 
-function updateSelectedLocationPoints(points: LocationCoordinatePoint[]) {
+function updateSelectedLocationPoints(
+  points: LocationCoordinatePoint[],
+  coordinates?: { latitude: number; longitude: number } | null,
+) {
   if (!selectedLocation.value) return;
 
   selectedLocation.value = {
     ...selectedLocation.value,
+    ...(coordinates
+      ? { latitude: coordinates.latitude, longitude: coordinates.longitude }
+      : {}),
     coordinatePoints: points.map((point) => ({ ...point })),
   };
   locations.value = locations.value.map((location) =>
     location.id === selectedLocation.value?.id
       ? {
           ...location,
+          ...(coordinates
+            ? { latitude: coordinates.latitude, longitude: coordinates.longitude }
+            : {}),
           coordinatePoints: points.map((point) => ({ ...point })),
         }
       : location,
