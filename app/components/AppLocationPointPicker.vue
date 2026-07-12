@@ -241,6 +241,24 @@ function setCoordinates(coordinates: [number, number]) {
   emit("picked", { latitude, longitude });
 }
 
+function handleMapContainerPointer(event: MouseEvent | PointerEvent) {
+  if (props.readonly || !map.value || !mapContainer.value) return;
+  if (
+    event.target instanceof HTMLElement &&
+    event.target.closest("[data-map-controls]")
+  ) {
+    return;
+  }
+
+  const rect = mapContainer.value.getBoundingClientRect();
+  const lngLat = map.value.unproject([
+    event.clientX - rect.left,
+    event.clientY - rect.top,
+  ]);
+
+  setCoordinates([lngLat.lng, lngLat.lat]);
+}
+
 function searchAddress(result: GeocodeResult) {
   const coordinates: [number, number] = [result.longitude, result.latitude];
 
@@ -585,6 +603,21 @@ onBeforeUnmount(() => map.value?.remove());
               : 'h-[min(22rem,44dvh)] min-h-64'
         "
         class="w-full"
+        @click="handleMapContainerPointer"
+        @pointerup.capture="handleMapContainerPointer"
+      />
+      <div
+        v-if="!readonly"
+        aria-label="Place point on map"
+        class="absolute inset-0 z-[5] cursor-crosshair"
+        role="button"
+        tabindex="0"
+        @click="handleMapContainerPointer"
+        @keydown.enter.prevent="
+          map &&
+            setCoordinates([map.getCenter().lng, map.getCenter().lat])
+        "
+        @pointerup.capture="handleMapContainerPointer"
       />
       <div
         v-if="!readonly || $slots.actions"

@@ -673,7 +673,7 @@ onBeforeUnmount(() => {
       </AppDrawerHeader>
     </template>
 
-    <div class="flex h-full min-h-0 flex-col gap-4">
+    <div class="grid gap-4 pb-4">
       <UAlert
         v-if="!signedIn"
         color="warning"
@@ -689,9 +689,9 @@ onBeforeUnmount(() => {
         variant="soft"
       />
 
-      <section class="flex min-h-0 flex-[1.15] flex-col gap-3">
+      <section class="grid gap-3">
         <div
-          class="border-default relative min-h-[18rem] flex-1 overflow-hidden rounded-md border"
+          class="border-default relative h-[min(42dvh,22rem)] min-h-64 overflow-hidden rounded-md border"
         >
           <div
             ref="mapContainer"
@@ -711,7 +711,7 @@ onBeforeUnmount(() => {
           />
           <div
             v-if="mapInstruction"
-            class="absolute top-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-xl border border-default/70 bg-default/95 p-2 shadow-lg backdrop-blur"
+            class="absolute right-3 bottom-3 left-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-default/70 bg-default/95 p-2 shadow-lg backdrop-blur sm:right-auto sm:bottom-auto sm:max-w-[calc(100%-1.5rem)]"
           >
             <span class="text-sm font-medium">{{ mapInstruction }}</span>
             <UButton
@@ -796,7 +796,7 @@ onBeforeUnmount(() => {
           </UFormField>
 
           <UFormField label="Location type" required>
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div class="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:grid-cols-3">
               <button
                 v-for="typeOption in locationPointTypeOptions"
                 :key="typeOption.value"
@@ -866,7 +866,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="flex min-h-0 flex-1 flex-col gap-3">
+      <section class="grid gap-3">
         <div class="flex items-center justify-between gap-3">
           <h3 class="text-base font-semibold text-highlighted">Locations</h3>
           <UButton
@@ -880,7 +880,7 @@ onBeforeUnmount(() => {
 
         <div
           ref="listContainer"
-          class="min-h-0 flex-1 overflow-y-auto rounded-md border border-default"
+          class="max-h-[18rem] min-h-44 overflow-y-auto rounded-md border border-default"
         >
           <div
             v-if="localPoints.length === 0"

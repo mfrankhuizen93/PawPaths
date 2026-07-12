@@ -10,7 +10,9 @@ import { isLocationDescriptionTemplate } from "#shared/utils/location-descriptio
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import { z } from "zod";
 import AppTabs from "~/components/common/AppTabs.vue";
+import AppEmptyState from "~/components/common/AppEmptyState.vue";
 import AppPhotoLanes from "~/components/AppPhotoLanes.vue";
+import LocationPointManagerField from "~/components/location/LocationPointManagerField.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -458,6 +460,12 @@ const mapMarkers = computed<FormMapMarker[]>(() => [
     id: point.id ?? `point-${index}`,
   })),
 ]);
+const coordinatePointModel = computed({
+  get: () => form.value.coordinatePoints ?? [],
+  set: (value: LocationCoordinatePoint[]) => {
+    form.value.coordinatePoints = value;
+  },
+});
 const directionsUrl = computed(() => {
   if (
     !Number.isFinite(form.value.latitude) ||
@@ -1224,126 +1232,28 @@ onBeforeUnmount(() => {
       </template>
 
       <template #map>
-        <UFormField
-          class="pt-4"
-          label="Location points"
-          name="latitude"
-          required
-        >
-          <div class="flex flex-col gap-3">
-            <UAlert
-              v-if="geocodeError"
-              :title="geocodeError"
-              color="warning"
-              icon="i-lucide-map-pinned"
-              variant="soft"
-            />
-            <div
-              v-if="!readonly"
-              class="flex flex-wrap items-center justify-between gap-2"
-            >
-              <UButton
-                color="neutral"
-                icon="i-lucide-map"
-                label="Edit map"
-                type="button"
-                variant="ghost"
-                @click="openMapEditor"
+        <div class="grid gap-5 pt-4">
+          <UFormField label="Location points" name="latitude" required>
+            <div class="flex flex-col gap-3">
+              <UAlert
+                v-if="geocodeError"
+                :title="geocodeError"
+                color="warning"
+                icon="i-lucide-map-pinned"
+                variant="soft"
               />
+              <LocationPointManagerField
+                v-model="coordinatePointModel"
+                v-model:latitude="form.latitude"
+                v-model:longitude="form.longitude"
+                :readonly="readonly"
+              />
+              <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
+                Finding place details from the general location...
+              </p>
             </div>
-            <AppLocationPointPicker
-              :latitude="form.latitude"
-              :longitude="form.longitude"
-              :markers="mapMarkers"
-              readonly
-            />
-            <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
-              Finding place details from the general location...
-            </p>
-          </div>
-        </UFormField>
-
-        <UModal
-          v-if="!readonly"
-          v-model:open="isMapEditorOpen"
-          fullscreen
-          title="Edit map points"
-        >
-          <template #body>
-            <div
-              class="flex h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 flex-col overflow-hidden"
-            >
-              <div class="relative min-h-0 flex-1">
-                <AppLocationPointPicker
-                  v-model:latitude="activeLatitude"
-                  v-model:longitude="activeLongitude"
-                  full-height
-                  :markers="mapMarkers"
-                  :readonly="false"
-                  @marker-change-kind="changeMapMarkerKind"
-                  @marker-delete="removeMapMarker"
-                  @marker-move="moveMapMarker"
-                  @marker-rename="renameMapMarker"
-                  @marker-set-general="setMapMarkerAsGeneral"
-                  @picked="handleMapPick"
-                >
-                  <template #actions>
-                    <div class="flex items-center gap-1.5">
-                      <UButton
-                        :class="mapPointActionButtonClass"
-                        color="neutral"
-                        icon="i-lucide-car"
-                        label="+ Parking"
-                        size="xs"
-                        type="button"
-                        :variant="
-                          pendingPointKind === 'parking' ? 'solid' : 'subtle'
-                        "
-                        @click="startAddingCoordinatePoint('parking')"
-                      />
-                      <UButton
-                        :class="mapPointActionButtonClass"
-                        color="neutral"
-                        icon="i-lucide-door-open"
-                        label="+ Entrance"
-                        size="xs"
-                        type="button"
-                        :variant="
-                          pendingPointKind === 'entrance' ? 'solid' : 'subtle'
-                        "
-                        @click="startAddingCoordinatePoint('entrance')"
-                      />
-                      <UDropdownMenu
-                        :content="{ align: 'start' }"
-                        :items="poiDropdownItems"
-                        size="sm"
-                        :ui="{
-                          content:
-                            'max-h-[min(20rem,calc(100dvh-8rem))] overflow-y-auto',
-                        }"
-                        @update:open="
-                          $event &&
-                          ((activePointId = null), (pendingPointKind = null))
-                        "
-                      >
-                        <UButton
-                          :class="mapPointActionButtonClass"
-                          color="neutral"
-                          icon="i-lucide-map-pinned"
-                          label="+ POI"
-                          size="xs"
-                          trailing-icon="i-lucide-chevron-down"
-                          type="button"
-                          :variant="isPoiAddMode ? 'solid' : 'subtle'"
-                        />
-                      </UDropdownMenu>
-                    </div>
-                  </template>
-                </AppLocationPointPicker>
-              </div>
-            </div>
-          </template>
-        </UModal>
+          </UFormField>
+        </div>
 
         <UModal
           v-if="!readonly"
