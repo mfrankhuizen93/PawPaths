@@ -1,7 +1,8 @@
 <script lang="ts" setup>
-import type { GeoJSONSource, Map, MapMouseEvent } from "maplibre-gl";
+import type { GeoJSONSource, Map, MapMouseEvent, Marker } from "maplibre-gl";
 import type { GeocodeResult } from "#shared/types/geo";
 import type { LocationCoordinateKind } from "#shared/types/locations";
+import { getLocationPointTypeConfig } from "#shared/utils/location-coordinate-points";
 
 type PickerMarker = {
   id: string;
@@ -40,6 +41,7 @@ const emit = defineEmits<{
 const config = useRuntimeConfig();
 const mapContainer = ref<HTMLElement | null>(null);
 const map = shallowRef<Map | null>(null);
+const markerInstances = new Map<string, Marker>();
 const isReady = ref(false);
 const contextMarker = ref<{
   id: string;
@@ -52,7 +54,6 @@ const mapStyle =
 const selectionLayerIds = [
   "pawpaths-location-selection",
   "pawpaths-location-selection-halo",
-  "pawpaths-location-selection-glyph",
 ] as const;
 const pointKindOptions = [
   { label: "Entrance", value: "entrance" },
@@ -189,6 +190,7 @@ function getSelectionSource() {
 
 function syncSelection() {
   getSelectionSource()?.setData(getSelectionFeatureCollection());
+  void syncSelectionMarkers();
 }
 
 function fitMarkersToView() {
@@ -327,65 +329,6 @@ function addSelectionLayer() {
   });
 
   map.value.addLayer({
-    id: "pawpaths-location-selection-glyph",
-    type: "symbol",
-    source: "pawpaths-location-selection",
-    layout: {
-      "text-field": [
-        "match",
-        ["get", "kind"],
-        "general",
-        "+",
-        "parking",
-        "P",
-        "poi",
-        "i",
-        "entrance",
-        "E",
-        "water",
-        "W",
-        "swimming",
-        "S",
-        "dog-playground",
-        "D",
-        "off-leash-area",
-        "L",
-        "bench",
-        "B",
-        "toilet",
-        "T",
-        "cafe",
-        "C",
-        "viewpoint",
-        "V",
-        "shade",
-        "H",
-        "waste-bin",
-        "R",
-        "rest-area",
-        "R",
-        "hazard",
-        "!",
-        "livestock",
-        "F",
-        "photo-spot",
-        "O",
-        "?",
-      ],
-      "text-size": 11,
-      "text-font": ["Metropolis Bold"],
-      "text-anchor": "center",
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
-    paint: {
-      "text-color": "#ffffff",
-      "text-halo-color": "#111827",
-      "text-halo-width": 1.25,
-    },
-  });
-
-  map.value.addLayer({
     id: "pawpaths-location-selection-label",
     type: "symbol",
     source: "pawpaths-location-selection",
@@ -402,6 +345,52 @@ function addSelectionLayer() {
       "text-halo-width": 2,
     },
   });
+}
+
+function makeSelectionMarkerElement(marker: PickerMarker) {
+  const meta = getLocationPointTypeConfig(marker.kind);
+  const element = document.createElement("button");
+  const icon = document.createElement("span");
+
+  element.type = "button";
+  element.className = "pawpaths-selection-marker";
+  element.style.setProperty("--point-color", meta.color);
+  element.style.setProperty("--point-text-color", meta.textColor);
+  element.setAttribute("aria-label", `${marker.label}, ${meta.label}`);
+
+  icon.className = meta.icon;
+  element.appendChild(icon);
+  element.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  return element;
+}
+
+async function syncSelectionMarkers() {
+  const activeMap = map.value;
+  if (!activeMap || !activeMap.getCanvas()) return;
+
+  const maplibregl = await import("maplibre-gl");
+
+  for (const marker of markerInstances.values()) marker.remove();
+  markerInstances.clear();
+
+  for (const marker of props.markers ?? []) {
+    if (!Number.isFinite(marker.latitude) || !Number.isFinite(marker.longitude)) {
+      continue;
+    }
+
+    markerInstances.set(
+      marker.id,
+      new maplibregl.Marker({
+        element: makeSelectionMarkerElement(marker),
+      })
+        .setLngLat([marker.longitude as number, marker.latitude as number])
+        .addTo(activeMap),
+    );
+  }
 }
 
 function getMarkerFromFeature(feature: GeoJSON.Feature | undefined): {
@@ -582,6 +571,7 @@ onMounted(async () => {
 
   map.value.on("load", () => {
     addSelectionLayer();
+    void syncSelectionMarkers();
     isReady.value = true;
     if (props.readonly) {
       fitMarkersToView();
@@ -624,7 +614,11 @@ watch(
   },
 );
 
-onBeforeUnmount(() => map.value?.remove());
+onBeforeUnmount(() => {
+  for (const marker of markerInstances.values()) marker.remove();
+  markerInstances.clear();
+  map.value?.remove();
+});
 </script>
 
 <template>
@@ -674,3 +668,24 @@ onBeforeUnmount(() => map.value?.remove());
     </div>
   </UContextMenu>
 </template>
+
+<style scoped>
+:deep(.pawpaths-selection-marker) {
+  align-items: center;
+  background: var(--point-color);
+  border: 2px solid rgb(255 255 255 / 0.96);
+  border-radius: 9999px;
+  box-shadow: 0 10px 22px rgb(15 23 42 / 0.24);
+  color: var(--point-text-color);
+  cursor: pointer;
+  display: grid;
+  height: 34px;
+  justify-content: center;
+  place-items: center;
+  width: 34px;
+}
+
+:deep(.pawpaths-selection-marker span) {
+  font-size: 18px;
+}
+</style>

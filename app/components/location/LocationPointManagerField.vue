@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import type { LocationCoordinatePoint } from "#shared/types/locations";
 import {
+  getLocationPointCustomLabel,
+  getLocationPointDefaultLabel,
+  getLocationPointDisplayLabel,
   getLocationPointTypeConfig,
+  isLocationPointNameRequired,
   locationPointTypeOptions,
   type LocationPointType,
 } from "#shared/utils/location-coordinate-points";
@@ -68,10 +72,11 @@ const generalPoint = computed<LocationCoordinatePoint>(() => ({
 }));
 const canSaveForm = computed(
   () =>
-    form.name.trim().length > 0 &&
+    (!isLocationPointNameRequired(form.type) || form.name.trim().length > 0) &&
     Boolean(form.type) &&
     (state.value.name === "editing" || Boolean(activeCoordinates.value)),
 );
+const isNameRequired = computed(() => isLocationPointNameRequired(form.type));
 const mapInstruction = computed(() => {
   if (state.value.name === "adding" && !state.value.coordinates) {
     return "Move the map to the spot, then choose Place here.";
@@ -128,7 +133,10 @@ const mapMarkers = computed(() => {
         return { ...point, ...state.value.draft };
       }
 
-      return point;
+      return {
+        ...point,
+        label: getLocationPointDisplayLabel(point),
+      };
     }),
   ];
 
@@ -136,7 +144,7 @@ const mapMarkers = computed(() => {
     markers.push({
       id: "temporary-point",
       kind: form.type,
-      label: form.name.trim() || "New location",
+      label: form.name.trim() || getLocationPointDefaultLabel(form.type),
       ...state.value.coordinates,
     });
   }
@@ -191,7 +199,7 @@ function startEditing(point: LocationCoordinatePoint) {
 
   state.value = { name: "editing", id: point.id ?? "" };
   selectedPointId.value = point.id ?? null;
-  form.name = point.label;
+  form.name = getLocationPointCustomLabel(point);
   form.type = point.kind as LocationPointType;
 }
 
@@ -254,7 +262,7 @@ function saveForm() {
   if (state.value.name === "adding" && state.value.coordinates) {
     const point: LocationCoordinatePoint = {
       id: createPointId(),
-      label: form.name.trim(),
+      label: form.name.trim() || getLocationPointDefaultLabel(form.type),
       kind: form.type,
       ...state.value.coordinates,
     };
@@ -266,7 +274,11 @@ function saveForm() {
   if (state.value.name === "editing") {
     points.value = points.value.map((point) =>
       point.id === state.value.id
-        ? { ...point, label: form.name.trim(), kind: form.type }
+        ? {
+            ...point,
+            label: form.name.trim() || getLocationPointDefaultLabel(form.type),
+            kind: form.type,
+          }
         : point,
     );
     cancelState();
@@ -474,13 +486,20 @@ watch(
       class="rounded-md border border-default bg-default p-3"
     >
       <form class="flex flex-col gap-4" @submit.prevent="saveForm">
-        <UFormField label="Name" required>
+        <UFormField
+          :label="isNameRequired ? 'Name' : 'Custom name'"
+          :required="isNameRequired"
+        >
           <UInput
             v-model="form.name"
             autofocus
             class="w-full"
-            placeholder="Parking near main entrance"
-            required
+            :placeholder="
+              isNameRequired
+                ? 'Photo spot near the bridge'
+                : `Optional, otherwise ${getLocationPointDefaultLabel(form.type)}`
+            "
+            :required="isNameRequired"
           />
         </UFormField>
 
@@ -584,7 +603,7 @@ watch(
             </span>
             <span class="min-w-0 flex-1">
               <span class="block truncate font-medium text-highlighted">
-                {{ point.label }}
+                {{ getLocationPointDisplayLabel(point) }}
               </span>
               <span class="text-muted block text-sm">
                 {{ getPointMeta(point).label }}

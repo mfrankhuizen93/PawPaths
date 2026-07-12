@@ -135,3 +135,30 @@ export function getLocationPointTypeConfig(
     locationPointTypeConfig.other
   );
 }
+
+export function isLocationPointNameRequired(value: LocationCoordinateKind | string) {
+  return value === "poi" || value === "other";
+}
+
+export function getLocationPointDefaultLabel(
+  value: LocationCoordinateKind | string,
+) {
+  return getLocationPointTypeConfig(value).label;
+}
+
+export function getLocationPointDisplayLabel(point: {
+  kind: LocationCoordinateKind | string;
+  label?: string | null;
+}) {
+  return point.label?.trim() || getLocationPointDefaultLabel(point.kind);
+}
+
+export function getLocationPointCustomLabel(point: {
+  kind: LocationCoordinateKind | string;
+  label?: string | null;
+}) {
+  const label = point.label?.trim() ?? "";
+  const defaultLabel = getLocationPointDefaultLabel(point.kind);
+
+  return label && label !== defaultLabel ? label : "";
+}

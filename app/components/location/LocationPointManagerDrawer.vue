@@ -6,7 +6,11 @@ import type {
   LocationListItem,
 } from "#shared/types/locations";
 import {
+  getLocationPointCustomLabel,
+  getLocationPointDefaultLabel,
+  getLocationPointDisplayLabel,
   getLocationPointTypeConfig,
+  isLocationPointNameRequired,
   locationPointTypeOptions,
   type LocationPointType,
 } from "#shared/utils/location-coordinate-points";
@@ -77,10 +81,11 @@ const activeCoordinates = computed<Coordinates | null>(() => {
 });
 const canSaveForm = computed(
   () =>
-    form.name.trim().length > 0 &&
+    (!isLocationPointNameRequired(form.type) || form.name.trim().length > 0) &&
     Boolean(form.type) &&
     (state.value.name === "editing" || Boolean(activeCoordinates.value)),
 );
+const isNameRequired = computed(() => isLocationPointNameRequired(form.type));
 const isDirty = computed(() => state.value.name !== "viewing");
 const mapInstruction = computed(() => {
   if (state.value.name === "adding" && !state.value.coordinates) {
@@ -235,7 +240,7 @@ function startAdding() {
 function startEditing(point: LocationCoordinatePoint) {
   state.value = { name: "editing", id: point.id ?? "" };
   selectedPointId.value = point.id ?? null;
-  form.name = point.label;
+  form.name = getLocationPointCustomLabel(point);
   form.type = point.kind as LocationPointType;
   syncMarkers();
 }
@@ -284,7 +289,7 @@ async function saveForm() {
   if (state.value.name === "adding" && state.value.coordinates) {
     const point: LocationCoordinatePoint = {
       id: createPointId(),
-      label: form.name.trim(),
+      label: form.name.trim() || getLocationPointDefaultLabel(form.type),
       kind: form.type,
       ...state.value.coordinates,
     };
@@ -299,7 +304,11 @@ async function saveForm() {
   if (state.value.name === "editing") {
     const nextPoints = localPoints.value.map((point) =>
       point.id === state.value.id
-        ? { ...point, label: form.name.trim(), kind: form.type }
+        ? {
+            ...point,
+            label: form.name.trim() || getLocationPointDefaultLabel(form.type),
+            kind: form.type,
+          }
         : point,
     );
     await savePoints(nextPoints, "Location point updated");
@@ -398,7 +407,10 @@ function makeMarkerElement(point: LocationCoordinatePoint, temporary = false) {
   ].join(" ");
   element.style.setProperty("--point-color", meta.color);
   element.style.setProperty("--point-text-color", meta.textColor);
-  element.setAttribute("aria-label", `${point.label}, ${meta.label}`);
+  element.setAttribute(
+    "aria-label",
+    `${getLocationPointDisplayLabel(point)}, ${meta.label}`,
+  );
 
   icon.className = meta.icon;
   element.appendChild(icon);
@@ -454,7 +466,7 @@ async function syncMarkers() {
     const temporaryPoint: LocationCoordinatePoint = {
       id,
       kind: form.type,
-      label: form.name.trim() || "New location",
+      label: form.name.trim() || getLocationPointDefaultLabel(form.type),
       ...activeCoordinates.value,
     };
     const element = makeMarkerElement(temporaryPoint, true);
@@ -716,7 +728,9 @@ onBeforeUnmount(() => {
               <span :class="selectedPointMeta.icon" class="text-xl" />
             </span>
             <div class="min-w-0 flex-1">
-              <p class="font-semibold">{{ selectedPoint.label }}</p>
+              <p class="font-semibold">
+                {{ getLocationPointDisplayLabel(selectedPoint) }}
+              </p>
               <p class="text-muted text-sm">{{ selectedPointMeta?.label }}</p>
             </div>
           </div>
@@ -751,13 +765,20 @@ onBeforeUnmount(() => {
         class="rounded-md border border-default bg-default p-3"
       >
         <form class="flex flex-col gap-4" @submit.prevent="saveForm">
-          <UFormField label="Name" required>
+          <UFormField
+            :label="isNameRequired ? 'Name' : 'Custom name'"
+            :required="isNameRequired"
+          >
             <UInput
               v-model="form.name"
               autofocus
               class="w-full"
-              placeholder="Parking near main entrance"
-              required
+              :placeholder="
+                isNameRequired
+                  ? 'Photo spot near the bridge'
+                  : `Optional, otherwise ${getLocationPointDefaultLabel(form.type)}`
+              "
+              :required="isNameRequired"
             />
           </UFormField>
 
@@ -900,7 +921,7 @@ onBeforeUnmount(() => {
                 </span>
                 <span class="min-w-0 flex-1">
                   <span class="block truncate font-medium text-highlighted">
-                    {{ point.label }}
+                    {{ getLocationPointDisplayLabel(point) }}
                   </span>
                   <span class="text-muted block text-sm">
                     {{ getLocationPointTypeConfig(point.kind).label }}
