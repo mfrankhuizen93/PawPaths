@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import type {
   EditableLocationFields,
+  LocationCoordinatePoint,
   LocationListItem,
   LocationReview,
   LocationsResponse,
@@ -9,6 +10,7 @@ import { useExploreQuery } from "~/composables/states";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
+import LocationPointManagerDrawer from "~/components/location/LocationPointManagerDrawer.vue";
 import {
   canDeleteLocation,
   canSuggestLocationUnavailable,
@@ -93,6 +95,7 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
 };
 const activeFilters = useExploreQuery();
 const filterDrawerOpen = ref(false);
+const locationPointManagerOpen = ref(false);
 
 const isSubmittingChange = ref(false);
 const isSubmittingReview = ref(false);
@@ -155,6 +158,13 @@ const hasUnsavedLocationChanges = computed(
 const currentRole = computed(() => user.value?.role ?? null);
 const locationMenuItems = computed(() => [
   [
+    {
+      label: "Manage points",
+      icon: "i-lucide-map-pinned",
+      onSelect() {
+        openLocationPointManager();
+      },
+    },
     {
       label: "Edit",
       icon: "i-lucide-pencil",
@@ -272,6 +282,10 @@ function openAddLocation() {
   } else {
     authDrawer.show("add");
   }
+}
+
+function openLocationPointManager() {
+  locationPointManagerOpen.value = true;
 }
 
 function getErrorMessage(errorValue: unknown) {
@@ -474,6 +488,25 @@ function selectLocation(location: LocationListItem) {
   selectedLocationError.value = "";
   syncChangeForm(location);
   replaceLocationQuery(location.slug);
+}
+
+function updateSelectedLocationPoints(points: LocationCoordinatePoint[]) {
+  if (!selectedLocation.value) return;
+
+  selectedLocation.value = {
+    ...selectedLocation.value,
+    coordinatePoints: points.map((point) => ({ ...point })),
+  };
+  locations.value = locations.value.map((location) =>
+    location.id === selectedLocation.value?.id
+      ? {
+          ...location,
+          coordinatePoints: points.map((point) => ({ ...point })),
+        }
+      : location,
+  );
+  syncChangeForm(selectedLocation.value);
+  changeBaseline.value = JSON.stringify(changeForm);
 }
 
 function getTypeMeta(type: string) {
@@ -681,6 +714,13 @@ watch(
               variant="soft"
               @click="requestSuggestEdit"
             />
+            <UButton
+              color="neutral"
+              icon="i-lucide-map-pinned"
+              label="Manage points"
+              variant="soft"
+              @click="openLocationPointManager"
+            />
           </div>
 
           <div
@@ -859,6 +899,13 @@ watch(
         </AppDrawerActions>
       </template>
     </UModal>
+
+    <LocationPointManagerDrawer
+      v-model:open="locationPointManagerOpen"
+      :location="selectedLocation"
+      :signed-in="isSignedIn"
+      @saved="updateSelectedLocationPoints"
+    />
 
     <LocationAddDrawer />
   </div>
