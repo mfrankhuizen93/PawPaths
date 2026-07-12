@@ -35,6 +35,7 @@ const props = withDefaults(
 const points = defineModel<LocationCoordinatePoint[]>({ required: true });
 const latitude = defineModel<number | null>("latitude", { default: null });
 const longitude = defineModel<number | null>("longitude", { default: null });
+const pointPicker = ref<{ pickMapCenter: () => void } | null>(null);
 const selectedPointId = ref<string | null>("general");
 const state = ref<ManagerState>({ name: "viewing" });
 const form = reactive({
@@ -73,13 +74,13 @@ const canSaveForm = computed(
 );
 const mapInstruction = computed(() => {
   if (state.value.name === "adding" && !state.value.coordinates) {
-    return "Tap the map to place the location.";
+    return "Move the map to the spot, then choose Place here.";
   }
   if (state.value.name === "adding") {
-    return "Adjust the marker by tapping another spot, then save.";
+    return "Adjust the map or marker, then save.";
   }
   if (state.value.name === "moving") {
-    return "Tap a new position, then choose Done.";
+    return "Move the map, choose Place here or drag the marker, then choose Done.";
   }
   if (state.value.name === "moving-general") {
     if (state.value.draft) {
@@ -87,25 +88,11 @@ const mapInstruction = computed(() => {
     }
 
     return hasGeneralCoordinates.value
-      ? "Tap the map to move the main location, then choose Done."
-      : "Tap the map to place the main location.";
+      ? "Move the map to the main location, then choose Place here."
+      : "Move the map to the main location, then choose Place here.";
   }
 
   return "";
-});
-const activeLatitude = computed({
-  get: () => activeCoordinates.value?.latitude ?? null,
-  set: (value: number | null) => {
-    if (value === null) return;
-    setActiveCoordinates({ latitude: value, longitude: activeLongitude.value });
-  },
-});
-const activeLongitude = computed({
-  get: () => activeCoordinates.value?.longitude ?? null,
-  set: (value: number | null) => {
-    if (value === null) return;
-    setActiveCoordinates({ latitude: activeLatitude.value, longitude: value });
-  },
 });
 const mapLatitude = computed({
   get: () => activeCoordinates.value?.latitude ?? latitude.value,
@@ -255,6 +242,10 @@ function setActiveCoordinates(coordinates: {
 
 function handleMapPick(coordinates: Coordinates) {
   setActiveCoordinates(coordinates);
+}
+
+function placeAtMapCenter() {
+  pointPicker.value?.pickMapCenter();
 }
 
 function saveForm() {
@@ -426,6 +417,7 @@ watch(
 
       <div class="relative">
         <AppLocationPointPicker
+          ref="pointPicker"
           v-model:latitude="mapLatitude"
           v-model:longitude="mapLongitude"
           :markers="mapMarkers"
@@ -442,6 +434,20 @@ watch(
           class="absolute right-3 bottom-3 left-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-default/70 bg-default/95 p-2 shadow-lg backdrop-blur"
         >
           <span class="text-sm font-medium">{{ mapInstruction }}</span>
+          <UButton
+            v-if="
+              state.name === 'adding' ||
+              state.name === 'moving' ||
+              state.name === 'moving-general'
+            "
+            color="neutral"
+            icon="i-lucide-crosshair"
+            label="Place here"
+            size="sm"
+            type="button"
+            variant="soft"
+            @click="placeAtMapCenter"
+          />
           <UButton
             color="neutral"
             label="Cancel"
@@ -501,7 +507,12 @@ watch(
               >
                 <span :class="typeOption.icon" />
               </span>
-              <span>{{ typeOption.label }}</span>
+              <span class="min-w-0 flex-1">{{ typeOption.label }}</span>
+              <UIcon
+                v-if="form.type === typeOption.value"
+                name="i-lucide-check"
+                class="size-4 shrink-0"
+              />
             </button>
           </div>
         </UFormField>
@@ -579,6 +590,11 @@ watch(
                 {{ getPointMeta(point).label }}
               </span>
             </span>
+            <UIcon
+              v-if="point.id === selectedPointId"
+              name="i-lucide-check-circle-2"
+              class="text-primary size-5 shrink-0"
+            />
           </button>
           <UDropdownMenu :items="getPointMenuItems(point)">
             <UButton

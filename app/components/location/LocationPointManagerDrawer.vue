@@ -84,13 +84,13 @@ const canSaveForm = computed(
 const isDirty = computed(() => state.value.name !== "viewing");
 const mapInstruction = computed(() => {
   if (state.value.name === "adding" && !state.value.coordinates) {
-    return "Tap the map to place the location.";
+    return "Move the map to the spot, then choose Place here.";
   }
   if (state.value.name === "adding") {
-    return "Adjust the marker by tapping another spot, then save.";
+    return "Adjust the map or marker, then save.";
   }
   if (state.value.name === "moving") {
-    return "Drag the selected marker or tap a new position.";
+    return "Move the map, choose Place here or drag the marker, then choose Done.";
   }
 
   return "";
@@ -339,38 +339,6 @@ function handleMapClick(event: MapMouseEvent) {
   });
 
   applyMapCoordinates(coordinates);
-}
-
-function handleMapContainerClick(event: MouseEvent) {
-  handleMapPointerEvent(event);
-}
-
-function handleMapPointerUp(event: PointerEvent) {
-  handleMapPointerEvent(event);
-}
-
-function handleMapPointerEvent(event: MouseEvent | PointerEvent) {
-  if (state.value.name !== "adding" && state.value.name !== "moving") return;
-
-  const activeMap = map.value;
-  const container = mapContainer.value;
-  if (!activeMap || !container) return;
-  if (event.target instanceof HTMLElement && event.target.closest("button")) {
-    return;
-  }
-
-  const rect = container.getBoundingClientRect();
-  const lngLat = activeMap.unproject([
-    event.clientX - rect.left,
-    event.clientY - rect.top,
-  ]);
-
-  applyMapCoordinates(
-    roundCoordinates({
-      latitude: lngLat.lat,
-      longitude: lngLat.lng,
-    }),
-  );
 }
 
 function applyMapCoordinates(coordinates: Coordinates) {
@@ -696,24 +664,22 @@ onBeforeUnmount(() => {
           <div
             ref="mapContainer"
             class="size-full"
-            @click="handleMapContainerClick"
-            @pointerup.capture="handleMapPointerUp"
           />
           <USkeleton v-if="isLoadingMap" class="absolute inset-0 rounded-none" />
-          <div
-            v-if="state.name === 'adding' || state.name === 'moving'"
-            class="absolute inset-0 z-10 cursor-crosshair"
-            aria-label="Place location point on map"
-            role="button"
-            tabindex="0"
-            @click="handleMapContainerClick"
-            @keydown.enter.prevent="placeAtMapCenter"
-          />
           <div
             v-if="mapInstruction"
             class="absolute right-3 bottom-3 left-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-default/70 bg-default/95 p-2 shadow-lg backdrop-blur sm:right-auto sm:bottom-auto sm:max-w-[calc(100%-1.5rem)]"
           >
             <span class="text-sm font-medium">{{ mapInstruction }}</span>
+            <UButton
+              color="neutral"
+              icon="i-lucide-crosshair"
+              label="Place here"
+              size="sm"
+              type="button"
+              variant="soft"
+              @click="placeAtMapCenter"
+            />
             <UButton
               color="neutral"
               label="Cancel"
@@ -818,7 +784,12 @@ onBeforeUnmount(() => {
                 >
                   <span :class="typeOption.icon" />
                 </span>
-                <span class="min-w-0">{{ typeOption.label }}</span>
+                <span class="min-w-0 flex-1">{{ typeOption.label }}</span>
+                <UIcon
+                  v-if="form.type === typeOption.value"
+                  name="i-lucide-check"
+                  class="size-4 shrink-0"
+                />
               </button>
             </div>
           </UFormField>
@@ -935,6 +906,11 @@ onBeforeUnmount(() => {
                     {{ getLocationPointTypeConfig(point.kind).label }}
                   </span>
                 </span>
+                <UIcon
+                  v-if="point.id === selectedPointId"
+                  name="i-lucide-check-circle-2"
+                  class="text-primary size-5 shrink-0"
+                />
               </button>
               <UDropdownMenu :items="getPointMenuItems(point)">
                 <UButton

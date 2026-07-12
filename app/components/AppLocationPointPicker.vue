@@ -52,6 +52,7 @@ const mapStyle =
 const selectionLayerIds = [
   "pawpaths-location-selection",
   "pawpaths-location-selection-halo",
+  "pawpaths-location-selection-glyph",
 ] as const;
 const pointKindOptions = [
   { label: "Entrance", value: "entrance" },
@@ -241,24 +242,6 @@ function setCoordinates(coordinates: [number, number]) {
   emit("picked", { latitude, longitude });
 }
 
-function handleMapContainerPointer(event: MouseEvent | PointerEvent) {
-  if (props.readonly || !map.value || !mapContainer.value) return;
-  if (
-    event.target instanceof HTMLElement &&
-    event.target.closest("[data-map-controls]")
-  ) {
-    return;
-  }
-
-  const rect = mapContainer.value.getBoundingClientRect();
-  const lngLat = map.value.unproject([
-    event.clientX - rect.left,
-    event.clientY - rect.top,
-  ]);
-
-  setCoordinates([lngLat.lng, lngLat.lat]);
-}
-
 function searchAddress(result: GeocodeResult) {
   const coordinates: [number, number] = [result.longitude, result.latitude];
 
@@ -340,6 +323,65 @@ function addSelectionLayer() {
       "circle-stroke-color": "#1f2937",
       "circle-stroke-opacity": 0.22,
       "circle-stroke-width": 1,
+    },
+  });
+
+  map.value.addLayer({
+    id: "pawpaths-location-selection-glyph",
+    type: "symbol",
+    source: "pawpaths-location-selection",
+    layout: {
+      "text-field": [
+        "match",
+        ["get", "kind"],
+        "general",
+        "+",
+        "parking",
+        "P",
+        "poi",
+        "i",
+        "entrance",
+        "E",
+        "water",
+        "W",
+        "swimming",
+        "S",
+        "dog-playground",
+        "D",
+        "off-leash-area",
+        "L",
+        "bench",
+        "B",
+        "toilet",
+        "T",
+        "cafe",
+        "C",
+        "viewpoint",
+        "V",
+        "shade",
+        "H",
+        "waste-bin",
+        "R",
+        "rest-area",
+        "R",
+        "hazard",
+        "!",
+        "livestock",
+        "F",
+        "photo-spot",
+        "O",
+        "?",
+      ],
+      "text-size": 11,
+      "text-font": ["Metropolis Bold"],
+      "text-anchor": "center",
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: {
+      "text-color": "#ffffff",
+      "text-halo-color": "#111827",
+      "text-halo-width": 1.25,
     },
   });
 
@@ -511,6 +553,15 @@ function deleteMarker(marker: {
   contextMarker.value = null;
 }
 
+function pickMapCenter() {
+  const center = map.value?.getCenter();
+  if (!center || props.readonly) return;
+
+  setCoordinates([center.lng, center.lat]);
+}
+
+defineExpose({ pickMapCenter });
+
 onMounted(async () => {
   if (!mapContainer.value) return;
 
@@ -603,21 +654,6 @@ onBeforeUnmount(() => map.value?.remove());
               : 'h-[min(22rem,44dvh)] min-h-64'
         "
         class="w-full"
-        @click="handleMapContainerPointer"
-        @pointerup.capture="handleMapContainerPointer"
-      />
-      <div
-        v-if="!readonly"
-        aria-label="Place point on map"
-        class="absolute inset-0 z-[5] cursor-crosshair"
-        role="button"
-        tabindex="0"
-        @click="handleMapContainerPointer"
-        @keydown.enter.prevent="
-          map &&
-            setCoordinates([map.getCenter().lng, map.getCenter().lat])
-        "
-        @pointerup.capture="handleMapContainerPointer"
       />
       <div
         v-if="!readonly || $slots.actions"
