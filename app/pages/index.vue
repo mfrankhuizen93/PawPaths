@@ -94,6 +94,7 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
 const activeFilters = useExploreQuery();
 const filterDrawerOpen = ref(false);
 const locationPointManagerOpen = ref(false);
+const isOpeningPointManager = ref(false);
 
 const isSubmittingChange = ref(false);
 const isSubmittingReview = ref(false);
@@ -159,8 +160,9 @@ const locationMenuItems = computed(() => [
     {
       label: "Manage points",
       icon: "i-lucide-map-pinned",
+      disabled: isOpeningPointManager.value,
       onSelect() {
-        openLocationPointManager();
+        void openLocationPointManager();
       },
     },
     {
@@ -282,8 +284,20 @@ function openAddLocation() {
   }
 }
 
-function openLocationPointManager() {
-  locationPointManagerOpen.value = true;
+async function openLocationPointManager() {
+  const slug = selectedLocation.value?.slug;
+  if (!slug || isOpeningPointManager.value) return;
+
+  isOpeningPointManager.value = true;
+
+  try {
+    const hasLocation = await openLocationBySlug(slug, { force: true });
+    if (hasLocation) {
+      locationPointManagerOpen.value = true;
+    }
+  } finally {
+    isOpeningPointManager.value = false;
+  }
 }
 
 function getErrorMessage(errorValue: unknown) {
@@ -462,14 +476,14 @@ function replaceLocationQuery(slug: string | null) {
 async function openLocationBySlug(
   slug: string,
   options: { force?: boolean } = {},
-) {
+): Promise<boolean> {
   if (!slug) {
     selectedLocation.value = null;
     selectedLocationError.value = "";
-    return;
+    return false;
   }
 
-  if (!options.force && selectedLocation.value?.slug === slug) return;
+  if (!options.force && selectedLocation.value?.slug === slug) return true;
 
   selectedLocationError.value = "";
 
@@ -477,9 +491,11 @@ async function openLocationBySlug(
     selectedLocation.value = await $fetch<LocationListItem>(
       `/api/locations/${slug}`,
     );
+    return true;
   } catch {
     selectedLocation.value = null;
     selectedLocationError.value = "Location not found";
+    return false;
   }
 }
 
@@ -720,6 +736,7 @@ watch(
               color="neutral"
               icon="i-lucide-map-pinned"
               label="Manage points"
+              :loading="isOpeningPointManager"
               variant="soft"
               @click="openLocationPointManager"
             />
