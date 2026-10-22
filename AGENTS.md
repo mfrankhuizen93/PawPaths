@@ -45,5 +45,8 @@ New branches must use one of these purpose prefixes:
 Keep names short and descriptive, use hyphens between words, and avoid vague
 terms such as `update`, `changes`, or `stuff`.
 
+For work tied to a GitHub issue, put its number immediately after the purpose
+prefix, for example `doc/14-product-architecture` or `bugfix/16-map-coordinates`.
+
 The full guide is normative. If it conflicts with an existing implementation,
 improve the implementation toward the guide without unrelated rewrites.
