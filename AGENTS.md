@@ -1,5 +1,18 @@
 # PawPaths Repository Instructions
 
+Before planning or implementing a change, read the relevant sections of
+[`docs/architecture/PRODUCT_DECISIONS.md`](docs/architecture/PRODUCT_DECISIONS.md)
+for product vision, domain semantics, UX decisions, and current implementation gaps.
+
+Use [GitHub Issues](https://github.com/mfrankhuizen93/PawPaths/issues) for issue
+scope, acceptance criteria, priorities, dependencies, and status. Keep issue
+tracking in GitHub; do not maintain backlog indexes or copies of issue bodies
+in the repository.
+
+Distinguish confirmed decisions from proposed implementation and open questions.
+Do not assume documented target behavior is already implemented. Keep changes
+within the requested issue's scope and preserve the UI guide below as normative.
+
 All UI work in this repository must follow
 [`docs/nuxt-ui-interaction-guide.md`](docs/nuxt-ui-interaction-guide.md).
 
@@ -33,6 +46,9 @@ New branches must use one of these purpose prefixes:
 
 Keep names short and descriptive, use hyphens between words, and avoid vague
 terms such as `update`, `changes`, or `stuff`.
+
+For work tied to a GitHub issue, put its number immediately after the purpose
+prefix, for example `doc/14-product-architecture` or `bugfix/16-map-coordinates`.
 
 The full guide is normative. If it conflicts with an existing implementation,
 improve the implementation toward the guide without unrelated rewrites.
