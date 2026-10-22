@@ -16,7 +16,19 @@ PawPaths helps dog owners discover suitable and attractive walking areas, unders
 
 The primary user goal is: **find a great place to walk my dog, understand whether it suits my needs, and easily get there.** Secondary goals are saving places, tracking visits, writing reviews, and correcting or enriching shared information.
 
-The product is mobile-first, intuitive, accessible, and visually appealing. Dutch labels are part of the product design: **Ontdek**, **Zoeken**, **Mijn plekken**, **Profiel**, **Overzicht**, **Kaart**, **Routes**, **Reviews**, and **Navigeer**.
+The product is mobile-first, intuitive, accessible, visually appealing, and multilingual. Dutch labels are the agreed Dutch UI translations: **Ontdek**, **Zoeken**, **Mijn plekken**, **Profiel**, **Overzicht**, **Kaart**, **Routes**, **Reviews**, and **Navigeer**. These identify destinations and actions; other supported UI languages use their corresponding translated labels.
+
+### Languages and translation
+
+**Confirmed product direction:** serve PawPaths in multiple languages. Treat application UI translation and location-content translation as separate concerns. The exact supported languages and default language remain open.
+
+- **UI text:** use maintained translations for labels, navigation, buttons, form help, validation messages, and loading/empty/error states. Resolve them through translation keys for the selected UI language rather than automatically translating rendered UI at runtime. The Dutch labels above describe the Dutch version, not a requirement to show Dutch labels in every language.
+- **Location content:** preserve text in the language it was provided in, including imported and community-submitted text. Automatically translate that content for readers in other supported languages without replacing the original. The original text remains the source for subsequent translations and moderation.
+- **Structured location facts:** coordinates, identifiers, URLs, and attribute values retain their meaning across languages. Translate their display labels rather than creating language-specific copies of the underlying facts. For example, the same parking point has a translated point-kind label, while its contributor-provided description retains its original text and can have an automatic translation.
+
+**Proposed implementation:** use locale message catalogs for UI text and a separate translation service for location content. Associate original text with its source language, and associate generated translations with a target language and source revision. Allow source-language metadata per text field or contribution where content within one location uses different languages; do not assume one source language for an entire location. Cache or store generated translations separately and refresh them when the source changes. Display the original while a translation is unavailable or fails, identify automatically translated text, and let readers view the original. Preserve proper place names unless an established localized name is available.
+
+**Open questions:** initial languages and default locale; language selection and persistence; translation provider, cost, privacy, and quality controls; language detection and correction for unknown or mixed-language source text; translation timing and storage; translated search; and which text fields, including reviews, receive automatic translation. These implementation choices do not change the direction of preserving original location text and providing automatic translations.
 
 ## 2. Decision vocabulary
 
@@ -31,7 +43,7 @@ Unless a subsection is explicitly marked otherwise, sections 1 and 3–11 state 
 
 ### Confirmed decisions
 
-The four primary destinations are:
+The four primary destinations, shown here with their Dutch UI labels, are:
 
 1. **Ontdek** — discovery-first homepage with inspirational locations.
 2. **Zoeken** — search, filters, and map exploration.
@@ -210,7 +222,7 @@ Keeping edits in memory allows retries without persistent drafts. Confirming dis
 - Reviews are currently posted directly to a location endpoint and rendered in root-page detail state; their placement should align with the detail Reviews tab without expanding scope.
 - Contributions are available to maintainers/admins, but profile-facing contribution history and concurrent comparison are not complete.
 - Favorites and visited state are not represented in the inspected shared location types or visible API surface.
-- Existing map and form labels are mostly English while agreed primary navigation labels are Dutch; this is a product/content consistency concern, not a request to translate the whole application in this documentation task.
+- Existing map and form labels are mostly hard-coded English while the agreed Dutch navigation labels are documented. `package.json` and `nuxt.config.ts` do not configure an application localization system, and the shared location types do not represent source languages or generated translations. The multilingual UI and automatic location-content translations are target behavior, not implemented by this documentation change.
 - The current shared form uses Details, Map, Photos, and Links, with Features or Reviews by mode. The target Overzicht, Kaart, Routes, Reviews arrangement and inline edits must be reconciled with the guide's shared form requirements in issue #27.
 - The current reverse lookup prefers some named area features but can fall back to a street; it does not yet establish reliable area matching, confidence, or provider resilience.
 - Current pending payloads are mutable during moderation, and full-payload approval can overwrite fields changed by another approved contribution. Immutable original snapshots and conflict comparison are target behavior.
@@ -243,6 +255,7 @@ These paths support the observations above and give implementation issues a star
 - Persistent draft saving for unfinished create/edit flows.
 - A long, mandatory multi-step wizard for initial location creation.
 - Putting the map inside the detail overview instead of its own tab.
+- Replacing original location content with an automatic translation or storing translated UI labels as the identity of structured location facts.
 
 ## 14. Technical constraints
 
@@ -264,17 +277,18 @@ These paths support the observations above and give implementation issues a star
 7. Persistence model for saved and visited states and whether visit metadata is needed.
 8. Route data model and whether route geometry is stored internally or linked externally.
 9. Review moderation, editing, and abuse controls within the existing review scope.
-10. Target locales and translation strategy beyond the agreed Dutch navigation labels.
+10. Initial supported UI/content languages, default locale, and language preference persistence. Multilingual UI, maintained UI-label translations, preservation of original location text, and automatic location-content translation are established product direction; the provider, source-language metadata, revision tracking, translation timing/storage, field coverage, and search behavior remain open (section 1).
 11. How the short map-first creation and inline-edit journeys reuse `AppLocationForm` and reconcile target detail tabs with the current UI guide, without introducing nested tabs or duplicate forms.
 12. Whether creation can begin before sign-in, or retains the guide's authentication-first Add behavior; both must preserve intent and unsaved values through authentication or cancellation.
 
 ### Tradeoffs and decision boundaries
 
-| Choice                                    | Benefit                                                                | Cost or unresolved boundary                                                                                                     |
-| ----------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Incremental routes and shared drawers     | Preserves existing links, auth continuation, and form reuse.           | The discovery homepage and target detail composition require an explicit transition rather than an immediate route replacement. |
-| Minimal creation requirements             | Reduces the effort needed to propose a useful area.                    | Incomplete attributes remain unknown; city validation and optional enrichment must be aligned before delivery.                  |
-| Explicit point placement and confirmation | Makes the intended navigation/edit coordinate understandable.          | Adds a confirmation step; point identity, precision, and retry behavior need end-to-end validation.                             |
-| Parallel moderated contributions          | Allows independent corrections while protecting published information. | Requires retained history and conflict comparison; basic pending statuses alone are insufficient.                               |
-| Geodata suggestions with manual fallback  | Can improve names without making providers a prerequisite.             | Matching quality, attribution, service policy, latency, and cost must be evaluated before selecting a provider.                 |
-| No persistent unfinished drafts           | Keeps the initial create/edit lifecycle small.                         | Reloads and deliberate discard lose unfinished work; exit warnings and in-memory retry handling matter.                         |
+| Choice                                       | Benefit                                                                                   | Cost or unresolved boundary                                                                                                     |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Incremental routes and shared drawers        | Preserves existing links, auth continuation, and form reuse.                              | The discovery homepage and target detail composition require an explicit transition rather than an immediate route replacement. |
+| Minimal creation requirements                | Reduces the effort needed to propose a useful area.                                       | Incomplete attributes remain unknown; city validation and optional enrichment must be aligned before delivery.                  |
+| Explicit point placement and confirmation    | Makes the intended navigation/edit coordinate understandable.                             | Adds a confirmation step; point identity, precision, and retry behavior need end-to-end validation.                             |
+| Parallel moderated contributions             | Allows independent corrections while protecting published information.                    | Requires retained history and conflict comparison; basic pending statuses alone are insufficient.                               |
+| Geodata suggestions with manual fallback     | Can improve names without making providers a prerequisite.                                | Matching quality, attribution, service policy, latency, and cost must be evaluated before selecting a provider.                 |
+| No persistent unfinished drafts              | Keeps the initial create/edit lifecycle small.                                            | Reloads and deliberate discard lose unfinished work; exit warnings and in-memory retry handling matter.                         |
+| Separate UI and location-content translation | Gives UI text maintained wording while preserving each location text's original language. | Automatic content translation needs source tracking, quality controls, fallback behavior, and a provider/storage decision.      |
