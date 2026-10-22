@@ -422,7 +422,9 @@ function buildRatingFieldsStage(): PipelineStage {
   };
 }
 
-function buildProjection(options: { compact?: boolean } = {}): MongoFilter {
+function buildProjection(
+  options: { compact?: boolean; includeReviews?: boolean } = {},
+): MongoFilter {
   const sharedProjection: MongoFilter = {
     _id: 1,
     id: { $toString: "$_id" },
@@ -438,17 +440,15 @@ function buildProjection(options: { compact?: boolean } = {}): MongoFilter {
     characteristics: 1,
     coordinatePoints: 1,
     warnings: { $ifNull: ["$warnings", []] },
+    photos: options.compact
+      ? { $literal: [] }
+      : { $slice: [{ $ifNull: ["$photos", []] }, 1] },
     reviewCount: 1,
     ratingCount: 1,
     averageRating: 1,
   };
 
-  if (options.compact) {
-    return {
-      ...sharedProjection,
-      photos: { $literal: [] },
-    };
-  }
+  if (!options.includeReviews) return sharedProjection;
 
   return {
     ...sharedProjection,
@@ -626,7 +626,10 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   const isGeoSearch =
     !boundsFilter && lat !== null && lng !== null && radiusKm !== null;
   const minRating = toRating(query.minRating);
-  const projection = buildProjection({ compact: isViewportSearch });
+  const projection = buildProjection({
+    compact: isViewportSearch,
+    includeReviews,
+  });
   const ratingFieldsStage = buildRatingFieldsStage();
 
   const pipeline: PipelineStage[] = [];
