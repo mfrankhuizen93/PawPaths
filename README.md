@@ -1,4 +1,6 @@
-# Nuxt Minimal Starter
+# PawPaths
+
+Product and UX decisions are documented in [PRODUCT_DECISIONS.md](docs/architecture/PRODUCT_DECISIONS.md), with delivery dependencies in the [architecture backlog](docs/architecture/BACKLOG.md). UI implementation follows the [Nuxt UI interaction guide](docs/nuxt-ui-interaction-guide.md).
 
 Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
 

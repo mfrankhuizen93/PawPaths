@@ -6,6 +6,10 @@
 
 This document is the central source of truth for PawPaths. It records agreed behavior without implying that unimplemented behavior already exists. Technical recommendations are explicitly marked as proposed, and unresolved choices remain open questions.
 
+Delivery is tracked in [Issue #14](https://github.com/mfrankhuizen93/PawPaths/issues/14) and the [backlog index](./BACKLOG.md). This document defines the intended product, not a release checklist. Current implementation observations below were checked against repository source on 2026-10-22; they do not establish deployed behavior.
+
+The [Nuxt UI interaction guide](../nuxt-ui-interaction-guide.md) remains normative for UI implementation. The discovery homepage, map-first creation journey, inline editing, and detail tabs below describe the target product. They do not authorize replacing the guide's shared `AppLocationForm`, drawer-first interactions, or authentication continuation. Reconcile those differences explicitly in the linked delivery issues before implementing them; route composition and authentication timing remain open in section 15.
+
 ## 1. Product vision
 
 PawPaths helps dog owners discover suitable and attractive walking areas, understand their characteristics, navigate to them, and contribute reliable information to the community.
@@ -19,6 +23,9 @@ The product is mobile-first, intuitive, accessible, and visually appealing. Dutc
 - **Confirmed decision:** agreed product behavior that future implementation should preserve.
 - **Proposed implementation:** a technical or UX recommendation that still needs validation during delivery.
 - **Open question:** an unresolved choice; do not treat it as architecture until decided.
+- **Current implementation:** an observation supported by the linked source, not proof that the target behavior is complete.
+
+Unless a subsection is explicitly marked otherwise, sections 1 and 3–11 state **confirmed product decisions**. Proposed mechanisms are not approved schema or provider contracts. Sections 12–16 separately record current gaps, rejected alternatives, constraints, unresolved choices, and delivery order.
 
 ## 3. Information architecture and navigation
 
@@ -77,6 +84,8 @@ An area may have multiple entrances and parking locations. Navigeer first presen
 
 Only a map position is required to begin. A recognizable name is required to submit. Additional attributes and points are optional. There is no persistent draft saving; leaving with unsaved changes warns the user.
 
+**Current implementation:** signed-out Add first opens shared authentication and continues into the add drawer. The current form and server also require a city. The target journey's later sign-in and smaller required field set are not implemented; issue [#20](https://github.com/mfrankhuizen93/PawPaths/issues/20) must reconcile authentication timing with the UI guide while preserving continuation and entered values.
+
 ### Correct existing information
 
 Users edit published area attributes inline beside the displayed value. The edit becomes a moderation contribution; the published value remains visible until approval. Multiple pending contributions may coexist and must not silently overwrite each other.
@@ -108,6 +117,10 @@ The map belongs in the Kaart tab, not embedded in the overview. Navigation remai
 
 Off-leash classification supports **everywhere allowed**, **partially allowed**, **not allowed**, and **unknown**. Unknown is not false. The same distinction applies to other attributes: missing information must remain distinguishable from a confirmed negative value and can invite a contribution.
 
+An absent characteristic in a legacy array does not establish that it is prohibited or unavailable. Search must not silently classify an unknown attribute as a confirmed positive or negative. A missing rating is unrated, not a zero-star rating. Empty routes or destination points mean there is no recorded usable data; they do not prove that no routes or entrances exist. The storage representation and filter treatment of unknowns remain work for issues [#15](https://github.com/mfrankhuizen93/PawPaths/issues/15) and [#26](https://github.com/mfrankhuizen93/PawPaths/issues/26).
+
+Routes describe a walk associated with an area and may have geometry and metadata of their own. A route point alone is not a complete route. No route entity is currently defined in the shared location types; internal geometry versus external route links remains open.
+
 ### Current implementation alignment
 
 The repository already has `LocationListItem`, `EditableLocationFields`, `LocationCoordinatePoint`, `LocationContribution`, a `coordinatePoints` array, and MongoDB contribution review utilities. It also currently stores area-level `latitude`/`longitude` alongside points. This is a useful incremental foundation, but the contract must clarify when area coordinates are representative geometry versus a navigation target. Point IDs, ownership by parent area, and concurrency rules require stronger explicit guarantees.
@@ -137,9 +150,13 @@ Use a stable client-generated point identity while editing, keep the selected po
 
 For every saved point, the persisted latitude/longitude must equal the confirmed coordinate (within the documented rounding precision), retain its point ID on edits, and never be replaced by the area center or another selected point. This is P0 behavior.
 
+**Current implementation:** `AppLocationPointPicker.setCoordinates` rounds map selections to six decimal places and emits named latitude/longitude values. MongoDB GeoJSON uses `[longitude, latitude]`. This describes the current boundaries, not a verified end-to-end guarantee. Issue [#16](https://github.com/mfrankhuizen93/PawPaths/issues/16) must specify precision across placement, normalization, approval, and reload, and cover rapid point switching and failed saves.
+
 ## 8. Geographical data and name suggestions
 
 The application should suggest the most likely walking-area name using geographical information, preferring a park, forest, nature reserve, or walking area over the nearest street. If multiple names are plausible, choose the strongest match and let the user change it. If no reliable match exists, ask for manual input.
+
+Missing geodata, a timeout, or an unavailable provider must leave manual naming and the confirmed coordinates usable. A delayed suggestion must not overwrite a name the user has edited. A name suggestion does not establish area boundaries or a valid navigation destination.
 
 ### Proposed implementation
 
@@ -170,11 +187,17 @@ The current repository has pending/approved/rejected contribution statuses, new-
 
 `proposed -> pending -> approved | rejected`, with review metadata and an immutable payload snapshot. Approval should apply a known proposal against the current published version, detect stale or conflicting fields, and require an explicit moderator decision where needed. Rejection retains the proposal and reason. No persistent unfinished drafts are created.
 
+Here, `proposed` describes the user's unsaved editing state, not a fourth persisted status. The existing persisted statuses are `pending`, `approved`, and `rejected`. **Confirmed decision:** retain separately addressable competing submissions and review outcomes; prevent publication before approval. **Proposed implementation:** immutable original snapshots and version/field comparison are mechanisms to achieve this. The current review API can save a changed pending payload and approve that edited payload, so original-snapshot preservation is not implemented. A saved pending moderation record is distinct from an unfinished personal draft.
+
+**Current implementation:** maintainers/admins can review; a maintainer cannot review their own submission, while an admin can. Existing new-location approval checks `sourceContributionId` to avoid duplicate publication on retry, and completed reviews are rejected on repeat. This is not a guarantee of atomic, conflict-safe approval: location-change approval applies a whole payload without comparing its base version. Issues [#22](https://github.com/mfrankhuizen93/PawPaths/issues/22) and [#23](https://github.com/mfrankhuizen93/PawPaths/issues/23) must handle stale values, deleted parents/points, concurrent approvals, and partial-failure retries without losing another proposal.
+
 ## 11. Accessibility and states
 
 The redesign is mobile-first and keyboard-accessible where applicable. Interactive controls need labels, focus states, and non-color affordances. Map selection and coordinate confirmation need textual, understandable feedback. Every core flow handles loading, empty, error, and unknown-information states. Controls must not look like filters unless they behave as filters.
 
 Existing PawPaths guidance remains normative: reuse Nuxt UI and shared components, use `AppPageHeader` except on the fullscreen root map, use shared skeleton/empty states, keep form inputs at least 16px, use one horizontal tab row per drawer, and confirm before discarding unsaved drawer changes.
+
+Keeping edits in memory allows retries without persistent drafts. Confirming discard abandons those edits; cancelling dismissal retains them. Drawer dismissal, route changes, and authentication interruption need validation in the delivery issues; the shared drawer's dirty-state confirmation alone does not establish that every exit path is protected.
 
 ## 12. Known UX and architecture inconsistencies
 
@@ -188,6 +211,24 @@ Existing PawPaths guidance remains normative: reuse Nuxt UI and shared component
 - Contributions are available to maintainers/admins, but profile-facing contribution history and concurrent comparison are not complete.
 - Favorites and visited state are not represented in the inspected shared location types or visible API surface.
 - Existing map and form labels are mostly English while agreed primary navigation labels are Dutch; this is a product/content consistency concern, not a request to translate the whole application in this documentation task.
+- The current shared form uses Details, Map, Photos, and Links, with Features or Reviews by mode. The target Overzicht, Kaart, Routes, Reviews arrangement and inline edits must be reconciled with the guide's shared form requirements in issue #27.
+- The current reverse lookup prefers some named area features but can fall back to a street; it does not yet establish reliable area matching, confidence, or provider resilience.
+- Current pending payloads are mutable during moderation, and full-payload approval can overwrite fields changed by another approved contribution. Immutable original snapshots and conflict comparison are target behavior.
+
+### Source review
+
+These paths support the observations above and give implementation issues a starting point:
+
+| Concern                       | Current source                                                                                                                                                                                                    | Gap or limitation                                                                                                                  |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Navigation and location links | [`app/navigation/items.ts`](../../app/navigation/items.ts), [`app/pages/location/[slug].vue`](../../app/pages/location/%5Bslug%5D.vue)                                                                            | Explore plus role-specific admin entries; detail links redirect to root selection. Four public destinations are not implemented.   |
+| Detail, reviews, navigation   | [`app/pages/index.vue`](../../app/pages/index.vue)                                                                                                                                                                | Root orchestrates detail/reviews; external navigation uses area latitude/longitude rather than a chosen destination.               |
+| Add and authentication        | [`LocationAddForm.vue`](../../app/components/location/LocationAddForm.vue), [`AppAuthDrawer.vue`](../../app/components/auth/AppAuthDrawer.vue), [`AppLocationForm.vue`](../../app/components/AppLocationForm.vue) | Shared tabbed form after sign-in; profile is currently shown in the auth drawer.                                                   |
+| Area, points, attributes      | [`shared/types/locations.ts`](../../shared/types/locations.ts)                                                                                                                                                    | Optional point IDs, characteristic arrays, no separate route or saved/visited contract.                                            |
+| Coordinate placement          | [`AppLocationPointPicker.vue`](../../app/components/AppLocationPointPicker.vue), [`editable-location-fields.ts`](../../shared/utils/editable-location-fields.ts)                                                  | Shared selection state and six-decimal placement; persistence invariant still needs regression coverage.                           |
+| Geodata                       | [`reverse.get.ts`](../../server/api/geo/reverse.get.ts), [`search.get.ts`](../../server/api/geo/search.get.ts)                                                                                                    | Existing lookup endpoints do not settle the target provider contract.                                                              |
+| Contributions and publication | [`location-contributions.ts`](../../server/utils/location-contributions.ts), [`contributions.get.ts`](../../server/api/contributions.get.ts)                                                                      | Pending-only maintainer/admin listing, editable review payloads, no base-version conflict comparison; normalization requires city. |
+| Unsaved drawer edits          | [`AppDrawer.vue`](../../app/components/drawer/AppDrawer.vue)                                                                                                                                                      | Dirty-state dismissal confirmation exists; all exit paths still require flow validation.                                           |
 
 ## 13. Explicitly rejected alternatives
 
@@ -224,6 +265,19 @@ Existing PawPaths guidance remains normative: reuse Nuxt UI and shared component
 8. Route data model and whether route geometry is stored internally or linked externally.
 9. Review moderation, editing, and abuse controls within the existing review scope.
 10. Target locales and translation strategy beyond the agreed Dutch navigation labels.
+11. How the short map-first creation and inline-edit journeys reuse `AppLocationForm` and reconcile target detail tabs with the current UI guide, without introducing nested tabs or duplicate forms.
+12. Whether creation can begin before sign-in, or retains the guide's authentication-first Add behavior; both must preserve intent and unsaved values through authentication or cancellation.
+
+### Tradeoffs and decision boundaries
+
+| Choice                                    | Benefit                                                                | Cost or unresolved boundary                                                                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Incremental routes and shared drawers     | Preserves existing links, auth continuation, and form reuse.           | The discovery homepage and target detail composition require an explicit transition rather than an immediate route replacement. |
+| Minimal creation requirements             | Reduces the effort needed to propose a useful area.                    | Incomplete attributes remain unknown; city validation and optional enrichment must be aligned before delivery.                  |
+| Explicit point placement and confirmation | Makes the intended navigation/edit coordinate understandable.          | Adds a confirmation step; point identity, precision, and retry behavior need end-to-end validation.                             |
+| Parallel moderated contributions          | Allows independent corrections while protecting published information. | Requires retained history and conflict comparison; basic pending statuses alone are insufficient.                               |
+| Geodata suggestions with manual fallback  | Can improve names without making providers a prerequisite.             | Matching quality, attribution, service policy, latency, and cost must be evaluated before selecting a provider.                 |
+| No persistent unfinished drafts           | Keeps the initial create/edit lifecycle small.                         | Reloads and deliberate discard lose unfinished work; exit warnings and in-memory retry handling matter.                         |
 
 ## 16. Implementation sequence
 

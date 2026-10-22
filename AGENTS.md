@@ -1,5 +1,16 @@
 # PawPaths Repository Instructions
 
+Before planning or implementing a change, read the relevant sections of:
+
+- [`docs/architecture/PRODUCT_DECISIONS.md`](docs/architecture/PRODUCT_DECISIONS.md)
+  for product vision, domain semantics, UX decisions, and current implementation gaps.
+- [`docs/architecture/BACKLOG.md`](docs/architecture/BACKLOG.md)
+  for issue scope, priorities, and delivery dependencies.
+
+Distinguish confirmed decisions from proposed implementation and open questions.
+Do not assume documented target behavior is already implemented. Keep changes
+within the requested issue's scope and preserve the UI guide below as normative.
+
 All UI work in this repository must follow
 [`docs/nuxt-ui-interaction-guide.md`](docs/nuxt-ui-interaction-guide.md).
 
