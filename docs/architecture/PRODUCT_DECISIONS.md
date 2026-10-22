@@ -6,7 +6,7 @@
 
 This document is the central source of truth for PawPaths. It records agreed behavior without implying that unimplemented behavior already exists. Technical recommendations are explicitly marked as proposed, and unresolved choices remain open questions.
 
-Delivery is tracked in [Issue #14](https://github.com/mfrankhuizen93/PawPaths/issues/14) and the [backlog index](./BACKLOG.md). This document defines the intended product, not a release checklist. Current implementation observations below were checked against repository source on 2026-10-22; they do not establish deployed behavior.
+Issue scope, acceptance criteria, priorities, dependencies, and status are tracked in [GitHub Issues](https://github.com/mfrankhuizen93/PawPaths/issues). This document defines the intended product, not a release checklist. Current implementation observations below were checked against repository source on 2026-10-22; they do not establish deployed behavior.
 
 The [Nuxt UI interaction guide](../nuxt-ui-interaction-guide.md) remains normative for UI implementation. The discovery homepage, map-first creation journey, inline editing, and detail tabs below describe the target product. They do not authorize replacing the guide's shared `AppLocationForm`, drawer-first interactions, or authentication continuation. Reconcile those differences explicitly in the linked delivery issues before implementing them; route composition and authentication timing remain open in section 15.
 
@@ -25,7 +25,7 @@ The product is mobile-first, intuitive, accessible, and visually appealing. Dutc
 - **Open question:** an unresolved choice; do not treat it as architecture until decided.
 - **Current implementation:** an observation supported by the linked source, not proof that the target behavior is complete.
 
-Unless a subsection is explicitly marked otherwise, sections 1 and 3–11 state **confirmed product decisions**. Proposed mechanisms are not approved schema or provider contracts. Sections 12–16 separately record current gaps, rejected alternatives, constraints, unresolved choices, and delivery order.
+Unless a subsection is explicitly marked otherwise, sections 1 and 3–11 state **confirmed product decisions**. Proposed mechanisms are not approved schema or provider contracts. Sections 12–15 separately record current gaps, rejected alternatives, constraints, and unresolved choices.
 
 ## 3. Information architecture and navigation
 
@@ -278,23 +278,3 @@ These paths support the observations above and give implementation issues a star
 | Parallel moderated contributions          | Allows independent corrections while protecting published information. | Requires retained history and conflict comparison; basic pending statuses alone are insufficient.                               |
 | Geodata suggestions with manual fallback  | Can improve names without making providers a prerequisite.             | Matching quality, attribution, service policy, latency, and cost must be evaluated before selecting a provider.                 |
 | No persistent unfinished drafts           | Keeps the initial create/edit lifecycle small.                         | Reloads and deliberate discard lose unfinished work; exit warnings and in-memory retry handling matter.                         |
-
-## 16. Implementation sequence
-
-### Phase 1 — Foundations
-
-Document decisions; align area/point/contribution models; fix coordinate selection and persistence; establish reliable multi-point editing and regression coverage.
-
-### Phase 2 — Contributions
-
-Add geodata name suggestions; duplicate warnings; map-first new-location submission; inline edits; moderation comparison and conflict handling; profile contribution status.
-
-### Phase 3 — Discovery
-
-Build the discovery-first homepage; improve search/filter state and full-screen list/map switching; redesign location details and tabs; add destination selection for navigation.
-
-### Phase 4 — Personalization and validation
-
-Add saved/visited management; improve the existing reviews experience; validate mobile usability and accessibility across core flows.
-
-Dependencies and issue-level priorities are tracked in `docs/architecture/BACKLOG.md`.

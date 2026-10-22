@@ -1,11 +1,13 @@
 # PawPaths Repository Instructions
 
-Before planning or implementing a change, read the relevant sections of:
+Before planning or implementing a change, read the relevant sections of
+[`docs/architecture/PRODUCT_DECISIONS.md`](docs/architecture/PRODUCT_DECISIONS.md)
+for product vision, domain semantics, UX decisions, and current implementation gaps.
 
-- [`docs/architecture/PRODUCT_DECISIONS.md`](docs/architecture/PRODUCT_DECISIONS.md)
-  for product vision, domain semantics, UX decisions, and current implementation gaps.
-- [`docs/architecture/BACKLOG.md`](docs/architecture/BACKLOG.md)
-  for issue scope, priorities, and delivery dependencies.
+Use [GitHub Issues](https://github.com/mfrankhuizen93/PawPaths/issues) for issue
+scope, acceptance criteria, priorities, dependencies, and status. Keep issue
+tracking in GitHub; do not maintain backlog indexes or copies of issue bodies
+in the repository.
 
 Distinguish confirmed decisions from proposed implementation and open questions.
 Do not assume documented target behavior is already implemented. Keep changes
