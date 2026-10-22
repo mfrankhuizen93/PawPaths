@@ -8,7 +8,6 @@ import type {
 import { useExploreQuery } from "~/composables/states";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
-import LocationAddDrawer from "~/components/location/LocationAddDrawer.vue";
 import {
   canDeleteLocation,
   canSuggestLocationUnavailable,
@@ -447,27 +446,17 @@ function replaceLocationQuery(slug: string | null) {
   void router.replace({ query });
 }
 
-function hasLocationDetail(location: LocationListItem | null) {
-  return (
-    location &&
-    "description" in location &&
-    "relatedUrls" in location
-  );
-}
-
-async function openLocationBySlug(slug: string) {
+async function openLocationBySlug(
+  slug: string,
+  options: { force?: boolean } = {},
+) {
   if (!slug) {
     selectedLocation.value = null;
     selectedLocationError.value = "";
     return;
   }
 
-  if (
-    selectedLocation.value?.slug === slug &&
-    hasLocationDetail(selectedLocation.value)
-  ) {
-    return;
-  }
+  if (!options.force && selectedLocation.value?.slug === slug) return;
 
   selectedLocationError.value = "";
 
@@ -487,7 +476,7 @@ function selectLocation(location: LocationListItem) {
   selectedLocationError.value = "";
   syncChangeForm(location);
   replaceLocationQuery(location.slug);
-  void openLocationBySlug(location.slug);
+  void openLocationBySlug(location.slug, { force: true });
 }
 
 function getTypeMeta(type: string) {
@@ -585,7 +574,7 @@ watch(
       <ClientOnly>
         <LazyAppLocation
           :filters="activeFilters"
-          :limit="60"
+          :limit="1000"
           :location="selectedLocation"
           :locations="locations"
           class="h-full"
@@ -723,7 +712,7 @@ watch(
         </div>
       </template>
       <template #default>
-        <AppLocationForm
+        <LazyAppLocationForm
           v-if="selectedLocation"
           v-model="changeForm"
           :can-generate-description="isAdmin"
@@ -823,7 +812,7 @@ watch(
               </div>
             </div>
           </template>
-        </AppLocationForm>
+        </LazyAppLocationForm>
       </template>
 
       <template
@@ -874,7 +863,7 @@ watch(
       </template>
     </UModal>
 
-    <LocationAddDrawer />
+    <LazyLocationAddDrawer />
   </div>
 </template>
 

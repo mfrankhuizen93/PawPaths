@@ -1,4 +1,5 @@
-import { defineEventHandler, getQuery } from "h3";
+import { defineEventHandler, getQuery, setHeader } from "h3";
+import { ObjectId } from "mongodb";
 import type { QueryObject, QueryValue } from "ufo";
 import type { LocationsResponse } from "#shared/types/locations";
 import { getDb } from "../utils/mongodb.js";
@@ -6,6 +7,7 @@ import { inferLocationWarnings } from "../utils/location-warnings.js";
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
+const MAX_VIEWPORT_LIMIT = 1000;
 const CHARACTERISTIC_POINT_KIND_MAP: Record<string, string[]> = {
   "food and drink": ["cafe"],
   "off-leash area": ["off-leash-area"],
@@ -23,9 +25,23 @@ type LocationReview = {
 };
 
 type RawLocationItem = {
+  _id?: ObjectId;
+  searchScore?: number;
+  reviewCount?: number;
+  ratingCount?: number;
+  averageRatingSort?: number;
+  name?: string;
   reviews?: LocationReview[];
-  warnings?: unknown;
   [key: string]: unknown;
+};
+
+type LocationCursor = {
+  searchScore?: number;
+  reviewCount: number;
+  averageRatingSort: number;
+  ratingCount: number;
+  name: string;
+  id: string;
 };
 
 function toFiniteNumber(value: QueryValue | QueryValue[]): number | null {
@@ -40,20 +56,24 @@ function toPositiveNumber(value: QueryValue | QueryValue[]): number | null {
   return number && number > 0 ? number : null;
 }
 
-function toNonNegativeInteger(
+function toPositiveInteger(
   value: QueryValue | QueryValue[],
-  fallback = 0,
+  fallback = 1,
 ): number {
   const number = Number(value);
-  return Number.isInteger(number) && number >= 0 ? number : fallback;
+
+  return Number.isInteger(number) && number >= 1 ? number : fallback;
 }
 
-function toLimitedInteger(value: QueryValue | QueryValue[]): number {
+function toLimitedInteger(
+  value: QueryValue | QueryValue[],
+  max = MAX_LIMIT,
+): number {
   const number = Number(value);
 
   if (!Number.isInteger(number) || number < 1) return DEFAULT_LIMIT;
 
-  return Math.min(number, MAX_LIMIT);
+  return Math.min(number, max);
 }
 
 function toRating(value: QueryValue | QueryValue[]): number | null {
@@ -64,6 +84,14 @@ function toRating(value: QueryValue | QueryValue[]): number | null {
   return number;
 }
 
+function clampLatitude(latitude: number) {
+  return Math.max(-90, Math.min(90, latitude));
+}
+
+function normalizeLongitude(longitude: number) {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
 function escapeRegex(value: unknown) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -72,6 +100,67 @@ function toSearchQuery(value: QueryValue | QueryValue[]) {
   const rawValue = Array.isArray(value) ? value[0] : value;
 
   return rawValue ? String(rawValue).trim() : "";
+}
+
+function toCursor(value: QueryValue | QueryValue[]): LocationCursor | null {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  if (!rawValue) return null;
+
+  try {
+    const parsedValue = JSON.parse(
+      Buffer.from(String(rawValue), "base64url").toString("utf8"),
+    ) as Partial<LocationCursor>;
+
+    if (
+      typeof parsedValue.reviewCount !== "number" ||
+      typeof parsedValue.averageRatingSort !== "number" ||
+      typeof parsedValue.ratingCount !== "number" ||
+      typeof parsedValue.name !== "string" ||
+      typeof parsedValue.id !== "string" ||
+      !ObjectId.isValid(parsedValue.id)
+    ) {
+      return null;
+    }
+
+    if (
+      parsedValue.searchScore !== undefined &&
+      typeof parsedValue.searchScore !== "number"
+    ) {
+      return null;
+    }
+
+    return {
+      searchScore: parsedValue.searchScore,
+      reviewCount: parsedValue.reviewCount,
+      averageRatingSort: parsedValue.averageRatingSort,
+      ratingCount: parsedValue.ratingCount,
+      name: parsedValue.name,
+      id: parsedValue.id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function toNextCursor(
+  item: RawLocationItem | undefined,
+  includeSearchScore: boolean,
+) {
+  if (!item?._id) return null;
+
+  const cursor: LocationCursor = {
+    reviewCount: Number(item.reviewCount ?? 0),
+    averageRatingSort: Number(item.averageRatingSort ?? -1),
+    ratingCount: Number(item.ratingCount ?? 0),
+    name: String(item.name ?? ""),
+    id: item._id.toHexString(),
+  };
+
+  if (includeSearchScore) {
+    cursor.searchScore = Number(item.searchScore ?? 0);
+  }
+
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
 function asArray(value: QueryValue | QueryValue[]): string[] {
@@ -190,29 +279,39 @@ function buildFilter(query: QueryObject): MongoFilter {
   return filter;
 }
 
-function getBoundsFilter(query: QueryObject): MongoFilter | null {
-  const west = toFiniteNumber(query.west);
-  const south = toFiniteNumber(query.south);
-  const east = toFiniteNumber(query.east);
-  const north = toFiniteNumber(query.north);
+function getBoundsFilter(
+  query: QueryObject,
+  options: { includeCoordinatePoints?: boolean } = {},
+): MongoFilter | null {
+  const includeCoordinatePoints = options.includeCoordinatePoints ?? true;
+  const rawWest = toFiniteNumber(query.west);
+  const rawSouth = toFiniteNumber(query.south);
+  const rawEast = toFiniteNumber(query.east);
+  const rawNorth = toFiniteNumber(query.north);
 
-  if (west === null || south === null || east === null || north === null) {
+  if (
+    rawWest === null ||
+    rawSouth === null ||
+    rawEast === null ||
+    rawNorth === null
+  ) {
     return null;
   }
 
-  if (south < -90 || south > 90 || north < -90 || north > 90) {
-    return null;
-  }
-
-  if (west < -180 || west > 180 || east < -180 || east > 180) {
-    return null;
-  }
+  const south = clampLatitude(rawSouth);
+  const north = clampLatitude(rawNorth);
+  const longitudeSpan = Math.abs(rawEast - rawWest);
+  const west = longitudeSpan >= 360 ? -180 : normalizeLongitude(rawWest);
+  const east = longitudeSpan >= 360 ? 180 : normalizeLongitude(rawEast);
 
   if (south > north) {
     return null;
   }
 
-  const makeBoundsPolygon = (minLng: number, maxLng: number): MongoFilter => ({
+  const makeMainLocationBoundsClause = (
+    minLng: number,
+    maxLng: number,
+  ): MongoFilter => ({
     location: {
       $geoWithin: {
         $geometry: {
@@ -231,12 +330,34 @@ function getBoundsFilter(query: QueryObject): MongoFilter | null {
     },
   });
 
+  const makeCoordinatePointBoundsClause = (
+    minLng: number,
+    maxLng: number,
+  ): MongoFilter => ({
+    coordinatePoints: {
+      $elemMatch: {
+        latitude: { $gte: south, $lte: north },
+        longitude: { $gte: minLng, $lte: maxLng },
+      },
+    },
+  });
+
+  const makeBoundsClause = (minLng: number, maxLng: number): MongoFilter =>
+    includeCoordinatePoints
+      ? {
+          $or: [
+            makeMainLocationBoundsClause(minLng, maxLng),
+            makeCoordinatePointBoundsClause(minLng, maxLng),
+          ],
+        }
+      : makeMainLocationBoundsClause(minLng, maxLng);
+
   if (west <= east) {
-    return makeBoundsPolygon(west, east);
+    return makeBoundsClause(west, east);
   }
 
   return {
-    $or: [makeBoundsPolygon(west, 180), makeBoundsPolygon(-180, east)],
+    $or: [makeBoundsClause(west, 180), makeBoundsClause(-180, east)],
   };
 }
 
@@ -285,37 +406,55 @@ function buildRatingFieldsStage(): PipelineStage {
           },
         },
       },
+      averageRatingSort: {
+        $let: {
+          vars: { ratings: ratingValues },
+          in: {
+            $cond: [
+              { $gt: [{ $size: "$$ratings" }, 0] },
+              { $round: [{ $avg: "$$ratings" }, 1] },
+              -1,
+            ],
+          },
+        },
+      },
     },
   };
 }
 
-function buildProjection(includeReviews: boolean): MongoFilter {
-  const projection: MongoFilter = {
-    _id: 0,
+function buildProjection(
+  options: { compact?: boolean; includeReviews?: boolean } = {},
+): MongoFilter {
+  const sharedProjection: MongoFilter = {
+    _id: 1,
     id: { $toString: "$_id" },
+    averageRatingSort: 1,
+    searchScore: 1,
     slug: 1,
     name: 1,
     city: 1,
-    province: 1,
     country: 1,
     latitude: 1,
     longitude: 1,
-    location: 1,
     type: 1,
     characteristics: 1,
     coordinatePoints: 1,
     warnings: { $ifNull: ["$warnings", []] },
-    photos: { $slice: [{ $ifNull: ["$photos", []] }, 1] },
+    photos: options.compact
+      ? { $literal: [] }
+      : { $slice: [{ $ifNull: ["$photos", []] }, 1] },
     reviewCount: 1,
     ratingCount: 1,
     averageRating: 1,
   };
 
-  if (!includeReviews) return projection;
+  if (!options.includeReviews) return sharedProjection;
 
   return {
-    ...projection,
+    ...sharedProjection,
     sourceUrl: 1,
+    province: 1,
+    location: 1,
     description: 1,
     relatedUrls: 1,
     photos: 1,
@@ -361,25 +500,97 @@ function buildSearchScoreStage(searchQuery: string): PipelineStage {
   };
 }
 
+function buildCursorMatchStage(
+  cursor: LocationCursor,
+  includeSearchScore: boolean,
+): PipelineStage {
+  const fields = [
+    ...(includeSearchScore
+      ? [
+          {
+            expression: "$searchScore",
+            value: cursor.searchScore ?? 0,
+            direction: "desc" as const,
+          },
+        ]
+      : []),
+    {
+      expression: "$reviewCount",
+      value: cursor.reviewCount,
+      direction: "desc" as const,
+    },
+    {
+      expression: "$averageRatingSort",
+      value: cursor.averageRatingSort,
+      direction: "desc" as const,
+    },
+    {
+      expression: "$ratingCount",
+      value: cursor.ratingCount,
+      direction: "desc" as const,
+    },
+    { expression: "$name", value: cursor.name, direction: "asc" as const },
+    {
+      expression: "$_id",
+      value: new ObjectId(cursor.id),
+      direction: "asc" as const,
+    },
+  ];
+
+  return {
+    $match: {
+      $expr: {
+        $or: fields.map((field, index) => ({
+          $and: [
+            ...fields
+              .slice(0, index)
+              .map((previous) => ({
+                $eq: [previous.expression, previous.value],
+              })),
+            {
+              [field.direction === "desc" ? "$lt" : "$gt"]: [
+                field.expression,
+                field.value,
+              ],
+            },
+          ],
+        })),
+      },
+    },
+  };
+}
+
 function normalizeWarnings(
   items: RawLocationItem[],
   includeReviews: boolean,
 ): LocationsResponse["items"] {
   return items.map((item) => {
-    const warnings = item.reviews
-      ? inferLocationWarnings(item.reviews)
-      : Array.isArray(item.warnings)
-        ? item.warnings
-        : [];
+    const inferredWarnings = inferLocationWarnings(item.reviews);
+    const warnings =
+      inferredWarnings.length > 0
+        ? inferredWarnings
+        : Array.isArray(item.warnings)
+          ? item.warnings
+          : [];
+    const {
+      _id,
+      averageRatingSort,
+      searchScore,
+      ...publicItem
+    } = item;
+
+    void _id;
+    void averageRatingSort;
+    void searchScore;
 
     if (includeReviews) {
       return {
-        ...item,
+        ...publicItem,
         warnings,
       } as LocationsResponse["items"][number];
     }
 
-    const { reviews, ...location } = item;
+    const { reviews, ...location } = publicItem;
 
     return {
       ...location,
@@ -395,17 +606,30 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
 
   const filter = buildFilter(query);
   const searchQuery = toSearchQuery(query.q);
-  const limit = toLimitedInteger(query.limit);
-  const skip = toNonNegativeInteger(query.skip);
+  const boundsFilter = getBoundsFilter(query, {
+    includeCoordinatePoints: query.viewport !== "true",
+  });
+  const isViewportSearch = query.viewport === "true" && Boolean(boundsFilter);
+  if (isViewportSearch) {
+    setHeader(event, "Cache-Control", "no-store");
+  }
+  const limit = toLimitedInteger(
+    query.limit,
+    isViewportSearch ? MAX_VIEWPORT_LIMIT : MAX_LIMIT,
+  );
+  const cursor = isViewportSearch ? null : toCursor(query.cursor);
+  const pageNumber = toPositiveInteger(query.pageNumber);
   const includeReviews = query.includeReviews === "true";
   const lat = toFiniteNumber(query.lat);
   const lng = toFiniteNumber(query.lng);
   const radiusKm = toPositiveNumber(query.radiusKm);
-  const boundsFilter = getBoundsFilter(query);
   const isGeoSearch =
     !boundsFilter && lat !== null && lng !== null && radiusKm !== null;
   const minRating = toRating(query.minRating);
-  const projection = buildProjection(includeReviews);
+  const projection = buildProjection({
+    compact: isViewportSearch,
+    includeReviews,
+  });
   const ratingFieldsStage = buildRatingFieldsStage();
 
   const pipeline: PipelineStage[] = [];
@@ -449,42 +673,53 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
 
   if (searchQuery) {
     pipeline.push(buildSearchScoreStage(searchQuery));
-    pipeline.push({
-      $sort: {
-        searchScore: -1,
-        reviewCount: -1,
-        averageRating: -1,
-        ratingCount: -1,
-        name: 1,
-      },
-    });
-  } else {
-    pipeline.push({
-      $sort: {
-        reviewCount: -1,
-        averageRating: -1,
-        ratingCount: -1,
-        name: 1,
-      },
-    });
   }
 
-  pipeline.push({ $skip: skip });
-  pipeline.push({ $limit: limit });
+  if (cursor) {
+    pipeline.push(buildCursorMatchStage(cursor, Boolean(searchQuery)));
+  }
+
+  pipeline.push({
+    $sort: {
+      ...(searchQuery ? { searchScore: -1 } : {}),
+      reviewCount: -1,
+      averageRatingSort: -1,
+      ratingCount: -1,
+      name: 1,
+      _id: 1,
+    },
+  });
+
+  pipeline.push({ $limit: limit + 1 });
   pipeline.push({ $project: projection });
   countPipeline.push({ $count: "total" });
 
   const [rawItems, countResult] = await Promise.all([
     locations.aggregate(pipeline).toArray(),
-    locations.aggregate(countPipeline).toArray(),
+    isViewportSearch
+      ? Promise.resolve([])
+      : locations.aggregate(countPipeline).toArray(),
   ]);
-  const total = countResult[0]?.total ?? 0;
-  const items = normalizeWarnings(rawItems, includeReviews);
+  const isTruncated = rawItems.length > limit;
+  const pageItems = rawItems.slice(0, limit);
+  const items = normalizeWarnings(pageItems, includeReviews);
+  const total = isViewportSearch ? items.length : (countResult[0]?.total ?? 0);
+  const nextCursor =
+    !isViewportSearch && isTruncated
+      ? toNextCursor(pageItems.at(-1), Boolean(searchQuery))
+      : null;
 
   return {
     items,
     total,
     limit,
-    skip,
+    nextCursor,
+    metadata: {
+      pageNumber,
+      pageSize: limit,
+      totalFound: total,
+      resultCount: items.length,
+      truncated: isViewportSearch ? isTruncated : false,
+    },
   };
 });
