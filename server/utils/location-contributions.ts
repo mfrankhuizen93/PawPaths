@@ -13,6 +13,8 @@ import type {
 import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { getLocationSlug } from "#shared/utils/location-route";
 import type { AuthUser } from "#shared/types/auth";
+import { normalizeAreaAttributes } from "#shared/utils/location-contract";
+import { normalizeEditableLocationFields } from "#shared/utils/editable-location-fields";
 
 type ContributionDocument = {
   _id?: ObjectId;
@@ -22,6 +24,8 @@ type ContributionDocument = {
   locationSlug?: string | null;
   locationName?: string | null;
   payload: EditableLocationFields;
+  submittedPayload?: EditableLocationFields;
+  basePayload?: EditableLocationFields | null;
   submitter: {
     id: string;
     name: string;
@@ -48,6 +52,7 @@ type LocationDocument = EditableLocationFields & {
     coordinates: [number, number];
   } | null;
   source?: string;
+  sourceUrl?: string;
   photos?: unknown[];
   reviews?: unknown[];
   warnings?: string[];
@@ -152,7 +157,7 @@ function cleanPhotos(value: unknown): LocationPhoto[] {
   const values = Array.isArray(value) ? value : [];
 
   return values
-    .map((item) => {
+    .map((item): LocationPhoto | null => {
       if (!item || typeof item !== "object") return null;
 
       const photo = item as Record<string, unknown>;
@@ -193,33 +198,94 @@ function cleanPhotos(value: unknown): LocationPhoto[] {
 }
 
 function cleanCoordinatePoints(value: unknown): LocationCoordinatePoint[] {
+  if (value != null && !Array.isArray(value)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Points must be an array.",
+    });
+  }
   const values = Array.isArray(value) ? value : [];
+  if (values.length > 8) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "An area supports at most eight points.",
+    });
+  }
 
-  return values
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
+  const points = values.map((item): LocationCoordinatePoint => {
+    if (!item || typeof item !== "object") {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Each point needs an id and coordinates.",
+      });
+    }
 
-      const point = item as Record<string, unknown>;
-      const latitude = cleanNumber(point.latitude, -90, 90);
-      const longitude = cleanNumber(point.longitude, -180, 180);
-      const kindValue = cleanText(point.kind, 40) as LocationCoordinateKind;
-      const kind = COORDINATE_KINDS.has(kindValue) ? kindValue : "other";
-      const fallbackLabel = COORDINATE_KIND_LABELS.get(kind) ?? "Point";
-      const label = cleanText(point.label, 120) || fallbackLabel;
+    const point = item as Record<string, unknown>;
+    const latitude = cleanNumber(point.latitude, -90, 90);
+    const longitude = cleanNumber(point.longitude, -180, 180);
+    const kindValue = cleanText(point.kind, 40) as LocationCoordinateKind;
+    const kind = COORDINATE_KINDS.has(kindValue) ? kindValue : "other";
+    const fallbackLabel = COORDINATE_KIND_LABELS.get(kind) ?? "Point";
+    const label = cleanText(point.label, 120) || fallbackLabel;
 
-      if (latitude === null || longitude === null) return null;
+    if (latitude === null || longitude === null) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Each point needs valid coordinates.",
+      });
+    }
 
-      return {
-        id: cleanText(point.id, 80) || null,
-        kind,
-        label,
-        latitude,
-        longitude,
-        sourcePhotoId: cleanText(point.sourcePhotoId, 80) || null,
-      };
-    })
-    .filter((item): item is LocationCoordinatePoint => Boolean(item))
-    .slice(0, 8);
+    const id = cleanText(point.id, 80);
+    if (!id || id !== point.id) {
+      throw createError({
+        statusCode: 400,
+        statusMessage:
+          "Each point needs a stable id. Migrate legacy points before editing.",
+      });
+    }
+
+    return {
+      id,
+      kind,
+      label,
+      latitude,
+      longitude,
+      sourcePhotoId: cleanText(point.sourcePhotoId, 80) || null,
+    };
+  });
+  const ids = points.map((point) => point.id).filter(Boolean);
+  if (new Set(ids).size !== ids.length) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Point ids must be unique within an area.",
+    });
+  }
+  return points;
+}
+
+function cleanRoutes(
+  value: unknown,
+): NonNullable<EditableLocationFields["routes"]> {
+  if (!Array.isArray(value)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Routes must be an array.",
+    });
+  }
+  const ids = new Set<string>();
+  return value.map((route) => {
+    const id = cleanText(route?.id, 80);
+    const name = cleanText(route?.name, 120);
+    const url = cleanRelatedUrls([{ url: route?.url }])[0]?.url;
+    if (!id || !name || !url || ids.has(id)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Each route needs a unique id, name, and HTTP(S) URL.",
+      });
+    }
+    ids.add(id);
+    return { id, name, url };
+  });
 }
 
 export function sanitizeLocationPayload(body: unknown): EditableLocationFields {
@@ -233,7 +299,7 @@ export function sanitizeLocationPayload(body: unknown): EditableLocationFields {
   const longitude = cleanNumber(input.longitude, -180, 180);
   const type = cleanList(input.type, LOCATION_TYPES);
   const characteristics = cleanList(input.characteristics, CHARACTERISTICS);
-  const description = cleanLongText(input.description) || null;
+  const description = cleanLongText(input.description);
   const relatedUrls = cleanRelatedUrls(input.relatedUrls);
   const photos = Array.isArray(input.photos)
     ? cleanPhotos(input.photos)
@@ -273,6 +339,17 @@ export function sanitizeLocationPayload(body: unknown): EditableLocationFields {
     description,
     relatedUrls,
     coordinatePoints,
+    ...(input.attributes !== undefined
+      ? {
+          attributes: normalizeAreaAttributes(
+            input.attributes,
+            characteristics,
+          ),
+        }
+      : {}),
+    ...(input.routes !== undefined
+      ? { routes: cleanRoutes(input.routes) }
+      : {}),
     ...(photos ? { photos } : {}),
   };
 }
@@ -311,6 +388,8 @@ function toContribution(document: ContributionDocument): LocationContribution {
     locationSlug: document.locationSlug ?? null,
     locationName: document.locationName ?? null,
     payload: document.payload,
+    submittedPayload: document.submittedPayload ?? document.payload,
+    basePayload: document.basePayload ?? null,
     submitter: document.submitter,
     reviewer: document.reviewer ?? null,
     reviewNote: document.reviewNote ?? null,
@@ -352,7 +431,9 @@ async function createContributionIndexes(db: Db) {
       { sourceContributionId: 1 },
       {
         unique: true,
-        partialFilterExpression: { sourceContributionId: { $type: "objectId" } },
+        partialFilterExpression: {
+          sourceContributionId: { $type: "objectId" },
+        },
       },
     ),
   ]);
@@ -373,7 +454,11 @@ export async function createLocationContribution(options: {
     locationId: options.location?._id ?? null,
     locationSlug: options.location?.slug ?? null,
     locationName: options.location?.name ?? options.payload.name,
-    payload: options.payload,
+    payload: structuredClone(options.payload),
+    submittedPayload: structuredClone(options.payload),
+    basePayload: options.location
+      ? normalizeEditableLocationFields(options.location)
+      : null,
     submitter: getUserSummary(options.user),
     reviewer: null,
     reviewNote: null,
@@ -485,8 +570,38 @@ async function approveContribution(
     });
   }
 
+  const current = await locations.findOne({
+    _id: contribution.locationId,
+    status: "published",
+  });
+  if (!current) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Location not found.",
+    });
+  }
+  if (
+    !contribution.basePayload ||
+    JSON.stringify(normalizeEditableLocationFields(current)) !==
+      JSON.stringify(normalizeEditableLocationFields(contribution.basePayload))
+  ) {
+    throw createError({
+      statusCode: 409,
+      statusMessage:
+        "Published location changed or this legacy proposal has no base snapshot. Submit a new proposal against the current location.",
+    });
+  }
+  // Match the actual stored editable fields too: a concurrent approval, including
+  // a point deletion, must not be overwritten between the read and the write.
+  const unchangedFields = Object.fromEntries(
+    [
+      ...Object.keys(normalizeEditableLocationFields(current)),
+      "attributes",
+      "routes",
+    ].map((key) => [key, current[key as keyof EditableLocationFields] ?? null]),
+  );
   const result = await locations.updateOne(
-    { _id: contribution.locationId, status: "published" },
+    { _id: contribution.locationId, status: "published", ...unchangedFields },
     {
       $set: {
         ...contribution.payload,
@@ -498,8 +613,9 @@ async function approveContribution(
 
   if (result.matchedCount === 0) {
     throw createError({
-      statusCode: 404,
-      statusMessage: "Location not found.",
+      statusCode: 409,
+      statusMessage:
+        "Published location changed during approval. Reload and compare the proposal.",
     });
   }
 
@@ -559,7 +675,13 @@ export async function reviewContribution(options: {
   const payload =
     (options.action === "approve" || options.action === "save") &&
     options.payload !== undefined
-      ? sanitizeLocationPayload(options.payload)
+      ? sanitizeLocationPayload({
+          attributes: contribution.payload.attributes,
+          routes: contribution.payload.routes,
+          ...(typeof options.payload === "object" && options.payload
+            ? options.payload
+            : {}),
+        })
       : contribution.payload;
   const contributionForReview = {
     ...contribution,
@@ -572,7 +694,8 @@ export async function reviewContribution(options: {
       : null;
 
   const now = new Date();
-  const status = options.action === "approve" ? "approved" : "rejected";
+  const status: LocationContributionStatus =
+    options.action === "approve" ? "approved" : "rejected";
   const isSave = options.action === "save";
 
   if (isSave) {
@@ -580,6 +703,9 @@ export async function reviewContribution(options: {
       { _id },
       {
         $set: {
+          submittedPayload:
+            contribution.submittedPayload ??
+            structuredClone(contribution.payload),
           payload,
           locationName: payload.name,
           updatedAt: now,
@@ -608,6 +734,8 @@ export async function reviewContribution(options: {
 
   const reviewedContribution = {
     ...contribution,
+    submittedPayload:
+      contribution.submittedPayload ?? structuredClone(contribution.payload),
     status,
     payload,
     locationId: approvedLocation?.locationId ?? contribution.locationId,
@@ -623,6 +751,7 @@ export async function reviewContribution(options: {
     { _id },
     {
       $set: {
+        submittedPayload: reviewedContribution.submittedPayload,
         status: reviewedContribution.status,
         payload: reviewedContribution.payload,
         locationId: reviewedContribution.locationId,

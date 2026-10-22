@@ -17,6 +17,7 @@
     "cleanup:staatsbosbeheer": "node scripts/cleanup-staatsbosbeheer.js",
     "db:test": "node scripts/test-mongodb.js",
     "db:import": "node scripts/import-locations.js",
+    "db:migrate-point-ids": "node scripts/migrate-location-point-ids.js",
     "db:inspect": "node scripts/inspect-mongodb.js",
     "db:rewrite-descriptions": "node scripts/rewrite-location-descriptions.js",
     "images:upload": "node scripts/upload-location-photos.js"

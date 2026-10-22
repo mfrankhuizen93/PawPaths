@@ -26,8 +26,12 @@ Module._resolveFilename = function resolveNuxtAliases(
 
 const { default: locationContributions } =
   await import("../server/utils/location-contributions.ts");
-const { ensureContributionIndexes, reviewContribution } =
-  locationContributions;
+const {
+  ensureContributionIndexes,
+  reviewContribution,
+  createLocationContribution,
+  sanitizeLocationPayload,
+} = locationContributions;
 
 const admin = {
   id: "admin-user",
@@ -66,7 +70,11 @@ function idsEqual(a, b) {
 
 function matches(document, filter) {
   return Object.entries(filter).every(([key, value]) =>
-    idsEqual(document[key], value),
+    value === null
+      ? document[key] == null
+      : typeof value === "object" && !(value instanceof ObjectId)
+        ? JSON.stringify(document[key]) === JSON.stringify(value)
+        : idsEqual(document[key], value),
   );
 }
 
@@ -184,6 +192,259 @@ test("approving a new location creates one published location and completes the 
   assert.equal(result.status, "approved");
   assert.equal(result.locationSlug, location.slug);
   assert.equal(result.locationId, location._id.toString());
+});
+
+test("normalization preserves distinct point identities and exact destinations", () => {
+  const points = [
+    {
+      id: "east",
+      kind: "parking",
+      label: "East",
+      latitude: 52.123456,
+      longitude: 4.123456,
+    },
+    {
+      id: "west",
+      kind: "parking",
+      label: "West",
+      latitude: 52.654321,
+      longitude: 4.654321,
+    },
+  ];
+  const payload = sanitizeLocationPayload({
+    ...locationPayload(),
+    coordinatePoints: points,
+  });
+  assert.deepEqual(
+    payload.coordinatePoints.map(({ sourcePhotoId, ...point }) => point),
+    points,
+  );
+  assert.equal(payload.latitude, 52.37);
+  assert.throws(
+    () =>
+      sanitizeLocationPayload({
+        ...payload,
+        coordinatePoints: [{ ...points[0], id: undefined }],
+      }),
+    { statusCode: 400 },
+  );
+  assert.throws(
+    () =>
+      sanitizeLocationPayload({
+        ...payload,
+        coordinatePoints: [points[0], points[0]],
+      }),
+    { statusCode: 400 },
+  );
+  assert.throws(
+    () =>
+      sanitizeLocationPayload({
+        ...payload,
+        coordinatePoints: [{ ...points[0], latitude: 91 }],
+      }),
+    { statusCode: 400 },
+  );
+});
+
+test("normalization preserves explicit negative and unknown attributes and external routes", () => {
+  const attributes = {
+    offLeash: "not-allowed",
+    fenced: "no",
+    swimming: "unknown",
+    wheelchairAccessible: "yes",
+  };
+  const routes = [
+    { id: "walk-1", name: "Forest loop", url: "https://example.com/walk" },
+  ];
+  const payload = sanitizeLocationPayload({
+    ...locationPayload(),
+    attributes,
+    routes,
+  });
+  assert.deepEqual(payload.attributes, attributes);
+  assert.deepEqual(payload.routes, routes);
+  assert.equal(
+    sanitizeLocationPayload(locationPayload()).attributes,
+    undefined,
+  );
+  assert.throws(
+    () =>
+      sanitizeLocationPayload({
+        ...payload,
+        routes: [{ ...routes[0], url: "javascript:alert(1)" }],
+      }),
+    { statusCode: 400 },
+  );
+});
+
+test("moderator save and approval retain the original proposal and submission metadata", async () => {
+  const db = createDb();
+  const payload = locationPayload("Original");
+  const created = await createLocationContribution({
+    db,
+    user: submitter,
+    kind: "new-location",
+    payload,
+  });
+  payload.name = "Mutated outside persistence";
+  const saved = await reviewContribution({
+    db,
+    id: created.id,
+    reviewer: admin,
+    action: "save",
+    payload: locationPayload("Reviewed"),
+  });
+  assert.equal(saved.payload.name, "Reviewed");
+  assert.equal(saved.submittedPayload.name, "Original");
+  assert.deepEqual(saved.submitter, submitter);
+  assert.equal(saved.createdAt, created.createdAt);
+  assert.equal(saved.status, "pending");
+  const approved = await reviewContribution({
+    db,
+    id: created.id,
+    reviewer: admin,
+    action: "approve",
+  });
+  assert.equal(approved.submittedPayload.name, "Original");
+  assert.equal(approved.payload.name, "Reviewed");
+  assert.equal(approved.status, "approved");
+  assert.ok(approved.reviewedAt);
+});
+
+test("first review of a legacy new-location proposal retains the available proposal in storage and response", async () => {
+  const contribution = createPendingContribution({
+    payload: locationPayload("Available original"),
+  });
+  const db = createDb({ contributions: [contribution] });
+  const result = await reviewContribution({
+    db,
+    id: contribution._id.toString(),
+    reviewer: admin,
+    action: "approve",
+    payload: locationPayload("Moderator correction"),
+  });
+  assert.equal(result.submittedPayload.name, "Available original");
+  assert.equal(contribution.submittedPayload.name, "Available original");
+  assert.equal(result.payload.name, "Moderator correction");
+});
+
+test("approval rejects stale proposals including deleted points and retains competing contributions", async () => {
+  const point = {
+    id: "entrance-1",
+    kind: "entrance",
+    label: "Gate",
+    latitude: 52.1,
+    longitude: 4.2,
+  };
+  const location = {
+    ...locationPayload(),
+    coordinatePoints: [point],
+    _id: new ObjectId(),
+    slug: "loop-park",
+    status: "published",
+  };
+  const db = createDb({ locations: [location] });
+  const first = await createLocationContribution({
+    db,
+    user: submitter,
+    kind: "location-change",
+    location,
+    payload: { ...locationPayload("First"), coordinatePoints: [] },
+  });
+  const second = await createLocationContribution({
+    db,
+    user: submitter,
+    kind: "location-change",
+    location,
+    payload: { ...locationPayload("Second"), coordinatePoints: [point] },
+  });
+  await reviewContribution({
+    db,
+    id: first.id,
+    reviewer: admin,
+    action: "approve",
+  });
+  await assert.rejects(
+    reviewContribution({
+      db,
+      id: second.id,
+      reviewer: admin,
+      action: "approve",
+    }),
+    { statusCode: 409 },
+  );
+  assert.equal(location.name, "First");
+  assert.deepEqual(location.coordinatePoints, []);
+  assert.equal(db.collections.contributions.documents[1].status, "pending");
+  assert.equal(
+    db.collections.contributions.documents[1].submittedPayload.name,
+    "Second",
+  );
+});
+
+test("legacy pending changes without a historical base stay readable but cannot overwrite published data", async () => {
+  const contribution = {
+    ...createPendingContribution({ payload: locationPayload("Legacy edit") }),
+    kind: "location-change",
+    locationId: new ObjectId(),
+  };
+  const db = createDb({
+    contributions: [contribution],
+    locations: [
+      {
+        ...locationPayload(),
+        _id: contribution.locationId,
+        status: "published",
+      },
+    ],
+  });
+  await assert.rejects(
+    reviewContribution({
+      db,
+      id: contribution._id.toString(),
+      reviewer: admin,
+      action: "approve",
+    }),
+    { statusCode: 409 },
+  );
+  assert.equal(contribution.status, "pending");
+});
+
+test("publication detects a change made after base comparison, including newly added optional fields", async () => {
+  const location = {
+    ...locationPayload(),
+    _id: new ObjectId(),
+    slug: "loop-park",
+    status: "published",
+  };
+  const db = createDb({ locations: [location] });
+  const created = await createLocationContribution({
+    db,
+    user: submitter,
+    kind: "location-change",
+    location,
+    payload: locationPayload("Proposal"),
+  });
+  const collection = db.collections.locations;
+  const update = collection.updateOne.bind(collection);
+  collection.updateOne = async (filter, fields) => {
+    location.routes = [
+      { id: "new-route", name: "New route", url: "https://example.com/" },
+    ];
+    return update(filter, fields);
+  };
+  await assert.rejects(
+    reviewContribution({
+      db,
+      id: created.id,
+      reviewer: admin,
+      action: "approve",
+    }),
+    { statusCode: 409 },
+  );
+  assert.equal(location.name, "Loop Park");
+  assert.equal(location.routes[0].id, "new-route");
+  assert.equal(db.collections.contributions.documents[0].status, "pending");
 });
 
 test("contribution indexes only require real contribution source ids to be unique", async () => {

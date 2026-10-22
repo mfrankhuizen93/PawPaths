@@ -2,6 +2,7 @@ import { createError, defineEventHandler, getRouterParam } from "h3";
 import type { LocationDetail } from "#shared/types/locations";
 import { inferLocationWarnings } from "../../utils/location-warnings.js";
 import { getDb } from "../../utils/mongodb.js";
+import { normalizeAreaAttributes } from "#shared/utils/location-contract";
 
 type RawLocationDetail = LocationDetail & {
   reviews?: LocationDetail["reviews"];
@@ -71,6 +72,8 @@ function buildProjection() {
     type: 1,
     characteristics: 1,
     coordinatePoints: 1,
+    attributes: 1,
+    routes: 1,
     warnings: { $ifNull: ["$warnings", []] },
     description: 1,
     relatedUrls: 1,
@@ -112,6 +115,12 @@ export default defineEventHandler(async (event): Promise<LocationDetail> => {
 
   return {
     ...location,
+    coordinatePoints: location.coordinatePoints ?? [],
+    attributes: normalizeAreaAttributes(
+      location.attributes,
+      location.characteristics,
+    ),
+    routes: location.routes ?? [],
     warnings: inferLocationWarnings(location.reviews),
   };
 });
