@@ -4,7 +4,7 @@ These local issue specifications correspond to published GitHub issues #14–#31
 
 ## #14. Document PawPaths product and UX architecture
 
-**Priority:** P0  
+**Priority:** P0\
 **Labels:** `type:chore`, `area:architecture`, `priority:P0`
 
 ### Context
@@ -45,7 +45,7 @@ Implementing UI, API, schema, or provider changes.
 
 ## #15. Review and align walking-area, point, and contribution models
 
-**Priority:** P0  
+**Priority:** P0\
 **Labels:** `type:chore`, `area:architecture`, `priority:P0`
 
 ### Context
@@ -87,7 +87,7 @@ Visual redesign and new favorites/visited features.
 
 ## #16. Fix coordinate selection and persistence in the map editor
 
-**Priority:** P0  
+**Priority:** P0\
 **Labels:** `type:bug`, `area:map`, `priority:P0`
 
 ### Context
@@ -129,7 +129,7 @@ New map providers, area polygons, and visual redesign outside the editor.
 
 ## #17. Support reliable multi-point editing per walking area
 
-**Priority:** P0  
+**Priority:** P0\
 **Labels:** `type:feature`, `area:map`, `priority:P0`
 
 ### Context
@@ -171,7 +171,7 @@ Route geometry editing and area polygon editing.
 
 ## #18. Implement geodata-based walking-area name suggestions
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:geodata`, `priority:P1`
 
 ### Context
@@ -213,7 +213,7 @@ Choosing the final provider without validation and editing area geometry.
 
 ## #19. Warn about potentially duplicate walking areas
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:geodata`, `area:ux`, `priority:P1`
 
 ### Context
@@ -255,7 +255,7 @@ Automatic deduplication or merging published areas.
 
 ## #20. Implement the map-first new walking-area submission flow
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:contributions`, `area:map`, `priority:P1`
 
 ### Context
@@ -297,7 +297,7 @@ Long mandatory wizards and persistent drafts.
 
 ## #21. Support inline editing of existing area attributes
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:contributions`, `area:ux`, `priority:P1`
 
 ### Context
@@ -339,7 +339,7 @@ Moderator UI and unrelated review editing.
 
 ## #22. Implement the contribution moderation lifecycle
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:moderation`, `area:contributions`, `priority:P1`
 
 ### Context
@@ -381,7 +381,7 @@ Automatic conflict resolution.
 
 ## #23. Support concurrent pending edits and conflict comparison
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:moderation`, `priority:P1`
 
 ### Context
@@ -423,7 +423,7 @@ Real-time collaborative editing.
 
 ## #24. Show contribution history and moderation status in the profile
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:contributions`, `area:ux`, `priority:P1`
 
 ### Context
@@ -464,7 +464,7 @@ Moderator queue redesign.
 
 ## #25. Redesign the discover-first homepage
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:ux`, `priority:P1`
 
 ### Context
@@ -506,7 +506,7 @@ New recommendation algorithms and saved/visited functionality.
 
 ## #26. Improve search, filters, and full-screen list/map switching
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:ux`, `area:map`, `priority:P1`
 
 ### Context
@@ -548,7 +548,7 @@ Homepage visual redesign and area geometry editing.
 
 ## #27. Redesign walking-area details and tab structure
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:ux`, `priority:P1`
 
 ### Context
@@ -590,7 +590,7 @@ New review moderation and navigation provider selection.
 
 ## #28. Select navigation destinations for entrances and parking
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:feature`, `area:map`, `area:ux`, `priority:P1`
 
 ### Context
@@ -631,7 +631,7 @@ Turn-by-turn navigation inside PawPaths.
 
 ## #29. Improve saved and visited location management
 
-**Priority:** P2  
+**Priority:** P2\
 **Labels:** `type:feature`, `area:personalization`, `priority:P2`
 
 ### Context
@@ -672,7 +672,7 @@ Visit journaling, route tracking, and social sharing.
 
 ## #30. Improve the reviews experience within the existing scope
 
-**Priority:** P2  
+**Priority:** P2\
 **Labels:** `type:feature`, `area:ux`, `priority:P2`
 
 ### Context
@@ -713,7 +713,7 @@ Review editing, moderation, reactions, and new social features.
 
 ## #31. Validate mobile usability and accessibility of core flows
 
-**Priority:** P1  
+**Priority:** P1\
 **Labels:** `type:chore`, `area:quality`, `area:ux`, `priority:P1`
 
 ### Context

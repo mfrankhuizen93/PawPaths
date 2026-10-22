@@ -1,7 +1,7 @@
 # PawPaths Product and UX Architecture
 
-**Status:** Confirmed product decisions with proposed implementation guidance  
-**Last updated:** 2026-10-22  
+**Status:** Confirmed product decisions with proposed implementation guidance\
+**Last updated:** 2026-10-22\
 **Scope:** Product behavior, UX architecture, domain boundaries, and implementation constraints
 
 This document is the central source of truth for PawPaths. It records agreed behavior without implying that unimplemented behavior already exists. Technical recommendations are explicitly marked as proposed, and unresolved choices remain open questions.
