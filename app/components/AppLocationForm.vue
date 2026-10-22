@@ -348,7 +348,7 @@ const photoFileSchema = z
 
 const coordinatePointSchema = z
   .object({
-    id: z.string().nullable().optional(),
+    id: z.string().min(1),
     kind: z.custom<LocationCoordinateKind>(isCoordinateKind, {
       message: "Choose a point type.",
     }),
@@ -453,9 +453,8 @@ const generalLocationMarker = computed<FormMapMarker>({
 
 const mapMarkers = computed<FormMapMarker[]>(() => [
   generalLocationMarker.value,
-  ...(form.value.coordinatePoints ?? []).map((point, index) => ({
+  ...(form.value.coordinatePoints ?? []).map((point) => ({
     ...point,
-    id: point.id ?? `point-${index}`,
   })),
 ]);
 const directionsUrl = computed(() => {

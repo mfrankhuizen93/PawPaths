@@ -42,12 +42,33 @@ export type LocationCoordinateKind =
   (typeof locationCoordinateKindOptions)[number]["value"];
 
 export type LocationCoordinatePoint = {
-  id?: string | null;
+  /** Required and stable within the parent area; migrate legacy records first. */
+  id: string;
   kind: LocationCoordinateKind;
   label: string;
   latitude: number;
   longitude: number;
   sourcePhotoId?: string | null;
+};
+
+export type LocationAttributeState = "yes" | "no" | "unknown";
+export type LocationOffLeashState =
+  | "everywhere"
+  | "partial"
+  | "not-allowed"
+  | "unknown";
+export type LocationAreaAttributes = {
+  offLeash: LocationOffLeashState;
+  fenced: LocationAttributeState;
+  swimming: LocationAttributeState;
+  wheelchairAccessible: LocationAttributeState;
+};
+
+/** An external walking route, not a destination point or an area boundary. */
+export type LocationRoute = {
+  id: string;
+  name: string;
+  url: string;
 };
 
 export type LocationListItem = {
@@ -58,11 +79,14 @@ export type LocationListItem = {
   city?: string | null;
   province?: string | null;
   country?: string | null;
+  /** Representative discovery position; never implies a navigable destination. */
   latitude?: number | null;
   longitude?: number | null;
   type: string[];
   characteristics: string[];
   coordinatePoints?: LocationCoordinatePoint[];
+  attributes?: LocationAreaAttributes;
+  routes?: LocationRoute[];
   warnings: string[];
   reviewCount: number;
   ratingCount: number;
@@ -132,6 +156,8 @@ export type EditableLocationFields = {
   relatedUrls?: LocationRelatedUrl[];
   photos?: LocationPhoto[];
   coordinatePoints?: LocationCoordinatePoint[];
+  attributes?: LocationAreaAttributes;
+  routes?: LocationRoute[];
 };
 
 export type LocationContributionKind = "new-location" | "location-change";
@@ -145,6 +171,10 @@ export type LocationContribution = {
   locationSlug?: string | null;
   locationName?: string | null;
   payload: EditableLocationFields;
+  /** Original proposal, retained when moderators edit the working payload. */
+  submittedPayload?: EditableLocationFields;
+  /** Published editable values at submission; absent for legacy contributions. */
+  basePayload?: EditableLocationFields | null;
   submitter: {
     id: string;
     name: string;

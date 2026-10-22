@@ -4,6 +4,7 @@ import type { QueryObject, QueryValue } from "ufo";
 import type { LocationsResponse } from "#shared/types/locations";
 import { getDb } from "../utils/mongodb.js";
 import { inferLocationWarnings } from "../utils/location-warnings.js";
+import { normalizeAreaAttributes } from "#shared/utils/location-contract";
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
@@ -437,6 +438,8 @@ function buildProjection(options: { compact?: boolean } = {}): MongoFilter {
     type: 1,
     characteristics: 1,
     coordinatePoints: 1,
+    attributes: 1,
+    routes: 1,
     warnings: { $ifNull: ["$warnings", []] },
     reviewCount: 1,
     ratingCount: 1,
@@ -542,11 +545,9 @@ function buildCursorMatchStage(
       $expr: {
         $or: fields.map((field, index) => ({
           $and: [
-            ...fields
-              .slice(0, index)
-              .map((previous) => ({
-                $eq: [previous.expression, previous.value],
-              })),
+            ...fields.slice(0, index).map((previous) => ({
+              $eq: [previous.expression, previous.value],
+            })),
             {
               [field.direction === "desc" ? "$lt" : "$gt"]: [
                 field.expression,
@@ -572,12 +573,16 @@ function normalizeWarnings(
         : Array.isArray(item.warnings)
           ? item.warnings
           : [];
-    const {
-      _id,
-      averageRatingSort,
-      searchScore,
-      ...publicItem
-    } = item;
+    const { _id, averageRatingSort, searchScore, ...rawPublicItem } = item;
+    const publicItem = {
+      ...rawPublicItem,
+      coordinatePoints: item.coordinatePoints ?? [],
+      attributes: normalizeAreaAttributes(
+        item.attributes,
+        item.characteristics as string[] | undefined,
+      ),
+      routes: item.routes ?? [],
+    };
 
     void _id;
     void averageRatingSort;

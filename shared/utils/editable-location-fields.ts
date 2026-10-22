@@ -1,4 +1,5 @@
 import type { EditableLocationFields } from "#shared/types/locations";
+import { normalizeAreaAttributes } from "#shared/utils/location-contract";
 
 export function normalizeEditableLocationFields(
   payload: Partial<EditableLocationFields> | null | undefined,
@@ -18,5 +19,16 @@ export function normalizeEditableLocationFields(
     coordinatePoints: (payload?.coordinatePoints ?? []).map((point) => ({
       ...point,
     })),
+    ...(payload?.attributes
+      ? {
+          attributes: normalizeAreaAttributes(
+            payload.attributes,
+            payload.characteristics,
+          ),
+        }
+      : {}),
+    ...(payload?.routes
+      ? { routes: payload.routes.map((route) => ({ ...route })) }
+      : {}),
   };
 }

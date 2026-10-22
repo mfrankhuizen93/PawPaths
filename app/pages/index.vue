@@ -299,6 +299,10 @@ function syncChangeForm(location: LocationListItem | null) {
   changeForm.longitude = location?.longitude ?? null;
   changeForm.type = [...(location?.type ?? [])];
   changeForm.characteristics = [...(location?.characteristics ?? [])];
+  changeForm.attributes = location?.attributes
+    ? { ...location.attributes }
+    : undefined;
+  changeForm.routes = location?.routes?.map((route) => ({ ...route }));
   changeForm.description = location?.description ?? "";
   changeForm.relatedUrls = (location?.relatedUrls ?? []).map((url) => ({
     ...url,
