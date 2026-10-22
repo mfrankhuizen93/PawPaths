@@ -16,19 +16,19 @@ PawPaths helps dog owners discover suitable and attractive walking areas, unders
 
 The primary user goal is: **find a great place to walk my dog, understand whether it suits my needs, and easily get there.** Secondary goals are saving places, tracking visits, writing reviews, and correcting or enriching shared information.
 
-The product is mobile-first, intuitive, accessible, visually appealing, and multilingual. Dutch labels are the agreed Dutch UI translations: **Ontdek**, **Zoeken**, **Mijn plekken**, **Profiel**, **Overzicht**, **Kaart**, **Routes**, **Reviews**, and **Navigeer**. These identify destinations and actions; other supported UI languages use their corresponding translated labels.
+The product is mobile-first, intuitive, accessible, visually appealing, and multilingual. English (US), locale `en-US`, is the base language for UI labels: **Discover**, **Search**, **My places**, **Profile**, **Overview**, **Map**, **Routes**, **Reviews**, and **Navigate**. These identify destinations and actions; other supported UI languages use their corresponding translated labels.
 
 ### Languages and translation
 
-**Confirmed product direction:** serve PawPaths in multiple languages. Treat application UI translation and location-content translation as separate concerns. The exact supported languages and default language remain open.
+**Confirmed product direction:** serve PawPaths in multiple languages. Treat application UI translation and location-content translation as separate concerns. UI labels are authored in English (US), with maintained translations for other supported languages. Additional supported languages and initial locale selection remain open.
 
-- **UI text:** use maintained translations for labels, navigation, buttons, form help, validation messages, and loading/empty/error states. Resolve them through translation keys for the selected UI language rather than automatically translating rendered UI at runtime. The Dutch labels above describe the Dutch version, not a requirement to show Dutch labels in every language.
+- **UI text:** use maintained translations for labels, navigation, buttons, form help, validation messages, and loading/empty/error states. Resolve them through translation keys for the selected UI language rather than automatically translating rendered UI at runtime. Use the English (US) labels above as the source catalog; other locales provide their translated equivalents. This does not require location content to be submitted or stored in English.
 - **Location content:** preserve text in the language it was provided in, including imported and community-submitted text. Automatically translate that content for readers in other supported languages without replacing the original. The original text remains the source for subsequent translations and moderation.
 - **Structured location facts:** coordinates, identifiers, URLs, and attribute values retain their meaning across languages. Translate their display labels rather than creating language-specific copies of the underlying facts. For example, the same parking point has a translated point-kind label, while its contributor-provided description retains its original text and can have an automatic translation.
 
 **Proposed implementation:** use locale message catalogs for UI text and a separate translation service for location content. Associate original text with its source language, and associate generated translations with a target language and source revision. Allow source-language metadata per text field or contribution where content within one location uses different languages; do not assume one source language for an entire location. Cache or store generated translations separately and refresh them when the source changes. Display the original while a translation is unavailable or fails, identify automatically translated text, and let readers view the original. Preserve proper place names unless an established localized name is available.
 
-**Open questions:** initial languages and default locale; language selection and persistence; translation provider, cost, privacy, and quality controls; language detection and correction for unknown or mixed-language source text; translation timing and storage; translated search; and which text fields, including reviews, receive automatic translation. These implementation choices do not change the direction of preserving original location text and providing automatic translations.
+**Open questions:** additional supported languages and initial locale selection; language selection and persistence; translation provider, cost, privacy, and quality controls; language detection and correction for unknown or mixed-language source text; translation timing and storage; translated search; and which text fields, including reviews, receive automatic translation. These implementation choices do not change the direction of preserving original location text and providing automatic translations.
 
 ## 2. Decision vocabulary
 
@@ -43,16 +43,16 @@ Unless a subsection is explicitly marked otherwise, sections 1 and 3–11 state 
 
 ### Confirmed decisions
 
-The four primary destinations, shown here with their Dutch UI labels, are:
+The four primary destinations, shown here with their English (US) UI labels, are:
 
-1. **Ontdek** — discovery-first homepage with inspirational locations.
-2. **Zoeken** — search, filters, and map exploration.
-3. **Mijn plekken** — saved and visited locations.
-4. **Profiel** — account, contributions, and moderation status.
+1. **Discover** — discovery-first homepage with inspirational locations.
+2. **Search** — search, filters, and map exploration.
+3. **My places** — saved and visited locations.
+4. **Profile** — account, contributions, and moderation status.
 
 Adding a location is contextual, primarily from search or profile. It is not a fifth bottom-navigation destination. The existing application currently uses the root map as the main experience and routes `/location/[slug]` back to it; the redesign should move toward distinct information architecture incrementally rather than silently replacing the current route contract.
 
-### Homepage: Ontdek
+### Homepage: Discover
 
 - Place a prominent search field at the top.
 - Use large, wide, photo-led location cards.
@@ -61,7 +61,7 @@ Adding a location is contextual, primarily from search or profile. It is not a f
 - Show name, area/city, rating, and approximately two important characteristics consistently.
 - Make homepage cards visually richer than search-result cards.
 
-### Search: Zoeken
+### Search: Search
 
 Search covers location names, geographical areas, nearby locations, map exploration, characteristics, facilities, and distance. Important filters include off-leash possibilities, swimming/water, parking, fenced areas, hazards such as bicycle/BMX paths, facilities, and rating.
 
@@ -69,22 +69,22 @@ List and map are alternative full-screen presentations. List cards are compact a
 
 ### Personal areas
 
-Saving and visiting are separate states. A saved location is not automatically visited. Both collections are reachable through **Mijn plekken**. Contribution history and moderation status are visible in **Profiel**.
+Saving and visiting are separate states. A saved location is not automatically visited. Both collections are reachable through **My places**. Contribution history and moderation status are visible in **Profile**.
 
 ## 4. Core user journeys
 
 ### Discover and decide
 
-1. User opens Ontdek and sees relevant, inspiring location cards.
-2. User searches or switches to Zoeken when the destination or constraints are known.
+1. User opens Discover and sees relevant, inspiring location cards.
+2. User searches or switches to Search when the destination or constraints are known.
 3. User filters by characteristics, facilities, distance, rating, or nearby position.
 4. User selects a location preview or card and opens details.
 5. User reviews overview, characteristics, rating, routes, map, and community feedback.
-6. User selects Navigeer and chooses an entrance or parking destination.
+6. User selects Navigate and chooses an entrance or parking destination.
 
 ### Navigate accurately
 
-An area may have multiple entrances and parking locations. Navigeer first presents available destinations, then opens external navigation with the selected point's persisted coordinates. The application must not navigate to an approximate area center or invent a missing entrance/parking point. If no suitable destination exists, explain the limitation and provide a safe fallback only when one is explicitly supported by the data.
+An area may have multiple entrances and parking locations. Navigate first presents available destinations, then opens external navigation with the selected point's persisted coordinates. The application must not navigate to an approximate area center or invent a missing entrance/parking point. If no suitable destination exists, explain the limitation and provide a safe fallback only when one is explicitly supported by the data.
 
 ### Add a location
 
@@ -109,11 +109,11 @@ The detail view represents a walking **area**, not necessarily one coordinate. I
 1. Large hero photograph.
 2. Name and geographical context.
 3. Rating and important characteristics.
-4. Prominent Navigeer action.
+4. Prominent Navigate action.
 5. Concise overview.
-6. Tabs: **Overzicht**, **Kaart**, **Routes**, **Reviews**.
+6. Tabs: **Overview**, **Map**, **Routes**, **Reviews**.
 
-The map belongs in the Kaart tab, not embedded in the overview. Navigation remains easily accessible while scrolling. Reviews should reflect the current review capability and data model; do not invent unrelated review features.
+The map belongs in the Map tab, not embedded in the overview. Navigation remains easily accessible while scrolling. Reviews should reflect the current review capability and data model; do not invent unrelated review features.
 
 ## 6. Walking-area domain model
 
@@ -222,8 +222,8 @@ Keeping edits in memory allows retries without persistent drafts. Confirming dis
 - Reviews are currently posted directly to a location endpoint and rendered in root-page detail state; their placement should align with the detail Reviews tab without expanding scope.
 - Contributions are available to maintainers/admins, but profile-facing contribution history and concurrent comparison are not complete.
 - Favorites and visited state are not represented in the inspected shared location types or visible API surface.
-- Existing map and form labels are mostly hard-coded English while the agreed Dutch navigation labels are documented. `package.json` and `nuxt.config.ts` do not configure an application localization system, and the shared location types do not represent source languages or generated translations. The multilingual UI and automatic location-content translations are target behavior, not implemented by this documentation change.
-- The current shared form uses Details, Map, Photos, and Links, with Features or Reviews by mode. The target Overzicht, Kaart, Routes, Reviews arrangement and inline edits must be reconciled with the guide's shared form requirements in issue #27.
+- Existing map and form labels are mostly hard-coded English rather than a maintained English (US) source catalog with translations. `package.json` and `nuxt.config.ts` do not configure an application localization system, and the shared location types do not represent source languages or generated translations. The multilingual UI and automatic location-content translations are target behavior, not implemented by this documentation change.
+- The current shared form uses Details, Map, Photos, and Links, with Features or Reviews by mode. The target Overview, Map, Routes, Reviews arrangement and inline edits must be reconciled with the guide's shared form requirements in issue #27.
 - The current reverse lookup prefers some named area features but can fall back to a street; it does not yet establish reliable area matching, confidence, or provider resilience.
 - Current pending payloads are mutable during moderation, and full-payload approval can overwrite fields changed by another approved contribution. Immutable original snapshots and conflict comparison are target behavior.
 
@@ -277,7 +277,7 @@ These paths support the observations above and give implementation issues a star
 7. Persistence model for saved and visited states and whether visit metadata is needed.
 8. Route data model and whether route geometry is stored internally or linked externally.
 9. Review moderation, editing, and abuse controls within the existing review scope.
-10. Initial supported UI/content languages, default locale, and language preference persistence. Multilingual UI, maintained UI-label translations, preservation of original location text, and automatic location-content translation are established product direction; the provider, source-language metadata, revision tracking, translation timing/storage, field coverage, and search behavior remain open (section 1).
+10. Additional supported UI/content languages, initial locale selection, and language preference persistence. English (US) (`en-US`) is the established base language for UI labels. Multilingual UI, maintained UI-label translations, preservation of original location text, and automatic location-content translation are established product direction; the provider, source-language metadata, revision tracking, translation timing/storage, field coverage, and search behavior remain open (section 1).
 11. How the short map-first creation and inline-edit journeys reuse `AppLocationForm` and reconcile target detail tabs with the current UI guide, without introducing nested tabs or duplicate forms.
 12. Whether creation can begin before sign-in, or retains the guide's authentication-first Add behavior; both must preserve intent and unsaved values through authentication or cancellation.
 
