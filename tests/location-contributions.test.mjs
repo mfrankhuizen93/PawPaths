@@ -502,3 +502,110 @@ test("retrying approval after a previous location insert reuses the existing loc
   assert.equal(result.locationSlug, "retry-park-amsterdam");
   assert.equal(result.locationId, existingLocationId.toString());
 });
+
+// Exercise the same placement -> editable snapshot -> API sanitizer -> review
+// boundaries used by the add and edit drawers, using an isolated database double.
+test("confirmed add/edit positions survive normalization, submission reload, reviewer save and approval", async () => {
+  const { default: placementModule } =
+    await import("../app/composables/useLocationPointPlacement.ts");
+  const { default: normalization } =
+    await import("../shared/utils/editable-location-fields.ts");
+  const { useLocationPointPlacement } = placementModule;
+  const { normalizeEditableLocationFields } = normalization;
+  const db = createDb();
+  let form = normalizeEditableLocationFields(locationPayload());
+  const editor = useLocationPointPlacement(() => form);
+  editor.begin({ type: "area" });
+  editor.pick({ latitude: 52.11111149, longitude: 4.22222249 });
+  editor.confirm();
+  editor.begin({ type: "new", kind: "parking", label: "Parking" });
+  editor.pick({ latitude: 52.33333349, longitude: 4.44444449 });
+  editor.confirm();
+  const expected = structuredClone(form);
+  const added = await createLocationContribution({
+    db,
+    user: submitter,
+    kind: "new-location",
+    payload: sanitizeLocationPayload(normalizeEditableLocationFields(form)),
+  });
+  // A failed request does not consume or replace the confirmed form.
+  const failedDb = {
+    collection() {
+      return {
+        async insertOne() {
+          throw new Error("Network failure");
+        },
+      };
+    },
+  };
+  await assert.rejects(
+    createLocationContribution({
+      db: failedDb,
+      user: submitter,
+      kind: "new-location",
+      payload: sanitizeLocationPayload(form),
+    }),
+    /Network failure/,
+  );
+  assert.deepEqual(form, expected);
+  const reloaded = db.collections.contributions.documents[0];
+  assert.deepEqual(
+    reloaded.payload.coordinatePoints,
+    added.payload.coordinatePoints,
+  );
+  await reviewContribution({
+    db,
+    id: added.id,
+    reviewer: admin,
+    action: "save",
+    payload: normalizeEditableLocationFields(reloaded.payload),
+  });
+  await reviewContribution({
+    db,
+    id: added.id,
+    reviewer: admin,
+    action: "approve",
+  });
+  const published = db.collections.locations.documents[0];
+  assert.equal(published.latitude, 52.111111);
+  assert.equal(published.longitude, 4.222222);
+  assert.deepEqual(published.location.coordinates, [4.222222, 52.111111]);
+  assert.deepEqual(
+    published.coordinatePoints.map(({ sourcePhotoId, ...point }) => point),
+    expected.coordinatePoints,
+  );
+
+  form = normalizeEditableLocationFields(published);
+  const id = form.coordinatePoints[0].id;
+  editor.begin({ type: "point", id });
+  editor.pick({ latitude: -12.12345678, longitude: 130.98765432 });
+  editor.confirm();
+  const edited = await createLocationContribution({
+    db,
+    user: submitter,
+    kind: "location-change",
+    location: published,
+    payload: sanitizeLocationPayload(normalizeEditableLocationFields(form)),
+  });
+  await reviewContribution({
+    db,
+    id: edited.id,
+    reviewer: admin,
+    action: "approve",
+    payload: normalizeEditableLocationFields(edited.payload),
+  });
+  const loaded = normalizeEditableLocationFields(
+    JSON.parse(JSON.stringify(published)),
+  );
+  assert.deepEqual(loaded.coordinatePoints[0], {
+    id,
+    kind: "parking",
+    label: "Parking",
+    latitude: -12.123457,
+    longitude: 130.987654,
+    sourcePhotoId: null,
+  });
+  assert.equal(loaded.latitude, 52.111111);
+  assert.equal(loaded.longitude, 4.222222);
+  assert.deepEqual(published.location.coordinates, [4.222222, 52.111111]);
+});
