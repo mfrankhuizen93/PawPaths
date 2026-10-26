@@ -151,8 +151,8 @@ The editor is a map beside a manageable list of all points belonging to the area
 - Use the same coordinate-selection interaction for add and edit.
 - Replace coordinates without relying on marker dragging.
 - Enter point-specific details in a focused editing surface when useful.
-- Show a clear confirmation of the selected coordinates before save.
-- Persist exactly the coordinates shown to the user.
+- Show a clear confirmation of the selected map position, using area names or address details when available.
+- Persist exactly the confirmed map position.
 
 ### Proposed implementation
 
@@ -162,7 +162,7 @@ Use a stable client-generated point identity while editing, keep the selected po
 
 For every saved point, the persisted latitude/longitude must equal the confirmed coordinate (within the documented rounding precision), retain its point ID on edits, and never be replaced by the area center or another selected point. This is P0 behavior.
 
-**Current implementation:** `AppLocationPointPicker.setCoordinates` rounds map selections to six decimal places and emits named latitude/longitude values. MongoDB GeoJSON uses `[longitude, latitude]`. This describes the current boundaries, not a verified end-to-end guarantee. Issue [#16](https://github.com/mfrankhuizen93/PawPaths/issues/16) must specify precision across placement, normalization, approval, and reload, and cover rapid point switching and failed saves.
+**Current implementation:** the shared form stages a single coordinate pair from map clicks or address search and requires explicit confirmation before applying it to the selected area or stable point ID. Switching points or canceling discards the unconfirmed selection; failed submissions retain confirmed values. The [location contract](LOCATION_CONTRACT.md#placement-and-confirmation-precision) specifies six-decimal placement precision and unchanged numeric values through normalization, submission, approval, and reload. Regression tests cover these boundaries and rapid switching using an isolated database double; this does not establish deployed behavior. MongoDB GeoJSON uses `[longitude, latitude]`.
 
 ## 8. Geographical data and name suggestions
 

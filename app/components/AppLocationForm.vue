@@ -9,6 +9,8 @@ import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { isLocationDescriptionTemplate } from "#shared/utils/location-description";
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import { z } from "zod";
+import { getLocationPlaceDetails } from "~/utils/location-place-details";
+import { useLocationPointPlacement } from "~/composables/useLocationPointPlacement";
 import AppTabs from "~/components/common/AppTabs.vue";
 import AppPhotoLanes from "~/components/AppPhotoLanes.vue";
 
@@ -34,7 +36,7 @@ const props = withDefaults(
     canGenerateDescription: false,
     message: "",
     pointHelp:
-      "Click the map to set the general location. Add another point below, then click the map to place it.",
+      "Choose Place point or add a point, select a position on the map or search, then confirm the position.",
     resetKey: null,
     submitLabel: "Submit for review",
     submitting: false,
@@ -208,12 +210,31 @@ const compressedPhotoQuality = 0.74;
 
 const photoFiles = ref<File[]>([]);
 const isMapEditorOpen = ref(false);
-const activePointId = ref<string | null>(
-  props.mapEditingLocked ? null : "general",
+const placement = useLocationPointPlacement(() => form.value);
+const {
+  target: placementTarget,
+  draft: placementDraft,
+  coordinates: placementCoordinates,
+} = placement;
+const pendingPointKind = computed(() =>
+  placementTarget.value?.type === "new" ? placementTarget.value.kind : null,
 );
-const pendingPointKind = ref<Exclude<LocationCoordinateKind, "general"> | null>(
-  null,
+const placementLabel = computed(() => {
+  const target = placementTarget.value;
+  if (target?.type === "area") return "General location";
+  if (target?.type === "new") return target.label;
+  return target?.type === "point"
+    ? (findCoordinatePoint(target.id)?.label ?? "Point unavailable")
+    : "";
+});
+const placementMarkerId = computed(() =>
+  placementTarget.value?.type === "area"
+    ? "general"
+    : placementTarget.value?.type === "point"
+      ? placementTarget.value.id
+      : undefined,
 );
+const placementError = ref("");
 const renamingPointId = ref<string | null>(null);
 const renamingPointLabel = ref("");
 const isReverseGeocoding = ref(false);
@@ -353,8 +374,12 @@ const coordinatePointSchema = z
       message: "Choose a point type.",
     }),
     label: z.string().trim().min(1, "Enter a point label."),
-    latitude: z.number().finite("Set this point on the map."),
-    longitude: z.number().finite("Set this point on the map."),
+    latitude: z.number().finite("Set this point on the map.").min(-90).max(90),
+    longitude: z
+      .number()
+      .finite("Set this point on the map.")
+      .min(-180)
+      .max(180),
     sourcePhotoId: z.string().nullable().optional(),
   })
   .superRefine((value, context) => {
@@ -373,8 +398,8 @@ const locationSchema = z
     city: z.string().trim().nullable().optional(),
     province: z.string().nullable().optional(),
     country: z.string().trim().nullable().optional(),
-    latitude: z.number().finite().nullable().optional(),
-    longitude: z.number().finite().nullable().optional(),
+    latitude: z.number().finite().min(-90).max(90).nullable().optional(),
+    longitude: z.number().finite().min(-180).max(180).nullable().optional(),
     type: z
       .array(z.string())
       .min(1, "Choose at least one type.")
@@ -468,58 +493,12 @@ const directionsUrl = computed(() => {
   return `https://www.google.com/maps/dir/?api=1&destination=${form.value.latitude},${form.value.longitude}`;
 });
 
-const activePoint = computed<LocationCoordinatePoint | null>(() => {
-  if (!activePointId.value) return null;
-  if (activePointId.value === "general") return null;
-
-  return (
-    form.value.coordinatePoints?.find(
-      (point) => point.id === activePointId.value,
-    ) ?? null
-  );
-});
 const isPoiAddMode = computed(
   () =>
     Boolean(pendingPointKind.value) &&
     pendingPointKind.value !== "parking" &&
     pendingPointKind.value !== "entrance",
 );
-
-const activeLatitude = computed({
-  get: () => {
-    if (!activePointId.value) return null;
-
-    return activePoint.value?.latitude ?? form.value.latitude;
-  },
-  set: (value: number | null) => {
-    if (!activePointId.value) return;
-
-    if (activePoint.value) {
-      if (value !== null) activePoint.value.latitude = value;
-      return;
-    }
-
-    form.value.latitude = value;
-  },
-});
-
-const activeLongitude = computed({
-  get: () => {
-    if (!activePointId.value) return null;
-
-    return activePoint.value?.longitude ?? form.value.longitude;
-  },
-  set: (value: number | null) => {
-    if (!activePointId.value) return;
-
-    if (activePoint.value) {
-      if (value !== null) activePoint.value.longitude = value;
-      return;
-    }
-
-    form.value.longitude = value;
-  },
-});
 
 function getErrorMessage(errorValue: unknown) {
   if (
@@ -800,7 +779,7 @@ function addPoiFromPhoto(photo: LocationPhoto) {
   };
 
   form.value.coordinatePoints = [...(form.value.coordinatePoints ?? []), point];
-  activePointId.value = point.id ?? "general";
+  placement.cancel();
 }
 
 async function handlePhotoChange() {
@@ -882,50 +861,31 @@ function createPointId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
 
-function createCoordinatePoint(
-  kind: Exclude<LocationCoordinateKind, "general">,
-  latitude: number,
-  longitude: number,
-) {
-  const point: LocationCoordinatePoint = {
-    id: createPointId(),
-    kind,
-    label: getPointLabel(kind),
-    latitude,
-    longitude,
-  };
-
-  form.value.coordinatePoints = [...(form.value.coordinatePoints ?? []), point];
-  activePointId.value = null;
-  pendingPointKind.value = null;
-}
-
 function startAddingCoordinatePoint(
   kind: Exclude<LocationCoordinateKind, "general">,
 ) {
   isMapEditorOpen.value = true;
-  pendingPointKind.value = kind;
-  activePointId.value = null;
+  placementError.value = "";
+  placement.begin({ type: "new", kind, label: getPointLabel(kind) });
 }
 
 function handleMapPick(coordinates: { latitude: number; longitude: number }) {
-  if (!pendingPointKind.value) {
-    if (activePointId.value && activePointId.value !== "general") {
-      activePointId.value = null;
-    }
-    return;
-  }
+  placement.pick(coordinates);
+}
 
-  createCoordinatePoint(
-    pendingPointKind.value,
-    coordinates.latitude,
-    coordinates.longitude,
-  );
+function confirmMapPosition() {
+  placementError.value = placement.confirm()
+    ? ""
+    : "This point is unavailable or the eight-point limit has been reached.";
 }
 
 function moveMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
-  pendingPointKind.value = null;
-  activePointId.value = marker.kind === "general" ? "general" : marker.id;
+  placementError.value = "";
+  placement.begin(
+    marker.kind === "general"
+      ? { type: "area" }
+      : { type: "point", id: marker.id },
+  );
 }
 
 function openMapEditor() {
@@ -937,9 +897,11 @@ function removeCoordinatePoint(id: string | null | undefined) {
     (point) => point.id !== id,
   );
 
-  if (activePointId.value === id) {
-    activePointId.value = props.mapEditingLocked ? null : "general";
-  }
+  if (
+    placementTarget.value?.type === "point" &&
+    placementTarget.value.id === id
+  )
+    placement.cancel();
 }
 
 function removeMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
@@ -998,49 +960,54 @@ function setMapMarkerAsGeneral(marker: {
   const point = findCoordinatePoint(marker.id);
   if (!point) return;
 
-  form.value.latitude = point.latitude;
-  form.value.longitude = point.longitude;
-  removeCoordinatePoint(marker.id);
-  pendingPointKind.value = null;
-  activePointId.value = "general";
+  placement.begin({ type: "area" });
+  placement.pick({ latitude: point.latitude, longitude: point.longitude });
 }
 
 async function reverseGeocodeGeneralLocation() {
   if (
     props.readonly ||
-    activePointId.value !== "general" ||
     !Number.isFinite(form.value.latitude) ||
     !Number.isFinite(form.value.longitude)
   ) {
     return;
   }
 
+  const latitude = form.value.latitude;
+  const longitude = form.value.longitude;
+  const resetKey = props.resetKey;
+  const isCurrent = () =>
+    resetKey === props.resetKey &&
+    latitude === form.value.latitude &&
+    longitude === form.value.longitude;
   geocodeError.value = "";
   isReverseGeocoding.value = true;
 
   try {
-    const response = await $fetch<{
-      city?: string | null;
-      province?: string | null;
-      country?: string | null;
-    }>("/api/geo/reverse", {
-      query: {
-        lat: form.value.latitude,
-        lng: form.value.longitude,
-      },
+    const response = await getLocationPlaceDetails({
+      latitude: latitude as number,
+      longitude: longitude as number,
     });
 
+    if (!isCurrent()) return;
     form.value.city = response.city ?? form.value.city;
     form.value.province = response.province ?? form.value.province;
     form.value.country = response.country ?? form.value.country;
   } catch {
-    geocodeError.value = "Could not fill place details from the map point.";
+    if (isCurrent())
+      geocodeError.value = "Could not fill place details from the map point.";
   } finally {
-    isReverseGeocoding.value = false;
+    if (isCurrent()) isReverseGeocoding.value = false;
   }
 }
 
 function submitForm() {
+  if (placementTarget.value) {
+    isMapEditorOpen.value = true;
+    placementError.value =
+      "Confirm or cancel the selected position before submitting.";
+    return;
+  }
   emit("submit");
 }
 
@@ -1069,8 +1036,8 @@ async function generateDescription() {
 
 function resetLocalState() {
   isMapEditorOpen.value = false;
-  activePointId.value = props.mapEditingLocked ? null : "general";
-  pendingPointKind.value = null;
+  placement.cancel();
+  placementError.value = "";
   renamingPointId.value = null;
   renamingPointLabel.value = "";
   photoFiles.value = [];
@@ -1101,6 +1068,13 @@ watch(
     }, 650);
   },
 );
+
+watch(isMapEditorOpen, (open) => {
+  if (!open) {
+    placement.cancel();
+    placementError.value = "";
+  }
+});
 
 watch(
   () => props.resetKey,
@@ -1256,6 +1230,15 @@ onBeforeUnmount(() => {
               :markers="mapMarkers"
               readonly
             />
+            <AppLocationPointList
+              :markers="mapMarkers"
+              :readonly="readonly"
+              @select="
+                isMapEditorOpen = true;
+                moveMapMarker($event);
+              "
+              @remove="removeMapMarker"
+            />
             <p v-if="isReverseGeocoding" class="text-sm text-slate-500">
               Finding place details from the general location...
             </p>
@@ -1270,15 +1253,18 @@ onBeforeUnmount(() => {
         >
           <template #body>
             <div
-              class="flex h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 flex-col overflow-hidden"
+              class="flex h-[calc(100dvh-7rem)] max-h-[calc(100dvh-7rem)] min-h-0 flex-col gap-3 overflow-hidden sm:flex-row"
             >
               <div class="relative min-h-0 flex-1">
                 <AppLocationPointPicker
-                  v-model:latitude="activeLatitude"
-                  v-model:longitude="activeLongitude"
+                  :latitude="placementCoordinates?.latitude"
+                  :longitude="placementCoordinates?.longitude"
+                  :placing="Boolean(placementTarget)"
+                  :active-marker-id="placementMarkerId"
                   full-height
                   :markers="mapMarkers"
                   :readonly="false"
+                  @marker-select="moveMapMarker"
                   @marker-change-kind="changeMapMarkerKind"
                   @marker-delete="removeMapMarker"
                   @marker-move="moveMapMarker"
@@ -1287,7 +1273,50 @@ onBeforeUnmount(() => {
                   @picked="handleMapPick"
                 >
                   <template #actions>
-                    <div class="flex items-center gap-1.5">
+                    <p class="bg-default rounded-md p-2 text-sm">
+                      {{ pointHelp }}
+                    </p>
+                    <div
+                      v-if="placementTarget"
+                      class="bg-default flex flex-col gap-2 rounded-md p-3"
+                      aria-live="polite"
+                    >
+                      <p class="font-medium">Place {{ placementLabel }}</p>
+                      <AppLocationPositionSummary
+                        v-if="placementDraft"
+                        :latitude="placementDraft.latitude"
+                        :longitude="placementDraft.longitude"
+                      />
+                      <p v-else class="text-muted text-sm">
+                        Select a position on the map or search for a place.
+                      </p>
+                      <div class="flex flex-wrap gap-2">
+                        <UButton
+                          label="Confirm position"
+                          :disabled="!placementDraft"
+                          type="button"
+                          icon="i-lucide-check"
+                          @click="confirmMapPosition"
+                        />
+                        <UButton
+                          label="Cancel placement"
+                          type="button"
+                          color="neutral"
+                          variant="subtle"
+                          @click="
+                            placement.cancel();
+                            placementError = '';
+                          "
+                        />
+                      </div>
+                    </div>
+                    <UAlert
+                      v-if="placementError"
+                      :title="placementError"
+                      color="error"
+                      variant="soft"
+                    />
+                    <div class="flex flex-wrap items-center gap-1.5">
                       <UButton
                         :class="mapPointActionButtonClass"
                         color="neutral"
@@ -1320,10 +1349,6 @@ onBeforeUnmount(() => {
                           content:
                             'max-h-[min(20rem,calc(100dvh-8rem))] overflow-y-auto',
                         }"
-                        @update:open="
-                          $event &&
-                          ((activePointId = null), (pendingPointKind = null))
-                        "
                       >
                         <UButton
                           :class="mapPointActionButtonClass"
@@ -1340,6 +1365,13 @@ onBeforeUnmount(() => {
                   </template>
                 </AppLocationPointPicker>
               </div>
+              <AppLocationPointList
+                class="max-h-[30dvh] overflow-y-auto sm:max-h-full sm:w-72 sm:shrink-0"
+                :markers="mapMarkers"
+                :active-id="placementMarkerId"
+                @select="moveMapMarker"
+                @remove="removeMapMarker"
+              />
             </div>
           </template>
         </UModal>

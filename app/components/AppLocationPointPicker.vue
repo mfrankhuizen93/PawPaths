@@ -1,4 +1,8 @@
 <script lang="ts" setup>
+import {
+  isValidLocationCoordinates,
+  roundLocationCoordinates,
+} from "#shared/utils/location-coordinates";
 import type { GeoJSONSource, Map, MapMouseEvent } from "maplibre-gl";
 import type { GeocodeResult } from "#shared/types/geo";
 import type { LocationCoordinateKind } from "#shared/types/locations";
@@ -17,11 +21,12 @@ const props = defineProps<{
   markers?: PickerMarker[];
   fullHeight?: boolean;
   readonly?: boolean;
+  placing?: boolean;
+  activeMarkerId?: string;
 }>();
 
 const emit = defineEmits<{
-  "update:latitude": [value: number | null];
-  "update:longitude": [value: number | null];
+  "marker-select": [value: { id: string; kind: LocationCoordinateKind }];
   "marker-change-kind": [
     value: {
       id: string;
@@ -34,7 +39,6 @@ const emit = defineEmits<{
   "marker-rename": [value: { id: string; kind: LocationCoordinateKind }];
   "marker-set-general": [value: { id: string; kind: LocationCoordinateKind }];
   picked: [value: { latitude: number; longitude: number }];
-  selected: [value: GeocodeResult];
 }>();
 
 const config = useRuntimeConfig();
@@ -163,9 +167,29 @@ function getSelectionFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Poin
       Number.isFinite(marker.latitude) && Number.isFinite(marker.longitude),
   );
 
+  const visibleMarkers = markers.map((marker) =>
+    props.placing &&
+    marker.id === props.activeMarkerId &&
+    selectedCoordinates.value
+      ? { ...marker, latitude: props.latitude, longitude: props.longitude }
+      : marker,
+  );
+  if (
+    props.placing &&
+    selectedCoordinates.value &&
+    !visibleMarkers.some((marker) => marker.id === props.activeMarkerId)
+  ) {
+    visibleMarkers.push({
+      id: "placement-preview",
+      label: "Selected position",
+      kind: "other",
+      latitude: props.latitude,
+      longitude: props.longitude,
+    });
+  }
   return {
     type: "FeatureCollection",
-    features: markers.map((marker) => ({
+    features: visibleMarkers.map((marker) => ({
       type: "Feature",
       geometry: {
         type: "Point",
@@ -233,19 +257,18 @@ function fitMarkersToView() {
 }
 
 function setCoordinates(coordinates: [number, number]) {
-  const longitude = Number(coordinates[0].toFixed(6));
-  const latitude = Number(coordinates[1].toFixed(6));
-
-  emit("update:longitude", longitude);
-  emit("update:latitude", latitude);
-  emit("picked", { latitude, longitude });
+  if (props.readonly || !props.placing || !isReady.value) return;
+  const value = roundLocationCoordinates({
+    latitude: coordinates[1],
+    longitude: coordinates[0],
+  });
+  if (value) emit("picked", value);
 }
 
 function searchAddress(result: GeocodeResult) {
   const coordinates: [number, number] = [result.longitude, result.latitude];
-
   setCoordinates(coordinates);
-  emit("selected", result);
+  if (!isValidLocationCoordinates(result)) return;
   map.value?.easeTo({
     center: coordinates,
     zoom: Math.max(map.value.getZoom(), 14),
@@ -381,9 +404,9 @@ function getMapPointFromEvent(event: MouseEvent | PointerEvent) {
 
 function getMarkerAtPoint(point: { x: number; y: number }) {
   const activeMap = map.value;
-  if (!activeMap) return null;
+  if (!activeMap || !isReady.value) return null;
 
-  const features = activeMap.queryRenderedFeatures(point, {
+  const features = activeMap.queryRenderedFeatures([point.x, point.y], {
     layers: [...selectionLayerIds],
   });
 
@@ -514,9 +537,7 @@ onMounted(async () => {
   map.value.on("load", () => {
     addSelectionLayer();
     isReady.value = true;
-    if (props.readonly) {
-      fitMarkersToView();
-    }
+    fitMarkersToView();
   });
 
   map.value.on("click", (event: MapMouseEvent) => {
@@ -526,14 +547,24 @@ onMounted(async () => {
     }
 
     contextMarker.value = null;
-    if (props.readonly) return;
+    if (props.readonly || !isReady.value) return;
+    if (!props.placing) {
+      const marker = getMarkerAtPoint(event.point);
+      if (marker) emit("marker-select", marker);
+      return;
+    }
 
     setCoordinates([event.lngLat.lng, event.lngLat.lat]);
   });
 });
 
 watch(
-  () => [selectedCoordinates.value?.join(","), markerKey.value],
+  () => [
+    selectedCoordinates.value?.join(","),
+    markerKey.value,
+    props.placing,
+    props.activeMarkerId,
+  ],
   () => {
     syncSelection();
 
@@ -592,9 +623,11 @@ onBeforeUnmount(() => map.value?.remove());
         class="absolute top-3 left-3 z-10 flex w-[min(calc(100%-1.5rem),24rem)] flex-col gap-2"
       >
         <div
+          v-if="!readonly"
           class="border-default/60 bg-default/92 rounded-xl border shadow-lg backdrop-blur-xl"
         >
           <AppAddressSearch
+            v-if="isReady"
             placeholder="Search address or place"
             size="sm"
             @selected="searchAddress"
