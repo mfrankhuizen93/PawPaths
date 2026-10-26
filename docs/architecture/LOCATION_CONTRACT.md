@@ -38,17 +38,22 @@ editor discards only that temporary selection. Submission is blocked while a
 placement is active. A failed submission retains the confirmed editable payload.
 
 Newly placed pairs are validated against latitude `[-90, 90]` and longitude
-`[-180, 180]`, then rounded to six decimal places before display and confirmation
+`[-180, 180]`, then rounded to six decimal places before confirmation
 (maximum rounding difference: `0.0000005` degrees per axis). Negative zero is
-normalized to zero. Confirmation commits exactly that displayed pair to the
+normalized to zero. Confirmation commits exactly that selected pair to the
 selected area or stable point ID, never falling back to the area for a missing
 point. A deliberate **Set as general location** action stages the point's position
 for area confirmation and retains the original point.
 
 Editable normalization, submission sanitization, reviewer saving, approval, and
 reload preserve the submitted numeric values without further rounding. Existing
-unmoved coordinates can retain more than six decimal places. The point list shows
-those values in full; only new placements display six-decimal confirmation.
+unmoved coordinates can retain more than six decimal places. Confirmation and the
+point list show nearby area names and readable address details instead of raw
+latitude/longitude. These descriptions come from the existing reverse lookup;
+they never change the pinned position or the contributor's names. Lookups are
+debounced, shared by exact coordinate pair, cached in memory, and serialized.
+Late results from a previous selection are ignored. When geographical data is
+unavailable, users can still confirm the pin on the map.
 
 `general` remains a recognized legacy kind, but it does not turn an area position
 into an entrance. Only recorded `entrance` and `parking` points with valid

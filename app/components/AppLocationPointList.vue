@@ -26,17 +26,10 @@ defineEmits<{
       class="border-default rounded-md border p-3"
     >
       <p class="text-sm font-medium">{{ marker.label }}</p>
-      <p class="text-muted text-sm tabular-nums">
-        <template
-          v-if="
-            Number.isFinite(marker.latitude) &&
-            Number.isFinite(marker.longitude)
-          "
-        >
-          Latitude {{ marker.latitude }}, longitude {{ marker.longitude }}
-        </template>
-        <template v-else>Choose a position on the map</template>
-      </p>
+      <AppLocationPositionSummary
+        :latitude="marker.latitude"
+        :longitude="marker.longitude"
+      />
       <div v-if="!readonly" class="mt-2 flex flex-wrap gap-2">
         <UButton
           :label="activeId === marker.id ? 'Placing point' : 'Place point'"

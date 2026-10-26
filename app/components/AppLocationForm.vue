@@ -9,6 +9,7 @@ import { locationCoordinateKindOptions } from "#shared/types/locations";
 import { isLocationDescriptionTemplate } from "#shared/utils/location-description";
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import { z } from "zod";
+import { getLocationPlaceDetails } from "~/utils/location-place-details";
 import { useLocationPointPlacement } from "~/composables/useLocationPointPlacement";
 import AppTabs from "~/components/common/AppTabs.vue";
 import AppPhotoLanes from "~/components/AppPhotoLanes.vue";
@@ -35,7 +36,7 @@ const props = withDefaults(
     canGenerateDescription: false,
     message: "",
     pointHelp:
-      "Choose Place point or add a point, select a position on the map or search, then confirm the coordinates.",
+      "Choose Place point or add a point, select a position on the map or search, then confirm the position.",
     resetKey: null,
     submitLabel: "Submit for review",
     submitting: false,
@@ -983,15 +984,9 @@ async function reverseGeocodeGeneralLocation() {
   isReverseGeocoding.value = true;
 
   try {
-    const response = await $fetch<{
-      city?: string | null;
-      province?: string | null;
-      country?: string | null;
-    }>("/api/geo/reverse", {
-      query: {
-        lat: latitude,
-        lng: longitude,
-      },
+    const response = await getLocationPlaceDetails({
+      latitude: latitude as number,
+      longitude: longitude as number,
     });
 
     if (!isCurrent()) return;
@@ -1287,10 +1282,11 @@ onBeforeUnmount(() => {
                       aria-live="polite"
                     >
                       <p class="font-medium">Place {{ placementLabel }}</p>
-                      <p v-if="placementDraft" class="text-sm tabular-nums">
-                        Latitude {{ placementDraft.latitude.toFixed(6) }},
-                        longitude {{ placementDraft.longitude.toFixed(6) }}
-                      </p>
+                      <AppLocationPositionSummary
+                        v-if="placementDraft"
+                        :latitude="placementDraft.latitude"
+                        :longitude="placementDraft.longitude"
+                      />
                       <p v-else class="text-muted text-sm">
                         Select a position on the map or search for a place.
                       </p>

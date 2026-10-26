@@ -8,3 +8,11 @@ export type GeocodeResult = {
   province?: string | null;
   country?: string | null;
 };
+
+export type ReverseGeocodeResult = {
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  country: string | null;
+};

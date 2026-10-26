@@ -151,8 +151,8 @@ The editor is a map beside a manageable list of all points belonging to the area
 - Use the same coordinate-selection interaction for add and edit.
 - Replace coordinates without relying on marker dragging.
 - Enter point-specific details in a focused editing surface when useful.
-- Show a clear confirmation of the selected coordinates before save.
-- Persist exactly the coordinates shown to the user.
+- Show a clear confirmation of the selected map position, using area names or address details when available.
+- Persist exactly the confirmed map position.
 
 ### Proposed implementation
 
