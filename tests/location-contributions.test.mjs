@@ -521,6 +521,9 @@ test("confirmed add/edit positions survive normalization, submission reload, rev
   editor.begin({ type: "new", kind: "parking", label: "Parking" });
   editor.pick({ latitude: 52.33333349, longitude: 4.44444449 });
   editor.confirm();
+  editor.begin({ type: "new", kind: "parking", label: "Parking" });
+  editor.pick({ latitude: 52.55555549, longitude: 4.66666649 });
+  editor.confirm();
   const expected = structuredClone(form);
   const added = await createLocationContribution({
     db,
@@ -577,6 +580,16 @@ test("confirmed add/edit positions survive normalization, submission reload, rev
 
   form = normalizeEditableLocationFields(published);
   const id = form.coordinatePoints[0].id;
+  const untouchedPoint = structuredClone(form.coordinatePoints[1]);
+  const { default: pointEditorModule } =
+    await import("../app/composables/useLocationPointEditor.ts");
+  const pointEditor = pointEditorModule.useLocationPointEditor(
+    () => form,
+    () => true,
+  );
+  pointEditor.selectedId.value = id;
+  pointEditor.rename("West entrance");
+  pointEditor.changeKind("entrance");
   editor.begin({ type: "point", id });
   editor.pick({ latitude: -12.12345678, longitude: 130.98765432 });
   editor.confirm();
@@ -599,12 +612,14 @@ test("confirmed add/edit positions survive normalization, submission reload, rev
   );
   assert.deepEqual(loaded.coordinatePoints[0], {
     id,
-    kind: "parking",
-    label: "Parking",
+    kind: "entrance",
+    label: "West entrance",
     latitude: -12.123457,
     longitude: 130.987654,
     sourcePhotoId: null,
   });
+  assert.deepEqual(loaded.coordinatePoints[1], untouchedPoint);
+  assert.equal(loaded.coordinatePoints.length, 2);
   assert.equal(loaded.latitude, 52.111111);
   assert.equal(loaded.longitude, 4.222222);
   assert.deepEqual(published.location.coordinates, [4.222222, 52.111111]);
