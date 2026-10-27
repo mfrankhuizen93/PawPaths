@@ -35,6 +35,7 @@ async function picker() {
       return 14;
     },
     easeTo() {},
+    fitBounds() {},
     on(name, handler) {
       events[name] = handler;
     },
@@ -129,4 +130,45 @@ test("idle marker clicks select identity, while readonly and idle background cli
   props.placing = true;
   events.click(click);
   assert.equal(emitted.length, 1);
+});
+
+test("selected identities highlight and focus the same record without replacing other markers", async () => {
+  const { props, state, events, emitted, setFeature } = await picker();
+  props.placing = false;
+  props.markers = [
+    {
+      id: "area",
+      kind: "general",
+      label: "General location",
+      latitude: 51,
+      longitude: 3,
+    },
+    ...Array.from({ length: 8 }, (_, i) => ({
+      id: `gate-${i}`,
+      kind: "entrance",
+      label: "Gate",
+      latitude: 52 + i / 10,
+      longitude: 4 + i / 10,
+    })),
+  ];
+  events.load();
+  props.activeMarkerId = "gate-3";
+  assert.deepEqual(state.selectedCoordinates.value, [4.3, 52.3]);
+  const data = state.getSelectionFeatureCollection();
+  assert.equal(data.features.length, 9);
+  assert.deepEqual(
+    data.features
+      .filter((feature) => feature.properties.selected)
+      .map((feature) => feature.properties.id),
+    ["gate-3"],
+  );
+  setFeature(data.features[4]);
+  events.click({ point: { x: 1, y: 2 }, lngLat: { lat: 0, lng: 0 } });
+  assert.deepEqual(emitted, [
+    ["marker-select", { id: "gate-3", kind: "entrance", label: "Gate" }],
+  ]);
+  assert.deepEqual(
+    data.features.map((feature) => feature.properties.id),
+    props.markers.map((marker) => marker.id),
+  );
 });
