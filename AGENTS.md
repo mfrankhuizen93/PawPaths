@@ -52,3 +52,20 @@ prefix, for example `doc/14-product-architecture` or `bugfix/16-map-coordinates`
 
 The full guide is normative. If it conflicts with an existing implementation,
 improve the implementation toward the guide without unrelated rewrites.
+
+## Agent skills
+
+### Issue tracker
+
+Use GitHub Issues for PawPaths. Before issue operations, read
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels. Before triaging issues, read
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context layout. Before exploring domain concepts or
+architectural decisions, read `docs/agents/domain.md`.
