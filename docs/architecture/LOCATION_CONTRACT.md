@@ -58,9 +58,13 @@ unavailable, users can still confirm the pin on the map.
 `general` remains a recognized legacy kind, but it does not turn an area position
 into an entrance. Only recorded `entrance` and `parking` points with valid
 coordinates qualify as navigation destinations in `getLocationDestinations`.
-Empty points mean no destinations are recorded. Consumers must not manufacture
-destinations from area coordinates, photos, or a route. Wiring destination
-selection into existing navigation UI is separate delivery work.
+Empty points mean no entrance or parking destinations are recorded. Navigation
+uses the area's recorded `latitude`/`longitude` as a general-location fallback
+only when no valid entrance or parking point exists. Validate the fallback
+coordinates too; missing or invalid general coordinates leave navigation
+unavailable. Do not manufacture an entrance/parking record or derive a
+destination from photos or a route. A stale selected point ID must not silently
+fall back to the general location.
 
 Runtime reads do not synthesize missing IDs. Existing points must be migrated
 before deployment of the required-ID write contract (see below).

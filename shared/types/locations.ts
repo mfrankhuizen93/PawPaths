@@ -79,7 +79,7 @@ export type LocationListItem = {
   city?: string | null;
   province?: string | null;
   country?: string | null;
-  /** Representative discovery position; never implies a navigable destination. */
+  /** General discovery position; navigation fallback when no valid entrance or parking point exists. */
   latitude?: number | null;
   longitude?: number | null;
   type: string[];
