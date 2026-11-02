@@ -5,7 +5,14 @@ import type {
   LocationReview,
   LocationsResponse,
 } from "#shared/types/locations";
-import { useExploreQuery } from "~/composables/states";
+import {
+  readLocationSearch,
+  writeLocationSearch,
+} from "#shared/utils/location-search";
+import type { SearchBounds } from "#shared/utils/location-search";
+import LocationSearchToolbar from "~/components/location/LocationSearchToolbar.vue";
+import LocationSearchResults from "~/components/location/LocationSearchResults.vue";
+import LocationSearchCard from "~/components/location/LocationSearchCard.vue";
 import LocationNavigation from "~/components/location/LocationNavigation.vue";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
@@ -91,8 +98,85 @@ const warningOptions: Record<string, { icon: string; label: string }> = {
     label: "Traffic nearby",
   },
 };
-const activeFilters = useExploreQuery();
-const filterDrawerOpen = ref(false);
+const searchState = computed(() => readLocationSearch(route.query));
+const activeFilters = computed({
+  get: () => searchState.value.filters,
+  set: (filters) => {
+    const spatialChanged = (["lat", "lng", "radiusKm"] as const).some(
+      (key) => filters[key] !== activeFilters.value[key],
+    );
+    void router.replace({
+      query: writeLocationSearch(
+        {
+          ...searchState.value,
+          filters,
+          bounds: spatialChanged ? undefined : searchState.value.bounds,
+        },
+        route.query,
+      ),
+    });
+  },
+});
+const searchMode = computed({
+  get: () => searchState.value.mode,
+  set: (mode) => {
+    previewLocation.value = null;
+    void router.replace({
+      query: writeLocationSearch({ ...searchState.value, mode }, route.query),
+    });
+  },
+});
+const previewLocation = ref<LocationListItem | null>(null);
+const mapResults = ref<LocationsResponse | null>(null);
+function setSearchBounds(bounds: SearchBounds) {
+  if (
+    (["west", "east", "south", "north"] as const).every(
+      (key) => bounds[key] === searchState.value.bounds?.[key],
+    )
+  )
+    return;
+  void router.replace({
+    query: writeLocationSearch({ ...searchState.value, bounds }, route.query),
+  });
+}
+const displayedCount = computed(() =>
+  searchMode.value === "map"
+    ? (mapResults.value?.items.length ?? locations.value.length)
+    : locations.value.length,
+);
+const displayedTotal = computed(() =>
+  searchMode.value === "map"
+    ? (mapResults.value?.total ?? total.value)
+    : total.value,
+);
+const loadingMore = ref(false);
+const nextCursor = ref<string | null>(null);
+async function loadMoreLocations() {
+  if (!nextCursor.value || loadingMore.value) return;
+  loadingMore.value = true;
+  const queryKey = JSON.stringify(locationsQuery.value);
+  try {
+    const response = await $fetch<LocationsResponse>("/api/locations", {
+      query: { ...locationsQuery.value, cursor: nextCursor.value },
+    });
+    if (queryKey !== JSON.stringify(locationsQuery.value)) return;
+    locations.value = [...locations.value, ...response.items];
+    nextCursor.value = response.nextCursor ?? null;
+  } catch {
+    toast.add({ title: "Could not load more locations", color: "error" });
+  } finally {
+    loadingMore.value = false;
+  }
+}
+function clearSearch() {
+  previewLocation.value = null;
+  void router.replace({
+    query: writeLocationSearch(
+      { filters: {}, mode: searchMode.value, bounds: undefined },
+      route.query,
+    ),
+  });
+}
 
 const isSubmittingChange = ref(false);
 const isSubmittingReview = ref(false);
@@ -126,6 +210,7 @@ const reviewForm = reactive({
 const locationsQuery = computed(() => ({
   limit: 20,
   ...activeFilters.value,
+  ...searchState.value.bounds,
 }));
 
 const { data, error, pending, refresh } = await useFetch<LocationsResponse>(
@@ -218,19 +303,12 @@ const selectedLocationMeta = computed(() =>
     .filter(Boolean)
     .join(", "),
 );
-const activeFilterCount = computed(
-  () =>
-    Object.values(activeFilters.value).filter((value) =>
-      Array.isArray(value)
-        ? value.length > 0
-        : value !== undefined && value !== "",
-    ).length,
-);
 watch(
   data,
   (response) => {
     locations.value = response?.items ?? [];
     total.value = response?.total ?? 0;
+    nextCursor.value = response?.nextCursor ?? null;
   },
   { immediate: true },
 );
@@ -249,8 +327,7 @@ watch(
 );
 
 function applyMapResults(response: LocationsResponse) {
-  locations.value = response.items;
-  total.value = response.total;
+  mapResults.value = response;
 }
 
 function openAddLocation() {
@@ -463,6 +540,7 @@ async function openLocationBySlug(
 }
 
 function selectLocation(location: LocationListItem) {
+  previewLocation.value = null;
   locationMode.value = "view";
   selectedLocation.value = location;
   selectedLocationError.value = "";
@@ -496,6 +574,14 @@ function getWarningMeta(warning: string) {
   );
 }
 
+watch(
+  () => JSON.stringify(activeFilters.value),
+  () => {
+    previewLocation.value = null;
+    mapResults.value = null;
+  },
+);
+
 definePageMeta({
   layout: "explore",
 });
@@ -524,104 +610,61 @@ watch(
 </script>
 
 <template>
-  <div class="relative h-full min-h-0">
-    <div
-      v-if="pending && locations.length === 0"
-      class="bg-muted relative h-full overflow-hidden"
-    >
-      <USkeleton class="size-full rounded-none" />
-      <div
-        class="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5"
-      >
-        <USkeleton class="h-14 min-w-0 flex-1 rounded-2xl sm:max-w-md" />
-        <div class="flex gap-2">
-          <USkeleton class="size-12 rounded-2xl" />
-          <USkeleton class="size-12 rounded-2xl" />
-        </div>
-      </div>
-    </div>
-
+  <div class="relative flex h-full min-h-0 flex-col">
+    <LocationSearchToolbar
+      v-model="activeFilters"
+      v-model:mode="searchMode"
+      :result-count="displayedCount"
+      :total="displayedTotal"
+      :truncated="searchMode === 'map' && mapResults?.metadata.truncated"
+      @add="openAddLocation"
+    />
     <UAlert
       v-if="error || selectedLocationError"
-      :actions="
-        error
-          ? [
-              {
-                label: 'Retry',
-                color: 'error',
-                variant: 'subtle',
-                onClick: () => refresh(),
-              },
-            ]
-          : []
-      "
-      class="absolute top-24 left-3 z-20 max-w-sm shadow-lg sm:top-28 sm:left-5"
+      :title="selectedLocationError || 'Could not load locations'"
       color="error"
-      icon="i-lucide-circle-alert"
-      :title="selectedLocationError || String(error)"
-      variant="soft"
+      :actions="[{ label: 'Retry', onClick: () => refresh() }]"
     />
-
-    <div v-if="!error && !(pending && locations.length === 0)" class="h-full">
-      <ClientOnly>
+    <div class="relative min-h-0 flex-1">
+      <LocationSearchResults
+        v-if="searchMode === 'list'"
+        :locations="locations"
+        :pending="pending"
+        :more="Boolean(nextCursor)"
+        :loading-more="loadingMore"
+        @select="selectLocation"
+        @load-more="loadMoreLocations"
+        @clear="clearSearch"
+      />
+      <ClientOnly v-else>
         <LazyAppLocation
           :filters="activeFilters"
+          :search-bounds="searchState.bounds"
+          :show-toolbar="false"
           :limit="1000"
-          :location="selectedLocation"
+          :location="previewLocation ?? selectedLocation"
           :locations="locations"
           class="h-full"
           variant="search"
-          @location-selected="selectLocation"
+          @location-selected="previewLocation = $event"
           @locations-loaded="applyMapResults"
-        >
-          <template #actions>
-            <UDrawer
-              v-model:open="filterDrawerOpen"
-              description="Choose the places and features shown on the map."
-              direction="bottom"
-              title="Filters"
-              :ui="{
-                content: 'max-h-[calc(100dvh-1rem)] rounded-t-[1.75rem]',
-                container: 'mx-auto w-full max-w-3xl',
-                header: 'shrink-0',
-                body: 'max-h-[calc(100dvh-12rem)] overflow-y-auto',
-                handle: 'mt-3 h-1.5 w-10 rounded-full',
-              }"
-            >
-              <UChip color="error" :show="activeFilterCount > 0" size="lg">
-                <UButton
-                  aria-label="Filter locations"
-                  class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
-                  color="neutral"
-                  icon="i-lucide-sliders-horizontal"
-                  size="lg"
-                  square
-                  variant="ghost"
-                />
-              </UChip>
-
-              <template #body>
-                <AppLocationFilters
-                  v-model="activeFilters"
-                  :result-count="locations.length"
-                  :total="total"
-                />
-              </template>
-            </UDrawer>
-
-            <UButton
-              aria-label="Add location"
-              class="border-default/60 bg-default/88 size-12 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
-              color="neutral"
-              icon="i-lucide-plus"
-              size="lg"
-              square
-              variant="ghost"
-              @click="openAddLocation"
-            />
-          </template>
-        </LazyAppLocation>
+          @bounds-changed="setSearchBounds"
+        />
+        <template #fallback
+          ><USkeleton class="size-full rounded-none"
+        /></template>
       </ClientOnly>
+      <div
+        v-if="searchMode === 'map' && previewLocation"
+        class="absolute inset-x-3 bottom-16 z-10 mx-auto max-w-md"
+        aria-live="polite"
+      >
+        <LocationSearchCard
+          :location="previewLocation"
+          preview
+          @select="selectLocation"
+        />
+      </div>
     </div>
 
     <AppDrawer

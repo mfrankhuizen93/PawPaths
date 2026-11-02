@@ -83,9 +83,34 @@ legacy positive tag exists.
 Existing `type` and `characteristics` arrays remain supported. Other facilities
 and hazards still use positive tags: their absence is unknown. A future attribute
 editor must update structured values explicitly; changing a legacy tag alone
-does not override a stored structured value. Search vocabulary and treatment of
-unknown/exclusion filters remain separate work; this contract does not change
-existing search queries. Ratings continue to use null for unrated areas.
+does not override a stored structured value. Search uses the same explicit-first semantics. Ratings continue to use null for
+unrated areas; minimum-rating filters exclude unrated areas.
+
+### Search query contract
+
+The root search URL and `GET /api/locations` share normalized filters: `q`
+(name, city, province, country, or description), `type`, `offLeash`, `fenced`,
+`swimming`, `wheelchairAccessible`, `parking=yes`, `facility`, `hazard`,
+and `minRating` (1–5). Repeated or comma-separated collection values are
+supported. Facilities and hazards require positive tags or recorded point kinds;
+their absence never proves that they are unavailable. Multiple facility or hazard
+selections must all match. Area types match any selected type. Legacy
+`characteristic`, `excludeCharacteristic`, and `excludeType` remain readable;
+negative characteristics match only explicit negative structured attributes.
+Exclusions of characteristics without a negative representation return no matches.
+
+A distance search requires all of `lat`, `lng`, and `radiusKm` (0.1–500 km).
+Empty, partial, or invalid triples are ignored rather than converted into a
+zero-degree origin. Optional `west/south/east/north` bounds restrict the area's
+representative discovery position in both presentations; distance and viewport
+constraints intersect. Destination points do not move an area into the viewport.
+
+The URL's `mode=map|list` selects alternative full-screen presentations. Switching
+preserves filters and viewport bounds, and opening details retains search state.
+URL values take precedence over old local-storage filter preferences. Unknown
+enum values are ignored. Lists retain cursor pagination; map viewport requests
+remain clustered, compact, and limited to 1,000 areas. Marker selection opens a
+compact preview with an action to open the shared detail drawer.
 
 The list (including compact map responses) and detail APIs project attributes
 and routes. Read normalization supplies unknown attribute values and empty

@@ -105,10 +105,10 @@ onBeforeUnmount(() => {
       :autofocus="props.autofocus"
       :loading="isSearching"
       :placeholder="props.placeholder"
-      class="min-w-0 flex-1"
+      class="w-full min-w-0 flex-1"
       icon="i-lucide-search"
       :size="props.size"
-      :ui="{ base: props.size === 'lg' ? 'h-12' : undefined }"
+      :ui="{ base: props.size === 'lg' ? 'h-12 text-base' : 'text-base' }"
       variant="none"
     >
       <template v-if="props.collapsible" #trailing>
