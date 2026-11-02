@@ -194,6 +194,71 @@ try {
       .getByText("No navigation destinations", { exact: true })
       .waitFor();
     assert.equal(await picker.getByRole("link").count(), 0);
+    // A single eligible point navigates directly from either entry point.
+    for (const kind of ["entrance", "parking"]) {
+      location.coordinatePoints = [
+        {
+          id: "only",
+          kind,
+          label: "Only destination",
+          latitude: 52.765432,
+          longitude: 4.123456,
+        },
+        {
+          id: "general",
+          kind: "general",
+          label: "Area center",
+          latitude: 52,
+          longitude: 4,
+        },
+        {
+          id: "invalid",
+          kind: "entrance",
+          label: "Invalid",
+          latitude: 100,
+          longitude: 4,
+        },
+      ];
+      await navigate("/account/reset");
+      await navigate(`/?location=${location.slug}`);
+      const directLink = page.getByRole("link", {
+        name: "Navigate",
+        exact: true,
+      });
+      assert.equal(
+        new URL(await directLink.getAttribute("href")).searchParams.get(
+          "destination",
+        ),
+        "52.765432,4.123456",
+      );
+      assert.equal(await directLink.getAttribute("target"), "_blank");
+      await page
+        .context()
+        .route("https://www.google.com/maps/dir/**", (route) =>
+          route.fulfill({
+            contentType: "text/html",
+            body: "Navigation destination",
+          }),
+        );
+      const popupPromise = page.waitForEvent("popup");
+      await directLink.click();
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+      assert.equal(
+        new URL(popup.url()).searchParams.get("destination"),
+        "52.765432,4.123456",
+      );
+      await popup.close();
+      assert.equal(await picker.count(), 0);
+      await page.getByRole("tab", { name: "Links", exact: true }).click();
+      assert.equal(await directLink.count(), 2);
+      assert.equal(
+        new URL(await directLink.last().getAttribute("href")).searchParams.get(
+          "destination",
+        ),
+        "52.765432,4.123456",
+      );
+    }
     location.coordinatePoints = [
       {
         id: "p1",

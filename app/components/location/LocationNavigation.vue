@@ -18,6 +18,16 @@ const open = ref(false);
 const selectedId = ref<string>();
 const appleDevice = ref(false);
 const options = computed(() => getNavigationDestinationOptions(props.points));
+const directUrl = computed(() =>
+  options.value.length === 1
+    ? getLocationNavigationUrl(
+        props.points,
+        options.value[0]!.value,
+        user.value?.navigationAppPreference ?? "device",
+        appleDevice.value,
+      )
+    : undefined,
+);
 const url = computed(() =>
   getLocationNavigationUrl(
     props.points,
@@ -50,7 +60,10 @@ onMounted(() => {
     icon="i-lucide-navigation"
     label="Navigate"
     variant="soft"
-    @click="open = true"
+    :to="directUrl"
+    :target="directUrl ? '_blank' : undefined"
+    :rel="directUrl ? 'noopener noreferrer' : undefined"
+    @click="!directUrl && (open = true)"
   />
   <AppDrawer
     v-model:open="open"
