@@ -667,7 +667,7 @@ watch(
       </ClientOnly>
       <div
         v-if="searchMode === 'map' && previewLocation"
-        class="absolute inset-x-3 bottom-[max(2.5rem,env(safe-area-inset-bottom))] z-10 mx-auto max-w-md"
+        class="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md"
         aria-live="polite"
       >
         <LocationSearchCard
