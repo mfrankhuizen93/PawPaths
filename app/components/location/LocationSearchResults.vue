@@ -21,16 +21,22 @@ defineEmits<{
     class="h-full overflow-y-auto p-4 sm:p-6"
   >
     <div class="mx-auto flex max-w-3xl flex-col gap-3">
-      <template v-if="pending"
-        ><div
+      <template v-if="pending">
+        <div
           v-for="n in 5"
           :key="n"
-          class="border-default space-y-3 rounded-lg border p-4"
+          class="border-default flex items-center gap-3 rounded-lg border p-3"
         >
-          <USkeleton class="h-6 w-2/3" /><USkeleton
-            class="h-4 w-1/2"
-          /><USkeleton class="h-8 w-28" /></div
-      ></template>
+          <USkeleton class="size-20 shrink-0" />
+          <div class="min-w-0 flex-1 space-y-2">
+            <USkeleton class="h-6 w-full" />
+            <USkeleton class="h-4 w-2/3" />
+            <USkeleton class="h-4 w-1/2" />
+            <USkeleton class="h-5 w-20" />
+          </div>
+          <USkeleton class="size-5 shrink-0" />
+        </div>
+      </template>
       <template v-else>
         <LocationSearchCard
           v-for="location in locations"

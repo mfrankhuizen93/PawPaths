@@ -661,7 +661,6 @@ watch(
       >
         <LocationSearchCard
           :location="previewLocation"
-          preview
           @select="selectLocation"
         />
       </div>
