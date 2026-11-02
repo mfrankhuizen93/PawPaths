@@ -5,9 +5,11 @@ import { getAppNavigationItems } from "~/navigation/items";
 withDefaults(
   defineProps<{
     overlay?: boolean;
+    compact?: boolean;
   }>(),
   {
     overlay: false,
+    compact: false,
   },
 );
 
@@ -36,7 +38,7 @@ watch(
 <template>
   <header
     :class="[
-      'z-30 flex w-full items-start gap-2',
+      'z-30 flex w-full items-center gap-2',
       overlay
         ? 'pointer-events-none absolute inset-x-0 top-0 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))]'
         : 'mx-auto max-w-5xl px-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:pt-[max(1.5rem,env(safe-area-inset-top))]',
@@ -45,7 +47,12 @@ watch(
     <UButton
       v-if="showsNavigation"
       aria-label="Open navigation"
-      class="border-default/60 bg-default/88 pointer-events-auto size-12 shrink-0 justify-center rounded-2xl border p-0 shadow-lg backdrop-blur-xl"
+      :class="[
+        'pointer-events-auto shrink-0 justify-center p-0',
+        compact
+          ? 'size-10'
+          : 'border-default/60 bg-default/88 size-12 rounded-2xl border shadow-lg backdrop-blur-xl',
+      ]"
       color="neutral"
       icon="i-lucide-menu"
       size="lg"
@@ -60,7 +67,7 @@ watch(
 
     <div class="pointer-events-auto flex shrink-0 items-center gap-2">
       <slot name="actions" />
-      <AppProfileButton floating />
+      <AppProfileButton :floating="!compact" />
     </div>
   </header>
 

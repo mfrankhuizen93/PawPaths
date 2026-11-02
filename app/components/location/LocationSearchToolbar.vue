@@ -30,7 +30,7 @@ const filterCount = computed(
 
 <template>
   <div class="border-default bg-default relative z-20 shrink-0 border-b pb-3">
-    <AppPageToolbar>
+    <AppPageToolbar compact>
       <template #primary>
         <UInput
           v-model="searchText"
@@ -38,48 +38,64 @@ const filterCount = computed(
           placeholder="Name or area"
           icon="i-lucide-search"
           class="w-full"
-          :ui="{ base: 'text-base' }"
-        />
-      </template>
-      <template #actions>
-        <UButton
-          aria-label="Filter locations"
-          :aria-expanded="filterOpen"
-          :aria-description="`${filterCount} active filters`"
-          :label="filterCount ? String(filterCount) : undefined"
-          icon="i-lucide-sliders-horizontal"
-          color="neutral"
-          variant="soft"
-          @click="filterOpen = true"
-        />
-        <UButton
-          aria-label="Add location"
-          icon="i-lucide-plus"
-          color="neutral"
-          variant="soft"
-          @click="$emit('add')"
+          :ui="{ base: 'h-10 text-base' }"
         />
       </template>
     </AppPageToolbar>
-    <div
-      class="mx-auto mt-3 flex max-w-5xl gap-2 px-4 sm:px-6"
-      role="group"
-      aria-label="Search presentation"
-    >
-      <UButton
-        v-for="view in ['map', 'list'] as const"
-        :key="view"
-        :label="view === 'map' ? 'Map' : 'List'"
-        :icon="view === 'map' ? 'i-lucide-map' : 'i-lucide-list'"
-        :aria-pressed="mode === view"
-        :variant="mode === view ? 'solid' : 'soft'"
-        @click="mode = view"
-      />
-      <span class="text-muted my-auto text-sm" role="status"
-        >{{ resultCount }} locations shown{{
+    <div class="mx-auto mt-3 flex max-w-5xl flex-col gap-2 px-4 sm:px-6">
+      <div class="flex items-center justify-between gap-3">
+        <div
+          class="flex shrink-0 gap-1"
+          role="group"
+          aria-label="Search presentation"
+        >
+          <UButton
+            v-for="view in ['map', 'list'] as const"
+            :key="view"
+            :label="view === 'map' ? 'Map' : 'List'"
+            :icon="view === 'map' ? 'i-lucide-map' : 'i-lucide-list'"
+            :aria-pressed="mode === view"
+            :variant="mode === view ? 'solid' : 'soft'"
+            class="h-10 justify-center"
+            size="lg"
+            @click="mode = view"
+          />
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <UChip :show="filterCount > 0" :text="filterCount" size="lg">
+            <UButton
+              aria-label="Filter locations"
+              :aria-expanded="filterOpen"
+              :aria-description="`${filterCount} active filters`"
+              label="Filters"
+              :ui="{ label: 'hidden sm:inline' }"
+              class="h-10 min-w-10 justify-center"
+              size="lg"
+              icon="i-lucide-sliders-horizontal"
+              color="neutral"
+              variant="soft"
+              @click="filterOpen = true"
+            />
+          </UChip>
+          <UButton
+            aria-label="Add location"
+            label="Add location"
+            :ui="{ label: 'hidden sm:inline' }"
+            class="h-10 min-w-10 justify-center"
+            size="lg"
+            icon="i-lucide-plus"
+            color="neutral"
+            variant="soft"
+            @click="$emit('add')"
+          />
+        </div>
+      </div>
+      <p class="text-muted text-sm" role="status">
+        {{ resultCount }}
+        {{ resultCount === 1 ? "location" : "locations" }} shown{{
           truncated ? " · Zoom in for more" : ""
-        }}</span
-      >
+        }}
+      </p>
     </div>
     <UDrawer
       v-model:open="filterOpen"
