@@ -96,9 +96,9 @@ function formatDate(value: string) {
       :can-generate-description="canGenerateDescription"
       :contained="false"
       form-id="community-submission-form"
-      map-editing-locked
       point-help="Check and adjust the location points before approving."
       :reset-key="`${submission.id ?? 'submission'}-${submission.updatedAt}`"
+      :submitting="reviewing"
       :show-submit="false"
       :show-features="true"
       @submit="submitReviewAction"
