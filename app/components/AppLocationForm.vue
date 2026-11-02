@@ -10,7 +10,9 @@ import { isLocationDescriptionTemplate } from "#shared/utils/location-descriptio
 import type { TabsItem } from "@nuxt/ui/components/Tabs.vue";
 import { z } from "zod";
 import { getLocationPlaceDetails } from "~/utils/location-place-details";
+import { useLocationPointEditor } from "~/composables/useLocationPointEditor";
 import { useLocationPointPlacement } from "~/composables/useLocationPointPlacement";
+import AppEmptyState from "~/components/common/AppEmptyState.vue";
 import AppTabs from "~/components/common/AppTabs.vue";
 import AppPhotoLanes from "~/components/AppPhotoLanes.vue";
 
@@ -36,7 +38,7 @@ const props = withDefaults(
     canGenerateDescription: false,
     message: "",
     pointHelp:
-      "Choose Place point or add a point, select a position on the map or search, then confirm the position.",
+      "Select a point to edit its name or type. Choose Replace position or add a point, then select and confirm its position.",
     resetKey: null,
     submitLabel: "Submit for review",
     submitting: false,
@@ -210,6 +212,39 @@ const compressedPhotoQuality = 0.74;
 
 const photoFiles = ref<File[]>([]);
 const isMapEditorOpen = ref(false);
+const pointEditor = useLocationPointEditor(
+  () => form.value,
+  () => !props.readonly && !props.mapEditingLocked && !props.submitting,
+);
+const {
+  selectedId: selectedPointId,
+  removalPoint,
+  removalId,
+  identityError,
+  editable: canEditPoints,
+} = pointEditor;
+const areaMarkerId = computed(() => {
+  const ids = new Set(
+    (form.value.coordinatePoints ?? []).map((point) => point.id),
+  );
+  let id = "general";
+  while (ids.has(id)) id = "_" + id;
+  return id;
+});
+function selectMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
+  if (!canEditPoints.value) return;
+  placement.cancel();
+  selectedPointId.value = marker.id;
+}
+function confirmPointRemoval() {
+  const id = removalId.value;
+  if (
+    pointEditor.confirmRemoval() &&
+    placementTarget.value?.type === "point" &&
+    placementTarget.value.id === id
+  )
+    placement.cancel();
+}
 const placement = useLocationPointPlacement(() => form.value);
 const {
   target: placementTarget,
@@ -229,14 +264,12 @@ const placementLabel = computed(() => {
 });
 const placementMarkerId = computed(() =>
   placementTarget.value?.type === "area"
-    ? "general"
+    ? areaMarkerId.value
     : placementTarget.value?.type === "point"
       ? placementTarget.value.id
       : undefined,
 );
 const placementError = ref("");
-const renamingPointId = ref<string | null>(null);
-const renamingPointLabel = ref("");
 const isReverseGeocoding = ref(false);
 const geocodeError = ref("");
 const descriptionGenerationError = ref("");
@@ -464,7 +497,7 @@ type FormMapMarker = {
 
 const generalLocationMarker = computed<FormMapMarker>({
   get: () => ({
-    id: "general",
+    id: areaMarkerId.value,
     kind: "general" as const,
     label: "General location",
     latitude: form.value.latitude,
@@ -756,6 +789,8 @@ async function fileToLocationPhoto(file: File): Promise<LocationPhoto> {
 }
 
 function addPoiFromPhoto(photo: LocationPhoto) {
+  if (!canEditPoints.value || (form.value.coordinatePoints?.length ?? 0) >= 8)
+    return;
   if (!Number.isFinite(photo.latitude) || !Number.isFinite(photo.longitude)) {
     return;
   }
@@ -841,22 +876,6 @@ function getPointLabel(kind: LocationCoordinateKind) {
   );
 }
 
-function updatePointKind(
-  point: LocationCoordinatePoint,
-  kind: Exclude<LocationCoordinateKind, "general">,
-) {
-  const currentDefaultLabel = getPointLabel(point.kind);
-  const nextDefaultLabel = getPointLabel(kind);
-  const shouldUpdateLabel =
-    !point.label.trim() || point.label === currentDefaultLabel;
-
-  point.kind = kind;
-
-  if (shouldUpdateLabel) {
-    point.label = nextDefaultLabel;
-  }
-}
-
 function createPointId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -864,22 +883,33 @@ function createPointId() {
 function startAddingCoordinatePoint(
   kind: Exclude<LocationCoordinateKind, "general">,
 ) {
+  if (!canEditPoints.value) return;
+  selectedPointId.value = null;
   isMapEditorOpen.value = true;
   placementError.value = "";
   placement.begin({ type: "new", kind, label: getPointLabel(kind) });
 }
 
 function handleMapPick(coordinates: { latitude: number; longitude: number }) {
-  placement.pick(coordinates);
+  if (canEditPoints.value) placement.pick(coordinates);
 }
 
 function confirmMapPosition() {
-  placementError.value = placement.confirm()
-    ? ""
-    : "This point is unavailable or the eight-point limit has been reached.";
+  if (!canEditPoints.value) return;
+  const adding = placementTarget.value?.type === "new";
+  if (placement.confirm()) {
+    placementError.value = "";
+    if (adding)
+      selectedPointId.value = form.value.coordinatePoints?.at(-1)?.id ?? null;
+  } else {
+    placementError.value =
+      "This point is unavailable or the eight-point limit has been reached.";
+  }
 }
 
 function moveMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
+  if (!canEditPoints.value) return;
+  selectedPointId.value = marker.id;
   placementError.value = "";
   placement.begin(
     marker.kind === "general"
@@ -892,22 +922,8 @@ function openMapEditor() {
   isMapEditorOpen.value = true;
 }
 
-function removeCoordinatePoint(id: string | null | undefined) {
-  form.value.coordinatePoints = (form.value.coordinatePoints ?? []).filter(
-    (point) => point.id !== id,
-  );
-
-  if (
-    placementTarget.value?.type === "point" &&
-    placementTarget.value.id === id
-  )
-    placement.cancel();
-}
-
 function removeMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
-  if (marker.kind === "general") return;
-
-  removeCoordinatePoint(marker.id);
+  if (marker.kind !== "general") pointEditor.requestRemoval(marker.id);
 }
 
 function findCoordinatePoint(id: string) {
@@ -915,27 +931,7 @@ function findCoordinatePoint(id: string) {
 }
 
 function renameMapMarker(marker: { id: string; kind: LocationCoordinateKind }) {
-  if (marker.kind === "general") return;
-
-  const point = findCoordinatePoint(marker.id);
-  if (!point) return;
-
-  renamingPointId.value = marker.id;
-  renamingPointLabel.value = point.label;
-}
-
-function saveRenamedMapMarker() {
-  if (!renamingPointId.value) return;
-
-  const point = findCoordinatePoint(renamingPointId.value);
-  const nextLabel = renamingPointLabel.value.trim();
-
-  if (point && nextLabel) {
-    point.label = nextLabel;
-  }
-
-  renamingPointId.value = null;
-  renamingPointLabel.value = "";
+  if (marker.kind !== "general") selectMapMarker(marker);
 }
 
 function changeMapMarkerKind(marker: {
@@ -943,19 +939,20 @@ function changeMapMarkerKind(marker: {
   kind: LocationCoordinateKind;
   nextKind: Exclude<LocationCoordinateKind, "general">;
 }) {
-  if (marker.kind === "general") return;
+  if (!canEditPoints.value || marker.kind === "general") return;
 
   const point = findCoordinatePoint(marker.id);
   if (!point) return;
 
-  updatePointKind(point, marker.nextKind);
+  selectedPointId.value = marker.id;
+  pointEditor.changeKind(marker.nextKind);
 }
 
 function setMapMarkerAsGeneral(marker: {
   id: string;
   kind: LocationCoordinateKind;
 }) {
-  if (marker.kind === "general") return;
+  if (!canEditPoints.value || marker.kind === "general") return;
 
   const point = findCoordinatePoint(marker.id);
   if (!point) return;
@@ -1035,11 +1032,10 @@ async function generateDescription() {
 }
 
 function resetLocalState() {
+  pointEditor.reset();
   isMapEditorOpen.value = false;
   placement.cancel();
   placementError.value = "";
-  renamingPointId.value = null;
-  renamingPointLabel.value = "";
   photoFiles.value = [];
   clearPhotoFieldError();
   descriptionGenerationError.value = "";
@@ -1218,12 +1214,19 @@ onBeforeUnmount(() => {
               <UButton
                 color="neutral"
                 icon="i-lucide-map"
+                :disabled="!canEditPoints"
                 label="Edit map"
                 type="button"
                 variant="ghost"
                 @click="openMapEditor"
               />
             </div>
+            <UAlert
+              v-if="!readonly && identityError"
+              title="These points need maintenance before editing. Please ask an administrator to migrate their IDs."
+              color="warning"
+              variant="soft"
+            />
             <AppLocationPointPicker
               :latitude="form.latitude"
               :longitude="form.longitude"
@@ -1232,10 +1235,14 @@ onBeforeUnmount(() => {
             />
             <AppLocationPointList
               :markers="mapMarkers"
-              :readonly="readonly"
+              :readonly="!canEditPoints"
+              :active-id="selectedPointId"
+              @rename="pointEditor.rename"
+              @change-kind="pointEditor.changeKind"
+              @move="moveMapMarker"
               @select="
                 isMapEditorOpen = true;
-                moveMapMarker($event);
+                selectMapMarker($event);
               "
               @remove="removeMapMarker"
             />
@@ -1260,11 +1267,13 @@ onBeforeUnmount(() => {
                   :latitude="placementCoordinates?.latitude"
                   :longitude="placementCoordinates?.longitude"
                   :placing="Boolean(placementTarget)"
-                  :active-marker-id="placementMarkerId"
+                  :active-marker-id="
+                    placementMarkerId ?? selectedPointId ?? undefined
+                  "
                   full-height
                   :markers="mapMarkers"
-                  :readonly="false"
-                  @marker-select="moveMapMarker"
+                  :readonly="!canEditPoints"
+                  @marker-select="selectMapMarker"
                   @marker-change-kind="changeMapMarkerKind"
                   @marker-delete="removeMapMarker"
                   @marker-move="moveMapMarker"
@@ -1316,7 +1325,10 @@ onBeforeUnmount(() => {
                       color="error"
                       variant="soft"
                     />
-                    <div class="flex flex-wrap items-center gap-1.5">
+                    <div
+                      v-if="canEditPoints"
+                      class="flex flex-wrap items-center gap-1.5"
+                    >
                       <UButton
                         :class="mapPointActionButtonClass"
                         color="neutral"
@@ -1368,8 +1380,12 @@ onBeforeUnmount(() => {
               <AppLocationPointList
                 class="max-h-[30dvh] overflow-y-auto sm:max-h-full sm:w-72 sm:shrink-0"
                 :markers="mapMarkers"
-                :active-id="placementMarkerId"
-                @select="moveMapMarker"
+                :active-id="selectedPointId"
+                :readonly="!canEditPoints"
+                @select="selectMapMarker"
+                @move="moveMapMarker"
+                @rename="pointEditor.rename"
+                @change-kind="pointEditor.changeKind"
                 @remove="removeMapMarker"
               />
             </div>
@@ -1377,42 +1393,29 @@ onBeforeUnmount(() => {
         </UModal>
 
         <UModal
-          v-if="!readonly"
-          :open="Boolean(renamingPointId)"
-          title="Rename point"
-          :ui="{ footer: 'justify-end' }"
-          @update:open="
-            !$event && ((renamingPointId = null), (renamingPointLabel = ''))
-          "
+          :open="Boolean(removalPoint)"
+          title="Remove point?"
+          description="This removes the point from your proposal. Published points change only after approval."
+          @update:open="!$event && (removalId = null)"
         >
-          <template #body>
-            <UFormField label="Point name">
-              <UInput
-                v-model="renamingPointLabel"
-                autofocus
-                class="w-full"
-                placeholder="Point name"
-                @keydown.enter.prevent="saveRenamedMapMarker"
-              />
-            </UFormField>
-          </template>
-
+          <template #body
+            ><p>Remove {{ removalPoint?.label }}?</p></template
+          >
           <template #footer>
-            <div class="flex w-full items-center justify-end gap-2">
-              <UButton
-                color="neutral"
-                label="Cancel"
-                type="button"
-                variant="subtle"
-                @click="((renamingPointId = null), (renamingPointLabel = ''))"
-              />
-              <UButton
-                icon="i-lucide-check"
-                label="Save"
-                type="button"
-                @click="saveRenamedMapMarker"
-              />
-            </div>
+            <UButton
+              label="Keep point"
+              color="neutral"
+              variant="subtle"
+              type="button"
+              @click="removalId = null"
+            />
+            <UButton
+              label="Remove point"
+              color="error"
+              :disabled="!canEditPoints"
+              type="button"
+              @click="confirmPointRemoval"
+            />
           </template>
         </UModal>
       </template>

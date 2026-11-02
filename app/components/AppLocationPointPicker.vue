@@ -143,7 +143,12 @@ const contextMenuDisabled = computed(
 
 const selectedCoordinates = computed<[number, number] | null>(() => {
   if (!Number.isFinite(props.latitude) || !Number.isFinite(props.longitude)) {
-    return null;
+    const active =
+      !props.placing &&
+      props.markers?.find((marker) => marker.id === props.activeMarkerId);
+    return active && isValidLocationCoordinates(active)
+      ? [active.longitude, active.latitude]
+      : null;
   }
 
   return [props.longitude as number, props.latitude as number];
@@ -199,6 +204,7 @@ function getSelectionFeatureCollection(): GeoJSON.FeatureCollection<GeoJSON.Poin
         id: marker.id,
         label: marker.label,
         kind: marker.kind,
+        selected: marker.id === props.activeMarkerId,
       },
     })),
   };
@@ -343,8 +349,8 @@ function addSelectionLayer() {
       ],
       "circle-radius": 10,
       "circle-stroke-color": "#1f2937",
-      "circle-stroke-opacity": 0.22,
-      "circle-stroke-width": 1,
+      "circle-stroke-opacity": ["case", ["get", "selected"], 1, 0.22],
+      "circle-stroke-width": ["case", ["get", "selected"], 3, 1],
     },
   });
 
