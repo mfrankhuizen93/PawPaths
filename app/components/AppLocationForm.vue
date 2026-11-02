@@ -1082,7 +1082,7 @@ onBeforeUnmount(() => {
     :state="form"
     :class="[
       'flex h-full min-h-0 flex-col gap-5',
-      contained && 'rounded-md border border-slate-200 bg-white p-5 shadow-sm',
+      contained && 'border-default bg-default rounded-md border p-5 shadow-sm',
     ]"
     @submit="submitForm"
   >
@@ -1111,27 +1111,28 @@ onBeforeUnmount(() => {
             name="description"
           >
             <UEditor
+              :key="`${resetKey ?? ''}-${readonly ? 'view' : 'edit'}`"
               v-model="form.description"
               :editable="!readonly"
               :class="[
                 'min-h-32 w-full min-w-0 overflow-hidden',
                 readonly
                   ? 'bg-transparent'
-                  : 'rounded-md border border-slate-200 bg-white',
+                  : 'border-default bg-default rounded-md border',
               ]"
               content-type="markdown"
               placeholder="Describe this location..."
               :ui="{
                 content: 'min-h-32',
                 base: [
-                  'min-h-32 py-2 text-base leading-5 font-sans text-slate-950 *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
+                  'text-default min-h-32 py-2 text-base leading-5 font-sans *:my-0 [&_p]:leading-5 [&_p]:my-0 [&_:is(h1,h2,h3,h4,h5,h6)]:font-title',
                   readonly ? 'px-0 sm:px-0' : 'px-4 sm:px-4',
                 ],
               }"
             >
               <template v-if="!readonly" #default="{ editor }">
                 <div
-                  class="w-full min-w-0 overflow-hidden border-b border-slate-200 px-2 py-1"
+                  class="border-default w-full min-w-0 overflow-hidden border-b px-2 py-1"
                 >
                   <UEditorToolbar
                     :editor="editor"
