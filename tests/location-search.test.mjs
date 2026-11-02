@@ -329,3 +329,61 @@ test("API intersects distance and viewport, excludes unrated results, and keeps 
   });
   assert.ok(malformed.pipelines[0][0].$match);
 });
+
+test("list requests ignore remembered map bounds and keep pagination stable across viewport/mode changes", async () => {
+  const { parse, compileScript } = await import("@vue/compiler-sfc");
+  const { computed, ref } = await import("vue");
+  const source = await fs.readFile("app/pages/index.vue", "utf8");
+  const { descriptor } = parse(source);
+  const script = compileScript(descriptor, { id: "search-list-query" });
+  const declaration = script.scriptSetupAst
+    .flatMap((node) => node.declarations ?? [])
+    .find((node) => node.id.name === "locationsQuery");
+  const expression = descriptor.scriptSetup.content.slice(
+    declaration.init.start,
+    declaration.init.end,
+  );
+  const code = transformSync(`module.exports = ${expression}`, {
+    loader: "ts",
+    format: "cjs",
+  }).code;
+  const route = ref({
+    mode: "map",
+    q: "Dunes",
+    parking: "yes",
+    minRating: "4",
+    lat: "52",
+    lng: "4",
+    radiusKm: "10",
+    west: "3",
+    east: "5",
+    south: "51",
+    north: "53",
+  });
+  const activeFilters = computed(() => readLocationSearch(route.value).filters);
+  const module = { exports: {} };
+  new Function("module", "computed", "activeFilters", code)(
+    module,
+    computed,
+    activeFilters,
+  );
+  const query = module.exports;
+  const original = query.value;
+  assert.deepEqual(original, {
+    limit: 20,
+    q: "Dunes",
+    parking: "yes",
+    minRating: 4,
+    lat: 52,
+    lng: 4,
+    radiusKm: 10,
+  });
+  route.value = { ...route.value, mode: "list", west: "-10", east: "-9" };
+  assert.equal(query.value, original);
+  route.value = { ...route.value, mode: "map", west: "-8", east: "-7" };
+  assert.equal(query.value, original);
+  route.value = { ...route.value, radiusKm: "25" };
+  assert.notEqual(query.value, original);
+  assert.equal(query.value.radiusKm, 25);
+  assert.equal(query.value.west, undefined);
+});

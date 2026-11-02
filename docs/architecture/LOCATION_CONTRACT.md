@@ -101,12 +101,16 @@ Exclusions of characteristics without a negative representation return no matche
 
 A distance search requires all of `lat`, `lng`, and `radiusKm` (0.1–500 km).
 Empty, partial, or invalid triples are ignored rather than converted into a
-zero-degree origin. Optional `west/south/east/north` bounds restrict the area's
-representative discovery position in both presentations; distance and viewport
-constraints intersect. Destination points do not move an area into the viewport.
+zero-degree origin. Optional `west/south/east/north` bounds restrict map viewport
+requests to the area's representative discovery position; distance and viewport
+constraints intersect for markers. The list sends only the query and explicit
+filters, including a chosen area/distance, and never uses map bounds. Destination
+points do not move an area into the viewport.
 
 The URL's `mode=map|list` selects alternative full-screen presentations. Switching
-preserves filters and viewport bounds, and opening details retains search state.
+preserves shared query/filters and remembers the map bounds for returning to Map;
+panning the map does not narrow or reset the paginated list. Opening details
+retains search state.
 URL values take precedence over old local-storage filter preferences. Unknown
 enum values are ignored. Lists retain cursor pagination; map viewport requests
 remain clustered, compact, and limited to 1,000 areas. Marker selection opens a

@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import type {
   EditableLocationFields,
+  LocationFilters,
   LocationListItem,
   LocationReview,
   LocationsResponse,
@@ -207,11 +208,15 @@ const reviewForm = reactive({
   text: "",
 });
 
-const locationsQuery = computed(() => ({
-  limit: 20,
-  ...activeFilters.value,
-  ...searchState.value.bounds,
-}));
+const locationsQuery = computed<LocationFilters & { limit: number }>(
+  (previous) => {
+    const query = { limit: 20, ...activeFilters.value };
+    // Viewport and mode changes must not refetch or reset the paginated list.
+    return previous && JSON.stringify(previous) === JSON.stringify(query)
+      ? previous
+      : query;
+  },
+);
 
 const { data, error, pending, refresh } = await useFetch<LocationsResponse>(
   "/api/locations",
