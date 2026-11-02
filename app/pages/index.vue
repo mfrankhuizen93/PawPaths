@@ -151,10 +151,12 @@ const displayedTotal = computed(() =>
     : total.value,
 );
 const loadingMore = ref(false);
+const loadMoreError = ref("");
 const nextCursor = ref<string | null>(null);
 async function loadMoreLocations() {
-  if (!nextCursor.value || loadingMore.value) return;
+  if (!nextCursor.value || loadingMore.value || pending.value) return;
   loadingMore.value = true;
+  loadMoreError.value = "";
   const queryKey = JSON.stringify(locationsQuery.value);
   try {
     const response = await $fetch<LocationsResponse>("/api/locations", {
@@ -164,7 +166,9 @@ async function loadMoreLocations() {
     locations.value = [...locations.value, ...response.items];
     nextCursor.value = response.nextCursor ?? null;
   } catch {
-    toast.add({ title: "Could not load more locations", color: "error" });
+    if (queryKey === JSON.stringify(locationsQuery.value)) {
+      loadMoreError.value = "Could not load more locations. Please try again.";
+    }
   } finally {
     loadingMore.value = false;
   }
@@ -311,6 +315,7 @@ const selectedLocationMeta = computed(() =>
 watch(
   data,
   (response) => {
+    loadMoreError.value = "";
     locations.value = response?.items ?? [];
     total.value = response?.total ?? 0;
     nextCursor.value = response?.nextCursor ?? null;
@@ -637,8 +642,9 @@ watch(
         :pending="pending"
         :more="Boolean(nextCursor)"
         :loading-more="loadingMore"
+        :load-more-error="loadMoreError"
+        :load-more="loadMoreLocations"
         @select="selectLocation"
-        @load-more="loadMoreLocations"
         @clear="clearSearch"
       />
       <ClientOnly v-else>

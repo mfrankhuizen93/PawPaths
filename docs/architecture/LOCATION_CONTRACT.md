@@ -112,7 +112,10 @@ preserves shared query/filters and remembers the map bounds for returning to Map
 panning the map does not narrow or reset the paginated list. Opening details
 retains search state.
 URL values take precedence over old local-storage filter preferences. Unknown
-enum values are ignored. Lists retain cursor pagination; map viewport requests
+enum values are ignored. Lists use cursor pagination with automatic loading near
+the bottom of the scroll container. Loading stops when no cursor remains or a
+page fails; failures retain existing cards and offer an explicit Retry action.
+Changing query/filters resets the list to the top. Map viewport requests
 remain clustered, compact, and limited to 1,000 areas. Marker selection opens a
 compact preview with an action to open the shared detail drawer.
 
