@@ -6,6 +6,7 @@ import type {
   LocationsResponse,
 } from "#shared/types/locations";
 import { useExploreQuery } from "~/composables/states";
+import LocationNavigation from "~/components/location/LocationNavigation.vue";
 import AppDrawer from "~/components/drawer/AppDrawer.vue";
 import AppDrawerActions from "~/components/drawer/AppDrawerActions.vue";
 import {
@@ -225,19 +226,6 @@ const activeFilterCount = computed(
         : value !== undefined && value !== "",
     ).length,
 );
-const selectedLocationDirectionsUrl = computed(() => {
-  const location = selectedLocation.value;
-
-  if (
-    !location ||
-    !Number.isFinite(location.latitude) ||
-    !Number.isFinite(location.longitude)
-  ) {
-    return undefined;
-  }
-
-  return `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`;
-});
 watch(
   data,
   (response) => {
@@ -672,14 +660,9 @@ watch(
           </div>
 
           <div class="flex gap-3 overflow-x-auto pb-1">
-            <UButton
-              v-if="selectedLocationDirectionsUrl"
-              :to="selectedLocationDirectionsUrl"
-              color="primary"
-              icon="i-lucide-navigation"
-              label="Directions"
-              target="_blank"
-              variant="soft"
+            <LocationNavigation
+              :key="selectedLocation.id"
+              :points="selectedLocation.coordinatePoints"
             />
             <UButton
               color="neutral"

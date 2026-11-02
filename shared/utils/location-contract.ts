@@ -45,6 +45,9 @@ export function getLocationDestinations(
 ) {
   return points.filter(
     (point) =>
+      typeof point.id === "string" &&
+      point.id.trim().length > 0 &&
+      points.filter((candidate) => candidate.id === point.id).length === 1 &&
       (point.kind === "entrance" || point.kind === "parking") &&
       Number.isFinite(point.latitude) &&
       Math.abs(point.latitude) <= 90 &&

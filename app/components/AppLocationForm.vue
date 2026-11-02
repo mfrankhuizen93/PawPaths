@@ -13,6 +13,7 @@ import { getLocationPlaceDetails } from "~/utils/location-place-details";
 import { useLocationPointEditor } from "~/composables/useLocationPointEditor";
 import { useLocationPointPlacement } from "~/composables/useLocationPointPlacement";
 import AppEmptyState from "~/components/common/AppEmptyState.vue";
+import LocationNavigation from "~/components/location/LocationNavigation.vue";
 import AppTabs from "~/components/common/AppTabs.vue";
 import AppPhotoLanes from "~/components/AppPhotoLanes.vue";
 
@@ -515,17 +516,6 @@ const mapMarkers = computed<FormMapMarker[]>(() => [
     ...point,
   })),
 ]);
-const directionsUrl = computed(() => {
-  if (
-    !Number.isFinite(form.value.latitude) ||
-    !Number.isFinite(form.value.longitude)
-  ) {
-    return undefined;
-  }
-
-  return `https://www.google.com/maps/dir/?api=1&destination=${form.value.latitude},${form.value.longitude}`;
-});
-
 const isPoiAddMode = computed(
   () =>
     Boolean(pendingPointKind.value) &&
@@ -1508,15 +1498,10 @@ onBeforeUnmount(() => {
 
       <template #links>
         <div class="flex flex-col gap-4 pt-4">
-          <UButton
-            class="self-start"
-            color="primary"
-            :disabled="!directionsUrl"
-            icon="i-lucide-navigation"
-            label="Directions"
-            target="_blank"
-            :to="directionsUrl"
-            variant="soft"
+          <LocationNavigation
+            v-if="readonly"
+            :key="resetKey ?? undefined"
+            :points="form.coordinatePoints"
           />
 
           <template v-if="readonly">
@@ -1569,7 +1554,7 @@ onBeforeUnmount(() => {
           </template>
 
           <AppEmptyState
-            v-if="readonly && !directionsUrl && !form.relatedUrls?.length"
+            v-if="readonly && !form.relatedUrls?.length"
             description="No related links have been added."
             icon="i-lucide-link"
             title="No links"
