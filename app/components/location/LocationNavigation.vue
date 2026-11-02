@@ -10,6 +10,7 @@ import AppEmptyState from "~/components/common/AppEmptyState.vue";
 const props = withDefaults(
   defineProps<{
     points?: LocationCoordinatePoint[];
+    generalLocation?: { latitude?: number | null; longitude?: number | null };
   }>(),
   { points: () => [] },
 );
@@ -19,12 +20,13 @@ const selectedId = ref<string>();
 const appleDevice = ref(false);
 const options = computed(() => getNavigationDestinationOptions(props.points));
 const directUrl = computed(() =>
-  options.value.length === 1
+  options.value.length <= 1
     ? getLocationNavigationUrl(
         props.points,
-        options.value[0]!.value,
+        options.value[0]?.value ?? null,
         user.value?.navigationAppPreference ?? "device",
         appleDevice.value,
+        props.generalLocation,
       )
     : undefined,
 );
@@ -82,7 +84,7 @@ onMounted(() => {
     <AppEmptyState
       v-else
       title="No navigation destinations"
-      description="No valid entrances or parking points have been recorded. Check the location's links for access information or suggest an entrance or parking point."
+      description="No valid entrance, parking point, or general location has been recorded. Check the location's links for access information or suggest a location."
       icon="i-lucide-map-pin-off"
     />
     <template v-if="options.length" #actions>

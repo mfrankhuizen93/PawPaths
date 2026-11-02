@@ -84,7 +84,7 @@ Saving and visiting are separate states. A saved location is not automatically v
 
 ### Navigate accurately
 
-An area may have multiple entrances and parking locations. Navigate first presents available destinations, then opens external navigation with the selected point's persisted coordinates. The application must not navigate to an approximate area center or invent a missing entrance/parking point. If no suitable destination exists, explain the limitation and provide a safe fallback only when one is explicitly supported by the data.
+An area may have multiple entrances and parking locations. Navigate presents a choice when multiple valid destinations exist and opens external navigation immediately when there is only one. Navigation uses the destination's persisted coordinates. If no valid entrance or parking point exists, navigate to the recorded general location instead. Do not invent coordinates or label the general location as an entrance or parking point. If the general location is also missing or invalid, explain that navigation is unavailable.
 
 ### Add a location
 

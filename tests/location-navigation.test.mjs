@@ -102,3 +102,41 @@ test("repeated parking labels remain distinct and unrelated kinds are excluded",
   assert.deepEqual(options([{ ...point, kind: "general" }]), []);
   assert.deepEqual(options(), []);
 });
+
+test("general location is a validated fallback only when no entrance or parking is usable", () => {
+  const general = { latitude: 51.123456, longitude: -2.654321 };
+  for (const app of ["google", "apple", "waze", "device"]) {
+    const link = new URL(url([], null, app, false, general));
+    assert.equal(
+      link.searchParams.get(
+        app === "apple" ? "daddr" : app === "waze" ? "ll" : "destination",
+      ),
+      "51.123456,-2.654321",
+    );
+  }
+  assert.ok(url([{ ...point, latitude: 100 }], null, "google", false, general));
+  for (const kind of ["entrance", "parking"]) {
+    const points = [{ ...point, kind }];
+    assert.equal(url(points, null, "google", false, general), undefined);
+    assert.equal(
+      new URL(url(points, point.id, "google", false, general)).searchParams.get(
+        "destination",
+      ),
+      "52.123456,4.654321",
+    );
+  }
+  assert.equal(url([], "stale", "google", false, general), undefined);
+  for (const invalid of [
+    undefined,
+    {},
+    { latitude: null, longitude: 4 },
+    { latitude: 52, longitude: null },
+    { latitude: 91, longitude: 4 },
+    { latitude: 52, longitude: -181 },
+    { latitude: NaN, longitude: Infinity },
+    { latitude: "52", longitude: "4" },
+  ]) {
+    assert.equal(url([], null, "google", false, invalid), undefined);
+  }
+  assert.ok(url([], null, "google", false, { latitude: 0, longitude: 0 }));
+});

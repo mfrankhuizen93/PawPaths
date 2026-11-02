@@ -1502,6 +1502,7 @@ onBeforeUnmount(() => {
             v-if="readonly"
             :key="resetKey ?? undefined"
             :points="form.coordinatePoints"
+            :general-location="form"
           />
 
           <template v-if="readonly">

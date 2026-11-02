@@ -663,6 +663,7 @@ watch(
             <LocationNavigation
               :key="selectedLocation.id"
               :points="selectedLocation.coordinatePoints"
+              :general-location="selectedLocation"
             />
             <UButton
               color="neutral"

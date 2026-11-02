@@ -186,6 +186,8 @@ try {
         longitude: 4,
       },
     ];
+    location.latitude = null;
+    location.longitude = null;
     await navigate("/account/reset");
     await navigate(`/?location=${location.slug}`);
     await page.getByRole("button", { name: "Navigate", exact: true }).click();
@@ -194,6 +196,32 @@ try {
       .getByText("No navigation destinations", { exact: true })
       .waitFor();
     assert.equal(await picker.getByRole("link").count(), 0);
+    // No entrance or parking: use the recorded general location directly.
+    for (const coordinatePoints of [[], location.coordinatePoints]) {
+      location.coordinatePoints = coordinatePoints;
+      location.latitude = 52.888888;
+      location.longitude = 4.999999;
+      await navigate("/account/reset");
+      await navigate(`/?location=${location.slug}`);
+      const generalLink = page.getByRole("link", {
+        name: "Navigate",
+        exact: true,
+      });
+      assert.equal(
+        new URL(await generalLink.getAttribute("href")).searchParams.get(
+          "destination",
+        ),
+        "52.888888,4.999999",
+      );
+      await page.getByRole("tab", { name: "Links", exact: true }).click();
+      assert.equal(
+        new URL(await generalLink.last().getAttribute("href")).searchParams.get(
+          "destination",
+        ),
+        "52.888888,4.999999",
+      );
+      assert.equal(await picker.count(), 0);
+    }
     // A single eligible point navigates directly from either entry point.
     for (const kind of ["entrance", "parking"]) {
       location.coordinatePoints = [
@@ -282,6 +310,8 @@ try {
         longitude: 4.001,
       },
     ];
+    location.latitude = 52;
+    location.longitude = 4;
     assert.deepEqual(errors, []);
     console.log(
       `Navigation selection and missing destination flows passed at ${width}px`,
