@@ -4,7 +4,7 @@ defineProps<{ location: LocationListItem; preview?: boolean }>();
 defineEmits<{ select: [location: LocationListItem] }>();
 </script>
 <template>
-  <article class="bg-default flex gap-3 rounded-lg border p-3">
+  <article class="border-default bg-default flex gap-3 rounded-lg border p-3">
     <img
       v-if="location.photos?.[0]?.url"
       :src="location.photos[0].url"

@@ -29,7 +29,7 @@ const filterCount = computed(
 </script>
 
 <template>
-  <div class="bg-default relative z-20 shrink-0 border-b pb-3">
+  <div class="border-default bg-default relative z-20 shrink-0 border-b pb-3">
     <AppPageToolbar>
       <template #primary>
         <UInput

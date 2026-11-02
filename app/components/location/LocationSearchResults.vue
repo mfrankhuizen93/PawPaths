@@ -22,7 +22,11 @@ defineEmits<{
   >
     <div class="mx-auto flex max-w-3xl flex-col gap-3">
       <template v-if="pending"
-        ><div v-for="n in 5" :key="n" class="space-y-3 rounded-lg border p-4">
+        ><div
+          v-for="n in 5"
+          :key="n"
+          class="border-default space-y-3 rounded-lg border p-4"
+        >
           <USkeleton class="h-6 w-2/3" /><USkeleton
             class="h-4 w-1/2"
           /><USkeleton class="h-8 w-28" /></div
