@@ -831,7 +831,8 @@ onBeforeUnmount(() => {
 
     <div
       v-if="variant === 'search'"
-      class="absolute right-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 sm:right-5 sm:bottom-5"
+      class="absolute right-3 z-10 flex flex-col gap-3 sm:right-5"
+      :class="showToolbar ? 'top-24 sm:top-28' : 'top-3 sm:top-5'"
     >
       <div
         class="border-default/60 bg-default/88 flex flex-col overflow-hidden rounded-xl border shadow-lg backdrop-blur-xl"
