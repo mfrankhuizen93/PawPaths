@@ -4,20 +4,13 @@ import type { QueryObject, QueryValue } from "ufo";
 import type { LocationsResponse } from "#shared/types/locations";
 import { getDb } from "../utils/mongodb.js";
 import { inferLocationWarnings } from "../utils/location-warnings.js";
+import { readLocationSearch } from "#shared/utils/location-search";
+import { buildLocationSearchFilter } from "../utils/location-search-filter";
 import { normalizeAreaAttributes } from "#shared/utils/location-contract";
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
 const MAX_VIEWPORT_LIMIT = 1000;
-const CHARACTERISTIC_POINT_KIND_MAP: Record<string, string[]> = {
-  "food and drink": ["cafe"],
-  "off-leash area": ["off-leash-area"],
-  "swimming water": ["swimming", "water"],
-};
-const TYPE_POINT_KIND_MAP: Record<string, string[]> = {
-  "dog playground": ["dog-playground"],
-};
-
 type MongoFilter = Record<string, unknown>;
 type PipelineStage = Record<string, unknown>;
 
@@ -48,13 +41,9 @@ type LocationCursor = {
 function toFiniteNumber(value: QueryValue | QueryValue[]): number | null {
   if (Array.isArray(value)) return toFiniteNumber(value[0]);
 
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function toPositiveNumber(value: QueryValue | QueryValue[]): number | null {
-  const number = toFiniteNumber(value);
-  return number && number > 0 ? number : null;
 }
 
 function toPositiveInteger(
@@ -77,14 +66,6 @@ function toLimitedInteger(
   return Math.min(number, max);
 }
 
-function toRating(value: QueryValue | QueryValue[]): number | null {
-  const number = toFiniteNumber(value);
-
-  if (number === null || number < 1 || number > 5) return null;
-
-  return number;
-}
-
 function clampLatitude(latitude: number) {
   return Math.max(-90, Math.min(90, latitude));
 }
@@ -95,12 +76,6 @@ function normalizeLongitude(longitude: number) {
 
 function escapeRegex(value: unknown) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function toSearchQuery(value: QueryValue | QueryValue[]) {
-  const rawValue = Array.isArray(value) ? value[0] : value;
-
-  return rawValue ? String(rawValue).trim() : "";
 }
 
 function toCursor(value: QueryValue | QueryValue[]): LocationCursor | null {
@@ -162,122 +137,6 @@ function toNextCursor(
   }
 
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
-}
-
-function asArray(value: QueryValue | QueryValue[]): string[] {
-  if (!value) return [];
-
-  const values = Array.isArray(value) ? value : [value];
-
-  return values.flatMap((item) =>
-    String(item)
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean),
-  );
-}
-
-function addAndClause(filter: MongoFilter, clause: MongoFilter) {
-  filter.$and = [...((filter.$and as MongoFilter[] | undefined) ?? []), clause];
-}
-
-function buildFieldOrPointKindClause(
-  field: string,
-  value: string,
-  mappedPointKinds: string[],
-): MongoFilter {
-  if (mappedPointKinds.length === 0) return { [field]: value };
-
-  return {
-    $or: [
-      { [field]: value },
-      { "coordinatePoints.kind": { $in: mappedPointKinds } },
-    ],
-  };
-}
-
-function buildFilter(query: QueryObject): MongoFilter {
-  const filter: MongoFilter = {
-    status: "published",
-  };
-
-  const types = asArray(query.type).filter(Boolean);
-  const excludedTypes = asArray(query.excludeType).filter(Boolean);
-  if (types.length > 0) {
-    const mappedPointKinds = types.flatMap(
-      (type) => TYPE_POINT_KIND_MAP[type] ?? [],
-    );
-
-    if (mappedPointKinds.length > 0) {
-      addAndClause(filter, {
-        $or: [
-          { type: { $in: types } },
-          { "coordinatePoints.kind": { $in: mappedPointKinds } },
-        ],
-      });
-    } else {
-      filter.type = { $in: types };
-    }
-  }
-  if (excludedTypes.length > 0) {
-    filter.type = {
-      ...((filter.type as MongoFilter | undefined) ?? {}),
-      $nin: excludedTypes,
-    };
-    const mappedPointKinds = excludedTypes.flatMap(
-      (type) => TYPE_POINT_KIND_MAP[type] ?? [],
-    );
-
-    if (mappedPointKinds.length > 0) {
-      addAndClause(filter, {
-        "coordinatePoints.kind": { $nin: mappedPointKinds },
-      });
-    }
-  }
-
-  const characteristics = asArray(query.characteristic).filter(Boolean);
-  const excludedCharacteristics = asArray(query.excludeCharacteristic).filter(
-    Boolean,
-  );
-  if (characteristics.length > 0) {
-    for (const characteristic of characteristics) {
-      addAndClause(
-        filter,
-        buildFieldOrPointKindClause(
-          "characteristics",
-          characteristic,
-          CHARACTERISTIC_POINT_KIND_MAP[characteristic] ?? [],
-        ),
-      );
-    }
-  }
-  if (excludedCharacteristics.length > 0) {
-    filter.characteristics = {
-      ...((filter.characteristics as MongoFilter | undefined) ?? {}),
-      $nin: excludedCharacteristics,
-    };
-    const mappedPointKinds = excludedCharacteristics.flatMap(
-      (characteristic) => CHARACTERISTIC_POINT_KIND_MAP[characteristic] ?? [],
-    );
-
-    if (mappedPointKinds.length > 0) {
-      addAndClause(filter, {
-        "coordinatePoints.kind": { $nin: mappedPointKinds },
-      });
-    }
-  }
-
-  const searchQuery = toSearchQuery(query.q);
-  if (searchQuery) {
-    const pattern = new RegExp(escapeRegex(searchQuery), "i");
-    filter.$or = [
-      { name: pattern },
-      { city: pattern },
-      { description: pattern },
-    ];
-  }
-
-  return filter;
 }
 
 function getBoundsFilter(
@@ -440,6 +299,7 @@ function buildProjection(options: { compact?: boolean } = {}): MongoFilter {
     coordinatePoints: 1,
     attributes: 1,
     routes: 1,
+    distanceMeters: 1,
     warnings: { $ifNull: ["$warnings", []] },
     reviewCount: 1,
     ratingCount: 1,
@@ -609,10 +469,11 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   const db = await getDb();
   const locations = db.collection("locations");
 
-  const filter = buildFilter(query);
-  const searchQuery = toSearchQuery(query.q);
-  const boundsFilter = getBoundsFilter(query, {
-    includeCoordinatePoints: query.viewport !== "true",
+  const search = readLocationSearch(query);
+  const filter = buildLocationSearchFilter(search.filters);
+  const searchQuery = search.filters.q ?? "";
+  const boundsFilter = getBoundsFilter(search.bounds ?? {}, {
+    includeCoordinatePoints: false,
   });
   const isViewportSearch = query.viewport === "true" && Boolean(boundsFilter);
   if (isViewportSearch) {
@@ -625,19 +486,19 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
   const cursor = isViewportSearch ? null : toCursor(query.cursor);
   const pageNumber = toPositiveInteger(query.pageNumber);
   const includeReviews = query.includeReviews === "true";
-  const lat = toFiniteNumber(query.lat);
-  const lng = toFiniteNumber(query.lng);
-  const radiusKm = toPositiveNumber(query.radiusKm);
+  const lat = search.filters.lat;
+  const lng = search.filters.lng;
+  const radiusKm = search.filters.radiusKm;
   const isGeoSearch =
-    !boundsFilter && lat !== null && lng !== null && radiusKm !== null;
-  const minRating = toRating(query.minRating);
+    lat !== undefined && lng !== undefined && radiusKm !== undefined;
+  const minRating = search.filters.minRating ?? null;
   const projection = buildProjection({ compact: isViewportSearch });
   const ratingFieldsStage = buildRatingFieldsStage();
 
   const pipeline: PipelineStage[] = [];
   const countPipeline: PipelineStage[] = [];
 
-  if (boundsFilter) {
+  if (boundsFilter && !isGeoSearch) {
     const boundedFilter = {
       $and: [filter, boundsFilter],
     };
@@ -654,7 +515,7 @@ export default defineEventHandler(async (event): Promise<LocationsResponse> => {
         distanceField: "distanceMeters",
         maxDistance: radiusKm * 1000,
         spherical: true,
-        query: filter,
+        query: boundsFilter ? { $and: [filter, boundsFilter] } : filter,
       },
     };
 

@@ -8,6 +8,7 @@ import type {
   LocationsResponse,
 } from "#shared/types/locations";
 import { getLocationPath } from "#shared/utils/location-route";
+import type { SearchBounds } from "#shared/utils/location-search";
 
 type StoredMapViewport = {
   lng: number;
@@ -26,6 +27,8 @@ const props = withDefaults(
     filters?: LocationFilters;
     eyebrow?: string;
     title?: string;
+    showToolbar?: boolean;
+    searchBounds?: SearchBounds;
   }>(),
   {
     locations: () => [],
@@ -35,6 +38,7 @@ const props = withDefaults(
     filters: () => ({}),
     eyebrow: "Map",
     title: "Explore locations",
+    showToolbar: true,
   },
 );
 const mapViewportStorageKey = "pawpaths.searchMapViewport";
@@ -42,6 +46,7 @@ const mapViewportStorageKey = "pawpaths.searchMapViewport";
 const emit = defineEmits<{
   locationsLoaded: [response: LocationsResponse];
   locationSelected: [location: LocationListItem];
+  boundsChanged: [bounds: SearchBounds];
 }>();
 
 const config = useRuntimeConfig();
@@ -54,6 +59,7 @@ const isLocating = ref(false);
 const searchError = ref(false);
 const hasSearched = ref(false);
 const locationError = ref("");
+const tileError = ref(false);
 const userLocation = ref<[number, number] | null>(null);
 const fetchedLocations = ref<LocationListItem[]>([]);
 let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
@@ -115,7 +121,10 @@ const mappedLocationFeatures = computed(() =>
     }
 
     for (const point of location.coordinatePoints ?? []) {
-      if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) {
+      if (
+        !Number.isFinite(point.latitude) ||
+        !Number.isFinite(point.longitude)
+      ) {
         continue;
       }
 
@@ -327,16 +336,20 @@ function storeMapViewport() {
 
   const center = map.value.getCenter();
 
-  window.localStorage.setItem(
-    mapViewportStorageKey,
-    JSON.stringify({
-      lng: center.lng,
-      lat: center.lat,
-      zoom: map.value.getZoom(),
-      bearing: map.value.getBearing(),
-      pitch: map.value.getPitch(),
-    }),
-  );
+  try {
+    window.localStorage.setItem(
+      mapViewportStorageKey,
+      JSON.stringify({
+        lng: center.lng,
+        lat: center.lat,
+        zoom: map.value.getZoom(),
+        bearing: map.value.getBearing(),
+        pitch: map.value.getPitch(),
+      }),
+    );
+  } catch {
+    /* Map interactions remain available when storage is disabled. */
+  }
 }
 
 function clampLatitude(latitude: number) {
@@ -356,8 +369,7 @@ function getVisibleBoundsQuery() {
   const longitudeSpan = Math.abs(northEast.lng - southWest.lng);
 
   return {
-    west:
-      longitudeSpan >= 360 ? -180 : normalizeLongitude(southWest.lng),
+    west: longitudeSpan >= 360 ? -180 : normalizeLongitude(southWest.lng),
     south: clampLatitude(southWest.lat),
     east: longitudeSpan >= 360 ? 180 : normalizeLongitude(northEast.lng),
     north: clampLatitude(northEast.lat),
@@ -433,6 +445,7 @@ async function searchVisibleLocations() {
 
     hasSearched.value = true;
     fetchedLocations.value = response.items;
+    emit("boundsChanged", boundsQuery);
     emit("locationsLoaded", response);
   } catch {
     if (requestId !== searchRequestId) return;
@@ -445,6 +458,30 @@ async function searchVisibleLocations() {
       searchAbortController = null;
     }
   }
+}
+
+function focusSearchArea() {
+  const { lat, lng, radiusKm } = props.filters;
+  if (
+    !map.value ||
+    lat === undefined ||
+    lng === undefined ||
+    radiusKm === undefined
+  )
+    return false;
+  const latitudeDelta = radiusKm / 111;
+  const longitudeDelta = Math.min(
+    180,
+    latitudeDelta / Math.max(0.01, Math.cos((lat * Math.PI) / 180)),
+  );
+  map.value.fitBounds(
+    [
+      [lng - longitudeDelta, Math.max(-85, lat - latitudeDelta)],
+      [lng + longitudeDelta, Math.min(85, lat + latitudeDelta)],
+    ],
+    { padding: 24, duration: 0 },
+  );
+  return true;
 }
 
 function queueVisibleSearch() {
@@ -668,11 +705,25 @@ onMounted(async () => {
   });
 
   map.value.addControl(new maplibregl.AttributionControl({ compact: true }));
+  map.value.on("error", () => {
+    tileError.value = true;
+  });
 
   map.value.on("load", () => {
     addLocationLayers();
     addUserLocationLayer();
-    if (focusedCoordinates) {
+    if (props.searchBounds) {
+      const { west, south, east, north } = props.searchBounds;
+      map.value?.fitBounds(
+        [
+          [west, south],
+          [east < west ? east + 360 : east, north],
+        ],
+        { padding: 0, duration: 0 },
+      );
+    } else if (focusSearchArea()) {
+      // The selected distance search determines the initial map extent.
+    } else if (focusedCoordinates) {
       zoomToCoordinates(focusedCoordinates);
     } else if (!storedViewport) {
       fitToLocations();
@@ -690,8 +741,18 @@ watch(mappedLocationFeatures, () => {
 watch(filterKey, () => {
   if (props.variant !== "search") return;
 
+  searchRequestId += 1;
+  searchAbortController?.abort();
   queueVisibleSearch();
 });
+
+watch(
+  () =>
+    [props.filters.lat, props.filters.lng, props.filters.radiusKm].join(","),
+  () => {
+    focusSearchArea();
+  },
+);
 
 watch(userLocation, syncUserLocation);
 
@@ -724,9 +785,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="bg-muted relative h-full overflow-hidden">
-    <div ref="mapContainer" class="h-full min-h-96 w-full" />
+    <div
+      ref="mapContainer"
+      class="h-full w-full"
+      :class="variant === 'search' ? 'min-h-0' : 'min-h-96'"
+    />
 
-    <div v-if="variant === 'search'" class="absolute inset-x-0 top-0 z-10">
+    <div
+      v-if="variant === 'search' && showToolbar"
+      class="absolute inset-x-0 top-0 z-10"
+    >
       <AppPageToolbar overlay>
         <template #primary>
           <UButton
@@ -763,7 +831,8 @@ onBeforeUnmount(() => {
 
     <div
       v-if="variant === 'search'"
-      class="absolute right-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 sm:right-5 sm:bottom-5"
+      class="absolute right-3 z-10 flex flex-col gap-3 sm:right-5"
+      :class="showToolbar ? 'top-24 sm:top-28' : 'top-3 sm:top-5'"
     >
       <div
         class="border-default/60 bg-default/88 flex flex-col overflow-hidden rounded-xl border shadow-lg backdrop-blur-xl"
@@ -808,6 +877,23 @@ onBeforeUnmount(() => {
     </div>
 
     <UAlert
+      v-if="searchError"
+      title="Could not refresh this area"
+      description="The map may show previous results. Try again or switch to List."
+      :actions="[{ label: 'Retry', onClick: () => queueVisibleSearch() }]"
+      class="absolute top-3 left-3 z-10 max-w-sm"
+      color="warning"
+    />
+
+    <UAlert
+      v-if="tileError"
+      title="Map tiles are unavailable"
+      description="You can switch to List to browse locations."
+      class="absolute top-3 left-3 z-10 max-w-sm"
+      color="warning"
+    />
+
+    <UAlert
       v-if="locationError"
       :title="locationError"
       class="absolute top-24 left-3 z-10 max-w-sm shadow-lg sm:top-28 sm:left-5"
@@ -825,7 +911,9 @@ onBeforeUnmount(() => {
         :description="
           searchError
             ? 'Try moving the map or checking the location API.'
-            : 'The current results do not include coordinates yet.'
+            : variant === 'search' && hasSearched
+              ? 'No locations match this area and filters. Try another area or clear filters.'
+              : 'The current results do not include coordinates yet.'
         "
         icon="i-lucide-map-pin-off"
         :title="
@@ -840,7 +928,12 @@ onBeforeUnmount(() => {
       class="bg-default/88 text-muted absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 z-10 hidden rounded-full px-3 py-2 text-xs font-medium shadow-sm backdrop-blur-xl sm:left-5 sm:block"
     >
       <span v-if="isSearching">Searching this area...</span>
-      <span v-else>{{ locationCountLabel }}</span>
+      <span v-else
+        >{{ locationCountLabel
+        }}{{
+          fetchedLocations.length >= limit ? " · Zoom in to see more" : ""
+        }}</span
+      >
     </div>
   </div>
 </template>

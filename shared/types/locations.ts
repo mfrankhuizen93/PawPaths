@@ -136,6 +136,16 @@ export type LocationsResponse = {
 
 export type LocationFilters = {
   q?: string;
+  offLeash?: LocationOffLeashState;
+  fenced?: LocationAttributeState;
+  swimming?: LocationAttributeState;
+  wheelchairAccessible?: LocationAttributeState;
+  parking?: "yes";
+  facility?: string[];
+  hazard?: string[];
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
   minRating?: number;
   type?: string[];
   excludeType?: string[];
